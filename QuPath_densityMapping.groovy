@@ -46,7 +46,7 @@ fileName = buildFilePath(out_dir, 'dMap_r10.tif')
 
 println builder.buildParameters().getPixelSize()
 
-writeDensityMapImage(imageData, builder, fileName)
+writeDensityMapImage(imageData, builder, fileName) // actually perform the operation to compute the density's per pixel and then save to a file
 
 //describe(cal)
 //describe(builder)

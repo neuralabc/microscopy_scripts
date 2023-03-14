@@ -13,7 +13,7 @@ import java.lang.String
 import java.io.File
 
 // partially based on discussion here: https://forum.image.sc/t/scripted-densitymaps-and-exporting-to-image-file-with-imagej/78306/6
-
+test_fname_only = true
 auto_dMap_computation = false //use the automatic density map calculations (faster, but cannot yet control res)
 manual_pixel_cell_count = true //use float processor to compute cell count image based on user specifications (see below)
 save_centroids_csv = false // output centroid x,y coordinates to a csv file
@@ -41,6 +41,12 @@ if (getProjectEntry().getImageName().contains("20x")) {
     def imageName = getProjectEntry().getImageName().replace('.ets','').replaceAll(' ','_').replace('.vsi','')
     double pixelSize = imageData.getServer().getPixelCalibration().getAveragedPixelSize()
      
+    if (test_fname_output_only) {
+        println("Only outputting the header for the name of the first output file:")
+        println(imageName)
+        System.exit(0)
+    }
+
     // *************************** RUN THE CELL DETECTION *************************** 
     runPlugin('qupath.imagej.detect.cells.WatershedCellDetection', '{"detectionImageBrightfield": "Optical density sum",  "requestedPixelSizeMicrons": 0.0,  "backgroundRadiusMicrons": 0.0,  "medianRadiusMicrons": 0.0,  "sigmaMicrons": 1.5,  "minAreaMicrons": 10.0,  "maxAreaMicrons": 100.0,  "threshold": 0.23,  "maxBackground": 2.0,  "watershedPostProcess": true,  "excludeDAB": false,  "cellExpansionMicrons": 5.0,  "includeNuclei": true,  "smoothBoundaries": true,  "makeMeasurements": true}');
 

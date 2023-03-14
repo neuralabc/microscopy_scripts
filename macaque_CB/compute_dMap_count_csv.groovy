@@ -13,7 +13,7 @@ import java.lang.String
 import java.io.File
 
 // partially based on discussion here: https://forum.image.sc/t/scripted-densitymaps-and-exporting-to-image-file-with-imagej/78306/6
-test_fname_output_only = true
+test_fname_output_only = false
 auto_dMap_computation = false //use the automatic density map calculations (faster, but cannot yet control res)
 manual_pixel_cell_count = true //use float processor to compute cell count image based on user specifications (see below)
 save_centroids_csv = false // output centroid x,y coordinates to a csv file
@@ -124,12 +124,12 @@ if (getProjectEntry().getImageName().contains("20x")) {
             def roi = PathObjectTools.getROI(detection, true)
             int x = (int) ((roi.getCentroidX() / downsample))
             int y = (int) ((roi.getCentroidY() / downsample))
-
+            
             // correct for potential (due to rounding) cell counts outside of width and height, subtract 1! (0-based of course)
-            if (x=width) {
+            if (x==width) {
             x=width-1
             }
-            if (y=height) {
+            if (y==height) {
             y=height-1
             }
             fp.setf(x, y, fp.getf(x,y) + 1 as float)

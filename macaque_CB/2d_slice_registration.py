@@ -6,6 +6,7 @@ import nibabel
 from PIL import Image
 from nighres.io import load_volume, save_volume
 import scipy.ndimage
+from scipy.signal import convolve2d
 import os
 from nibabel import processing
 import subprocess
@@ -48,15 +49,20 @@ for idx,img in enumerate(images):
             image = slice_img
             slice_li = numpy.pad(image,pad_width=((0,rescale),(0,rescale)),mode='edge')
             
-            # use a for loop :(
-            slice_crop = numpy.zeros((math.ceil(image.shape[0]/rescale),math.ceil(image.shape[1]/rescale),rescale*rescale))
-            for dx in range(rescale):
-                for dy in range(rescale):
-                    slice_crop[:,:,dx+dy*rescale] = slice_li[dx:rescale*math.ceil(image.shape[0]/rescale):rescale,dy:rescale*math.ceil(image.shape[1]/rescale):rescale]
+            ## REMOVED, TODO: test if continues to work as expected            
+            # # use a for loop :(
+            # slice_crop = numpy.zeros((math.ceil(image.shape[0]/rescale),math.ceil(image.shape[1]/rescale),rescale*rescale))
+            # for dx in range(rescale):
+            #     for dy in range(rescale):
+            #         slice_crop[:,:,dx+dy*rescale] = slice_li[dx:rescale*math.ceil(image.shape[0]/rescale):rescale,dy:rescale*math.ceil(image.shape[1]/rescale):rescale]
             
-            # save the median as base contrast
-            slice_img = numpy.mean(slice_crop,axis=2)
+            # # save the median as base contrast (mean used here)
+            # slice_img = numpy.mean(slice_crop,axis=2)
             
+            ## alternative using 2d convolution to preserve cell count data
+            kernel = numpy.ones((rescale,rescale)) #2d convolution kernel, all 1s
+            slice_img = convolve2d(image,kernel,mode='full')[::rescale,::rescale] #can divide by rescale if we want the mean, otherwise sum is good (total cell count)
+
             header = nibabel.Nifti1Header()
             header.set_data_shape(slice_img.shape)
             

@@ -14,10 +14,9 @@ import java.io.File
 
 // partially based on discussion here: https://forum.image.sc/t/scripted-densitymaps-and-exporting-to-image-file-with-imagej/78306/6
 
-
 auto_dMap_computation = false //use the automatic density map calculations (faster, but cannot yet control res)
 manual_pixel_cell_count = true //use float processor to compute cell count image based on user specifications (see below)
-save_centroids_csv = false // output centroid x,y coordinates to a csv file (TOOD: work in progress)
+save_centroids_csv = false // output centroid x,y coordinates to a csv file
 
 // settings for manual pixel cell counting
 //    double requestedPixelSizeMicrons = 10 
@@ -31,8 +30,6 @@ double downsample = requestedDownSampleValue
 // SET OUTPUT
 def out_dir = buildFilePath(PROJECT_BASE_DIR, 'results_cell_counts')
 mkdirs(out_dir)
-
-
 
 // limit processing to the full data, do not run on labels etc
 if (getProjectEntry().getImageName().contains("20x")) { 
@@ -113,11 +110,6 @@ if (getProjectEntry().getImageName().contains("20x")) {
 
         int height = imp.getHeight()
 
-    //    println width
-    //    println height
-    //    println downsample
-    //    System.exit(0) //for script checking
-
         def fp = new FloatProcessor(width, height)
         for (detection in detections) {
             // Get ROI for a detection; this method gets the nucleus if we have a cell object (and the only ROI for anything else)
@@ -132,15 +124,7 @@ if (getProjectEntry().getImageName().contains("20x")) {
             if (y=height) {
             y=height-1
             }
-            // try {
             fp.setf(x, y, fp.getf(x,y) + 1 as float)
-            // }
-            // catch (Exception e) {
-            //     println width
-            //     println height
-            //     println(x)
-            //     println(y)
-            // }
         }
 
         // Show the images
@@ -190,9 +174,3 @@ if (getProjectEntry().getImageName().contains("20x")) {
         }
     }
 }
-//
-////    IJ.saveAsTiff(imp2, out_fname)
-//    IJExtension.getImageJInstance()
-//new ImagePlus(imp.getTitle() + "-counts", fp).show()
-//describe(imp)
-//describe(builder.buildServer(imageData))

@@ -21,7 +21,7 @@ inputdir = '/path/to/input/dir/'
 prefix = '_Image_'
 suffix = '.vsi - 20x'
 format = '.tif'
-output_dir = 'path/to/out_dir'
+output_dir = '/path/to/out_dir'
 
 
 # image slices to consider

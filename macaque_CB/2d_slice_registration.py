@@ -59,7 +59,7 @@ for idx,img in enumerate(images):
             # # save the median as base contrast (mean used here)
             # slice_img = numpy.mean(slice_crop,axis=2)
             
-            ## alternative using 2d convolution to preserve cell count data
+            ## alternative using 2d convolution to preserve cell counts (meaning is still the same here)
             kernel = numpy.ones((rescale,rescale)) #2d convolution kernel, all 1s
             slice_img = convolve2d(image,kernel,mode='full')[::rescale,::rescale] #can divide by rescale if we want the mean, otherwise sum is good (total cell count)
 

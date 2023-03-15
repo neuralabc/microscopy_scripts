@@ -71,9 +71,13 @@ if (getProjectEntry().getImageName().contains("20x")) {
 
         dMap_requestedPixelSizeMicrons = pixelSize * autoDownsampleValue  
         fileName_dMap = buildFilePath(out_dir, imageName + '_densityMap_'+ (int) dMap_radius + '_rad_' + (int) autoDownsampleValue + '_downsample_'+ dMap_requestedPixelSizeMicrons.round(3).toString().replace('.','p')+'um_pix.tif')
-        writeDensityMapImage(imageData, builder, fileName_dMap) // actually perform the operation to compute the density's per pixel and then save to a file
-
-        print "\n\tDensityMap output: \n\t " + fileName_dMap + " \n"
+        if (new File(fileName_dMap).isFile){
+            print "\n\tFile exists, skipping: " + fileName_dMap
+        }
+        else {
+            writeDensityMapImage(imageData, builder, fileName_dMap) // actually perform the operation to compute the density's per pixel and then save to a file
+            print "\n\tDensityMap output: \n\t " + fileName_dMap + " \n"
+        }
 
         // // PIXEL SIZE CALCULATIONS FOR DOWNSAMPLING, if you wanted to set this manually (this code does not work as-is)
         // something likely wrong here, processing never finishes when this is applied.
@@ -107,78 +111,89 @@ if (getProjectEntry().getImageName().contains("20x")) {
         
         fileName_manual = buildFilePath(out_dir, imageName + '_cellCount_' + (int) requestedDownSampleValue + '_downsample_' + requestedPixelSizeMicrons.round(3).toString().replace('.','p')+'um_pix.tif')
         
-        // Get the objects you want to count
-        // Potentially you can add filters for specific objects, e.g. to get only those with a 'Positive' classification
-        def detections = getDetectionObjects()
-        //def detections = detections.findAll {it.getPathClass() == getPathClass('Positive')}
-        def positiveDetections = detections.findAll {it.getPathClass() == getPathClass('Positive')}
-
-        // Create a counts image in ImageJ, where each pixel corresponds to the number of centroids at that pixel
-        int width = imp.getWidth()
-
-        int height = imp.getHeight()
-
-        def fp = new FloatProcessor(width, height)
-        for (detection in detections) {
-            // Get ROI for a detection; this method gets the nucleus if we have a cell object (and the only ROI for anything else)
-            def roi = PathObjectTools.getROI(detection, true)
-            int x = (int) ((roi.getCentroidX() / downsample))
-            int y = (int) ((roi.getCentroidY() / downsample))
-            
-            // correct for potential (due to rounding) cell counts outside of width and height, subtract 1! (0-based of course)
-            if (x==width) {
-            x=width-1
-            }
-            if (y==height) {
-            y=height-1
-            }
-            fp.setf(x, y, fp.getf(x,y) + 1 as float)
+        if (new File(fileName_manual).isFile){
+            print "\n\tFile exists, skipping: " + fileName_manual
         }
+        else {
+            // Get the objects you want to count
+            // Potentially you can add filters for specific objects, e.g. to get only those with a 'Positive' classification
+            def detections = getDetectionObjects()
+            //def detections = detections.findAll {it.getPathClass() == getPathClass('Positive')}
+            def positiveDetections = detections.findAll {it.getPathClass() == getPathClass('Positive')}
 
-        // Show the images
-        //IJExtension.getImageJInstance()
-        //ixmp//.show()
-        imp2 = new ImagePlus(imp.getTitle() + "-counts", fp)
-    //    imp2.show() // show in imageJ
+            // Create a counts image in ImageJ, where each pixel corresponds to the number of centroids at that pixel
+            int width = imp.getWidth()
 
-        IJ.saveAsTiff(imp2, fileName_manual)
-        print "\t Cell count output: \n\t " + fileName_manual + " \n"
-        println " "
+            int height = imp.getHeight()
+
+            def fp = new FloatProcessor(width, height)
+            for (detection in detections) {
+                // Get ROI for a detection; this method gets the nucleus if we have a cell object (and the only ROI for anything else)
+                def roi = PathObjectTools.getROI(detection, true)
+                int x = (int) ((roi.getCentroidX() / downsample))
+                int y = (int) ((roi.getCentroidY() / downsample))
+                
+                // correct for potential (due to rounding) cell counts outside of width and height, subtract 1! (0-based of course)
+                if (x==width) {
+                x=width-1
+                }
+                if (y==height) {
+                y=height-1
+                }
+                fp.setf(x, y, fp.getf(x,y) + 1 as float)
+            }
+
+            // Show the images
+            //IJExtension.getImageJInstance()
+            //ixmp//.show()
+            imp2 = new ImagePlus(imp.getTitle() + "-counts", fp)
+            imp2.show() // show in imageJ
+
+            IJ.saveAsTiff(imp2, fileName_manual)
+            print "\t Cell count output: \n\t " + fileName_manual + " \n"
+            println " "
+        }
     }
 
     if (save_centroids_csv) {
         fileName_csv = buildFilePath(out_dir, imageName.replace('.*','') + '_cellCentroidXY_' + requestedPixelSizeMicrons.round(3).toString().replace('.','p')+'um_pix.csv')
-        println("\tSaving centroid locations to csv output:\n\t"+fileName_csv)
-        File csvFile = new File(fileName_csv);
-        FileWriter fileWriter = new FileWriter(csvFile);
-
-        // adapted from: https://github.com/qupath/qupath/wiki/Scripting-examples
-        // Set this to true to use a nucleus ROI, if available
-        boolean useNucleusROI = true
         
-        // Start building a String with a header, these **should** contain the x and y indeces in the downsampled data (after converting to int)
-        sb = new StringBuilder("y_orig\tx_orig\ty_downsample_"+ ((int) requestedDownSampleValue).toString() +"\tx_downsampled_"+((int) requestedDownSampleValue).toString()+"\n") // this is intentionally y, then x, and assignments are x then y b/c data storage diffs (?)
-            
-        // Loop through detections
-        for (detection in getDetectionObjects()) {
-            def roi = detection.getROI()
-            // Use a Groovy metaClass trick to check if we can get a nucleus ROI... if we need to
-            // (could also use Java's instanceof qupath.lib.objects.PathCellObject)
-            if (useNucleusROI && detection.metaClass.respondsTo(detection, "getNucleusROI") && detection.getNucleusROI() != null)
-                roi = detection.getNucleusROI()
-            // ROI shouldn't be null... but still feel I should check...
-            if (roi == null)
-                continue
-            // Get centroid
-            double cx = roi.getCentroidX()
-            double cy = roi.getCentroidY()
-            // Append to String
-            sb.append(String.format("%.2f\t%.2f\t%.2f\t%.2f\n", cx, cy, cx/downsample, cy/downsample))
+        if (new File(fileName_csv).isFile){
+            print "\n\tFile exists, skipping: " + fileName_csv
         }
+        else {
+            println("\tSaving centroid locations to csv output:\n\t"+fileName_csv)
+            File csvFile = new File(fileName_csv);
+            FileWriter fileWriter = new FileWriter(csvFile);
 
-        for (line in sb) {
-            fileWriter.write(line.toString())
-            fileWriter.close()
+            // adapted from: https://github.com/qupath/qupath/wiki/Scripting-examples
+            // Set this to true to use a nucleus ROI, if available
+            boolean useNucleusROI = true
+            
+            // Start building a String with a header, these **should** contain the x and y indeces in the downsampled data (after converting to int)
+            sb = new StringBuilder("y_orig\tx_orig\ty_downsample_"+ ((int) requestedDownSampleValue).toString() +"\tx_downsampled_"+((int) requestedDownSampleValue).toString()+"\n") // this is intentionally y, then x, and assignments are x then y b/c data storage diffs (?)
+                
+            // Loop through detections
+            for (detection in getDetectionObjects()) {
+                def roi = detection.getROI()
+                // Use a Groovy metaClass trick to check if we can get a nucleus ROI... if we need to
+                // (could also use Java's instanceof qupath.lib.objects.PathCellObject)
+                if (useNucleusROI && detection.metaClass.respondsTo(detection, "getNucleusROI") && detection.getNucleusROI() != null)
+                    roi = detection.getNucleusROI()
+                // ROI shouldn't be null... but still feel I should check...
+                if (roi == null)
+                    continue
+                // Get centroid
+                double cx = roi.getCentroidX()
+                double cy = roi.getCentroidY()
+                // Append to String
+                sb.append(String.format("%.2f\t%.2f\t%.2f\t%.2f\n", cx, cy, cx/downsample, cy/downsample))
+            }
+
+            for (line in sb) {
+                fileWriter.write(line.toString())
+                fileWriter.close()
+            }
         }
     }
 }

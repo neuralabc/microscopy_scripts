@@ -70,7 +70,7 @@ if (getProjectEntry().getImageName().contains("20x")) {
 
         dMap_requestedPixelSizeMicrons = pixelSize * autoDownsampleValue  
         fileName_dMap = buildFilePath(out_dir, imageName + '_densityMap_'+ (int) dMap_radius + '_rad_' + (int) autoDownsampleValue + '_downsample_'+ dMap_requestedPixelSizeMicrons.round(3).toString().replace('.','p')+'um_pix.tif')
-        if (new File(fileName_dMap).isFile){
+        if (new File(fileName_dMap).isFile()){
             print "\n\tFile exists, skipping: " + fileName_dMap
         }
         else {
@@ -111,7 +111,7 @@ if (getProjectEntry().getImageName().contains("20x")) {
         
         fileName_manual = buildFilePath(out_dir, imageName + '_cellCount_' + (int) requestedDownSampleValue + '_downsample_' + requestedPixelSizeMicrons.round(3).toString().replace('.','p')+'um_pix.tif')
         
-        if (new File(fileName_manual).isFile){
+        if (new File(fileName_manual).isFile()){
             print "\n\tFile exists, skipping: " + fileName_manual
         }
         else {
@@ -164,7 +164,7 @@ if (getProjectEntry().getImageName().contains("20x")) {
     if (save_centroids_csv) {
         fileName_csv = buildFilePath(out_dir, imageName.replace('.*','') + '_cellCentroidXY_' + requestedPixelSizeMicrons.round(3).toString().replace('.','p')+'um_pix.csv')
         
-        if (new File(fileName_csv).isFile){
+        if (new File(fileName_csv).isFile()){
             print "\n\tFile exists, skipping: " + fileName_csv
         }
         else {

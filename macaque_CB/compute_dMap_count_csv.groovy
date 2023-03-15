@@ -39,8 +39,8 @@ def run_cell_counting() {
 // limit processing to the full data, do not run on labels etc
 if (getProjectEntry().getImageName().contains("20x")) { 
     //explicity set the image type so that we can use the opticaldensitysum channel for classification, tehse are defaults below
-    QP.setImageType('BRIGHTFIELD_H_DAB');
-    QP.setColorDeconvolutionStains('{"Name" : "H-DAB default", "Stain 1" : "Hematoxylin", "Values 1" : "0.65111 0.70119 0.29049", "Stain 2" : "DAB", "Values 2" : "0.26917 0.56824 0.77759", "Background" : " 255 255 255"}');
+    setImageType('BRIGHTFIELD_H_DAB');
+    setColorDeconvolutionStains('{"Name" : "H-DAB default", "Stain 1" : "Hematoxylin", "Values 1" : "0.65111 0.70119 0.29049", "Stain 2" : "DAB", "Values 2" : "0.26917 0.56824 0.77759", "Background" : " 255 255 255"}');
 
     def imageData = getCurrentImageData()
     def imageName = getProjectEntry().getImageName().replace('.ets','').replaceAll(' ','_').replace('.vsi','')

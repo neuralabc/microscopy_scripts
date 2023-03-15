@@ -54,7 +54,6 @@ if (getProjectEntry().getImageName().contains("20x")) {
         System.exit(0)
     }
 
-    // *************************** RUN THE CELL DETECTION ***************************
     selectAnnotations();
     def annotations = getAnnotationObjects()
     

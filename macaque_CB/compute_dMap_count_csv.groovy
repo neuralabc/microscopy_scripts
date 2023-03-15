@@ -33,6 +33,7 @@ mkdirs(out_dir)
 
 // run our cell counting with pre-set params
 def run_cell_counting() {
+    // *************************** RUN THE CELL DETECTION ***************************
     runPlugin('qupath.imagej.detect.cells.WatershedCellDetection', '{"detectionImageBrightfield": "Optical density sum",  "requestedPixelSizeMicrons": 0.0,  "backgroundRadiusMicrons": 0.0,  "medianRadiusMicrons": 0.0,  "sigmaMicrons": 1.5,  "minAreaMicrons": 10.0,  "maxAreaMicrons": 100.0,  "threshold": 0.23,  "maxBackground": 2.0,  "watershedPostProcess": true,  "excludeDAB": false,  "cellExpansionMicrons": 5.0,  "includeNuclei": true,  "smoothBoundaries": true,  "makeMeasurements": true}');
 }
 
@@ -52,7 +53,6 @@ if (getProjectEntry().getImageName().contains("20x")) {
         System.exit(0)
     }
 
-    // *************************** RUN THE CELL DETECTION ***************************
     selectAnnotations();
     def annotations = getAnnotationObjects()
     

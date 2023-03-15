@@ -153,7 +153,7 @@ if (getProjectEntry().getImageName().contains("20x")) {
             //IJExtension.getImageJInstance()
             //ixmp//.show()
             imp2 = new ImagePlus(imp.getTitle() + "-counts", fp)
-            imp2.show() // show in imageJ
+            // imp2.show() // show in imageJ
 
             IJ.saveAsTiff(imp2, fileName_manual)
             print "\t Cell count output: \n\t " + fileName_manual + " \n"

@@ -31,6 +31,11 @@ double downsample = requestedDownSampleValue
 def out_dir = buildFilePath(PROJECT_BASE_DIR, 'results_cell_counts')
 mkdirs(out_dir)
 
+// run our cell counting with pre-set params
+def run_cell_counting() {
+    runPlugin('qupath.imagej.detect.cells.WatershedCellDetection', '{"detectionImageBrightfield": "Optical density sum",  "requestedPixelSizeMicrons": 0.0,  "backgroundRadiusMicrons": 0.0,  "medianRadiusMicrons": 0.0,  "sigmaMicrons": 1.5,  "minAreaMicrons": 10.0,  "maxAreaMicrons": 100.0,  "threshold": 0.23,  "maxBackground": 2.0,  "watershedPostProcess": true,  "excludeDAB": false,  "cellExpansionMicrons": 5.0,  "includeNuclei": true,  "smoothBoundaries": true,  "makeMeasurements": true}');
+}
+
 // limit processing to the full data, do not run on labels etc
 if (getProjectEntry().getImageName().contains("20x")) { 
     //explicity set the image type so that we can use the opticaldensitysum channel for classification, tehse are defaults below
@@ -74,7 +79,7 @@ if (getProjectEntry().getImageName().contains("20x")) {
             print "\n\tFile exists, skipping: " + fileName_dMap
         }
         else {
-            runPlugin('qupath.imagej.detect.cells.WatershedCellDetection', '{"detectionImageBrightfield": "Optical density sum",  "requestedPixelSizeMicrons": 0.0,  "backgroundRadiusMicrons": 0.0,  "medianRadiusMicrons": 0.0,  "sigmaMicrons": 1.5,  "minAreaMicrons": 10.0,  "maxAreaMicrons": 100.0,  "threshold": 0.23,  "maxBackground": 2.0,  "watershedPostProcess": true,  "excludeDAB": false,  "cellExpansionMicrons": 5.0,  "includeNuclei": true,  "smoothBoundaries": true,  "makeMeasurements": true}');
+            run_cell_counting()
             writeDensityMapImage(imageData, builder, fileName_dMap) // actually perform the operation to compute the density's per pixel and then save to a file
             print "\n\tDensityMap output: \n\t " + fileName_dMap + " \n"
         }
@@ -119,7 +124,7 @@ if (getProjectEntry().getImageName().contains("20x")) {
                 //do nothing, we already computed the cell counts
             }
             else {
-                runPlugin('qupath.imagej.detect.cells.WatershedCellDetection', '{"detectionImageBrightfield": "Optical density sum",  "requestedPixelSizeMicrons": 0.0,  "backgroundRadiusMicrons": 0.0,  "medianRadiusMicrons": 0.0,  "sigmaMicrons": 1.5,  "minAreaMicrons": 10.0,  "maxAreaMicrons": 100.0,  "threshold": 0.23,  "maxBackground": 2.0,  "watershedPostProcess": true,  "excludeDAB": false,  "cellExpansionMicrons": 5.0,  "includeNuclei": true,  "smoothBoundaries": true,  "makeMeasurements": true}');
+                run_cell_counting()
             }
             // Get the objects you want to count
             // Potentially you can add filters for specific objects, e.g. to get only those with a 'Positive' classification

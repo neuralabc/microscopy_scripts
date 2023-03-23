@@ -320,18 +320,6 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl')
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl')
 
-# forwards registration
-coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], zfill_num=zfill_num, previous_reg_level_tag='coreg0nl', reg_level_tag='coreg1nl') 
-template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg1nl')
-
-#backwards registration
-coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], zfill_num=zfill_num, previous_reg_level_tag='coreg1nl', reg_level_tag='coreg2nl') 
-template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg2nl')
-
-#select best of the previous two regs and update registrations
-select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl')
-template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl')
-
 ## ****************************** Iteration 2
 # forwards registration
 coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], zfill_num=zfill_num, previous_reg_level_tag='coreg12nl', reg_level_tag='coreg121nl') 

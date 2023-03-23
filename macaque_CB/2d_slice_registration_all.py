@@ -223,7 +223,7 @@ else:
 for idx,img in reversed(list(enumerate(all_image_fnames))):
         img = os.path.basename(img).split('.')[0]
         # current image
-        nifti = output_dir+subject+'_'+str(idx).zfill(2)+'_'+img+'_coreg1nl_ants-def0.nii.gz'
+        nifti = output_dir+subject+'_'+str(idx).zfill(2)+'_'+img+'_coreg0nl_ants-def0.nii.gz' #change to 0 here after conversation w/ @pilou
      
         sources = [nifti]
         targets = [template]

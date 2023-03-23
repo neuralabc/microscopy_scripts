@@ -181,7 +181,8 @@ if (os.path.isfile(img_stack)):
         print('4. Stacking: done')
 else:
     for idx,img in enumerate(images):
-        reg = output_dir+subject+'_'+img+'_coreg1nl_ants-def0.nii.gz'
+        # reg = output_dir+subject+'_'+img+'_coreg1nl_ants-def0.nii.gz' 
+        reg = output_dir+subject+'_'+img+'_coreg0nl_ants-def0.nii.gz' #discussed w/ PILOU, change to original unreg image
         stack.append(nighres.io.load_volume(reg).get_fdata())
     
     img = numpy.stack(stack,axis=-1)

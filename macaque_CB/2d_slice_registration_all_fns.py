@@ -44,9 +44,9 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
     '''
     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
     if type(template) is list: #we have a list of templates, one for each slice
-        use_slice_template = True
+        per_slice_template = True
     else:
-        use_slice_template = False
+        per_slice_template = False
         targets = [template]
     for idx,img in enumerate(all_image_fnames):
         img = os.path.basename(img).split('.')[0]
@@ -55,8 +55,8 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
         nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
 
         sources = [nifti]
-        if use_slice_template:
-            targets = template[idx]
+        if per_slice_template:
+            targets = [template[idx]]
         if previous_target_tag is not None:
             tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
         else:
@@ -99,21 +99,27 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
 def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
                              zfill_num=4, input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl',run_syn=True,
                              run_rigid=True, previous_target_tag=None,scaling_factor=64):
-     ''' Co-register to slices before/after
-     target_offset_list: negative values indicate slices prior to the current, positive after
-     differs in that we reverse the list (and the idx) and the offsets are the opposite sign
-     TODO: can likely be combined with standard, with some more thought.
-     '''
-     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
-     for idx,img in reversed(list(enumerate(all_image_fnames))):
+    ''' Co-register to slices before/after
+    target_offset_list: negative values indicate slices prior to the current, positive after
+    differs in that we reverse the list (and the idx) and the offsets are the opposite sign
+    TODO: can likely be combined with standard, with some more thought.
+    '''
+    all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]'
+    if type(template) is list: #we have a list of templates, one for each slice
+        per_slice_template = True
+    else:
+        per_slice_template = False
+        targets = [template]
+    for idx,img in reversed(list(enumerate(all_image_fnames))):
         img = os.path.basename(img).split('.')[0]
         # current image
         previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
         nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
 
         sources = [nifti]
-        targets = [template]
-
+        
+        if per_slice_template:
+            targets = [template[idx]]
         if previous_target_tag is not None:
             tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
         else:

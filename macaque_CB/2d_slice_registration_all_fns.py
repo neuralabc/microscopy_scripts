@@ -21,7 +21,7 @@ subject = 'zefir'
 # prefix = '_Image_'
 # suffix = '.vsi - 20x'
 # format = '.tif'
-output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_TEST/'
+output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_TEST_perSliceTemplate/'
 zfill_num = 4
 
 # image slices to consider
@@ -117,7 +117,7 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
         nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
 
         sources = [nifti]
-        
+
         if per_slice_template:
             targets = [template[idx]]
         if previous_target_tag is not None:
@@ -405,7 +405,7 @@ for iter in range(num_syn_reg_iterations):
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=final_reg_level_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,reg_output_tag='coreg12nl'+iter_tag)
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                        zfill_num=4,reg_level_tag='coreg12nl'+iter_tag)
+                                        zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=True)
     
 
     coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,1,2], 
@@ -417,5 +417,5 @@ for iter in range(num_syn_reg_iterations):
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg12nl'+iter_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,reg_output_tag='coreg12nl_win12'+iter_tag)
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                        zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag)
+                                        zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=True)
     final_reg_level_tag = 'coreg12nl_win12'+iter_tag

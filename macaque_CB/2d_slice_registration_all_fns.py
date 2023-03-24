@@ -23,6 +23,7 @@ subject = 'zefir'
 # format = '.tif'
 output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_TEST_perSliceTemplate/'
 zfill_num = 4
+per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 
 # image slices to consider
 # images = ['01','02','05','06','07','09','10','11','12','14','15','16','17','19','20','21','22']
@@ -201,7 +202,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 save_volume(slice_template_fname,nifti)
                 template_list.append(slice_template_fname)            
 
-        img = numpy.mean(img,axis=2)
+        img = numpy.median(img,axis=2)
         nifti = nibabel.Nifti1Image(img,affine=None,header=header)
         save_volume(template,nifti)
         print('Stacking: done - {}'.format(template))
@@ -212,7 +213,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
     
 
 
-def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl'):
+def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',
+                          zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
+                          overwrite=True):
     '''
     Use MI to determine best registration (forwards or backwards) and select going forward
     reg_output_tag identifies the best registration outputs
@@ -222,14 +225,17 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
     tag1_tail = f'_{reg_level_tag1}'
     tag2_tail = f'_{reg_level_tag2}'
     
-    for idx,img in enumerate(all_image_fnames):
-        img = os.path.basename(img).split('.')[0]
+    for idx,img_name in enumerate(all_image_fnames):
+        img_name = os.path.basename(img_name).split('.')[0]
 
-        template = output_dir+subject+template_tail
-        output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+out_tail+'_ants-def0.nii.gz'
-        if (not os.path.isfile(output)):
-            slice1 = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+tag1_tail+'_ants-def0.nii.gz'
-            slice2 = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+tag2_tail+'_ants-def0.nii.gz'
+        if not per_slice_template:
+            template = output_dir+subject+template_tail #we use the generally defined template
+        output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+out_tail+'_ants-def0.nii.gz'
+        if (not os.path.isfile(output)) or overwrite:
+            if per_slice_template: #or,we use individual templates
+                template = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
+            slice1 = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag1_tail+'_ants-def0.nii.gz'
+            slice2 = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag2_tail+'_ants-def0.nii.gz'
         
             curr1 = nighres.io.load_volume(slice1).get_fdata()
             curr2 = nighres.io.load_volume(slice2).get_fdata()
@@ -251,17 +257,17 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
             print("MI: "+str(mi1c)+", "+str(mi2c))
             
             # copy the best result
-            mapping= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+out_tail+'_ants-map.nii.gz'
-            inverse= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+out_tail+'_ants-invmap.nii.gz'
+            mapping= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+out_tail+'_ants-map.nii.gz'
+            inverse= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+out_tail+'_ants-invmap.nii.gz'
             if (mi1c>mi2c): 
-                mapping1= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+tag1_tail+'_ants-map.nii.gz'
-                inverse1= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+tag1_tail+'_ants-invmap.nii.gz'
+                mapping1= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag1_tail+'_ants-map.nii.gz'
+                inverse1= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag1_tail+'_ants-invmap.nii.gz'
                 shutil.copyfile(mapping1, mapping)
                 shutil.copyfile(inverse1, inverse)
                 shutil.copyfile(slice1, output)
             else:
-                mapping2= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+tag2_tail+'_ants-map.nii.gz'
-                inverse2= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+tag2_tail+'_ants-invmap.nii.gz'
+                mapping2= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag2_tail+'_ants-map.nii.gz'
+                inverse2= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag2_tail+'_ants-invmap.nii.gz'
                 shutil.copyfile(mapping2, mapping)
                 shutil.copyfile(inverse2, inverse)
                 shutil.copyfile(slice2, output)
@@ -360,7 +366,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 #   - forwards
 #   - backwards
 #   - select the best registration
-#   - generate a template
+#   - generate a template, using a per-slice template helps quite a bit
 #   - window in front and behind, forwards
 #   - window in front and behind, backwards
 #   - select the best registration
@@ -368,16 +374,29 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 
 # STEP 1: Rigid + Syn
 num_reg_iterations = 3
+template_tag = 'coreg0nl' #initial template tag, which we update with each loop
+
 for iter in range(num_reg_iterations): #here we always go back to the original coreg0 images, just refining our target template
-    iter_tag = f"rigsyn_{iter}"
+    iter_tag = f"_rigsyn_{iter}"
+    if (iter == 0):
+        first_run_slice_template = False
+    else:
+        first_run_slice_template = per_slice_template
+
     coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,run_syn=True) 
     coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
-                            zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,run_syn=True) 
-    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',
-                        zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,reg_output_tag='coreg12nl'+iter_tag)
+                            zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,run_syn=True)
+    
+    print(iter)
+    print(template_tag)
+    print(first_run_slice_template)
+    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+                        zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template) #use the per slice templates after the first round, if requested
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                        zfill_num=4,reg_level_tag='coreg12nl'+iter_tag)
+                                        zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template)
+    template_tag = 'coreg12nl'+iter_tag
     
     coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3,1,2,3], 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
@@ -385,10 +404,13 @@ for iter in range(num_reg_iterations): #here we always go back to the original c
     coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3,1,2,3], 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,run_syn=True)
-    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg12nl'+iter_tag,
-                        zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,reg_output_tag='coreg12nl_win12'+iter_tag)
+    
+    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+                        zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
+                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                        zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag)
+                                        zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
+    template_tag = 'coreg12nl_win12'+iter_tag
     
 final_reg_level_tag = 'coreg12nl_win12'+iter_tag
 step1_iter_tag = iter_tag
@@ -403,21 +425,26 @@ for iter in range(num_syn_reg_iterations):
                     zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, reg_level_tag='coreg1nl'+iter_tag,run_syn=True,run_rigid=False) 
     coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
                             zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, reg_level_tag='coreg2nl'+iter_tag,run_syn=True,run_rigid=False) 
-    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=final_reg_level_tag,
-                        zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,reg_output_tag='coreg12nl'+iter_tag)
+    
+    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+                        zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template)
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                        zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=True)
+                                        zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template)
+    template_tag = 'coreg12nl'+iter_tag
     # print(template)
-'''
+
     coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,1,2], 
                     zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,run_syn=True,run_rigid=False) 
     coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,1,2], 
                     zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,run_syn=True,run_rigid=False)
-    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg12nl'+iter_tag,
-                        zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,reg_output_tag='coreg12nl_win12'+iter_tag)
+
+    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+                        zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
+                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                        zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=True)
+                                        zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
     final_reg_level_tag = 'coreg12nl_win12'+iter_tag
-'''
+    template_tag = 'coreg12nl_win12'+iter_tag

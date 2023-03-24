@@ -39,23 +39,28 @@ if not os.path.exists(output_dir):
 def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
                      zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,
                      run_rigid=True,previous_target_tag=None,scaling_factor=64):
-     ''' Co-register to slices before/after
-     target_offset_list: negative values indicate slices prior to the current, positive after
-     '''
-     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
-     for idx,img in enumerate(all_image_fnames):
+    ''' Co-register to slices before/after
+    target_offset_list: negative values indicate slices prior to the current, positive after
+    '''
+    all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
+    if type(template) is list: #we have a list of templates, one for each slice
+        use_slice_template = True
+    else:
+        use_slice_template = False
+        targets = [template]
+    for idx,img in enumerate(all_image_fnames):
         img = os.path.basename(img).split('.')[0]
         # current image
         previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
         nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
 
         sources = [nifti]
-        targets = [template]
+        if use_slice_template:
+            targets = template[idx]
         if previous_target_tag is not None:
             tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
         else:
             tail = f'_{reg_level_tag}_ants-def0.nii.gz'
-
         # append additional images as additional targets to stabilize reg
         for slice_offset in target_slice_offet_list:
             if slice_offset < 0: #we add registration targets for the slices that came before

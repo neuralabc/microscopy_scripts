@@ -39,8 +39,23 @@ if not os.path.exists(output_dir):
 
 ## TODO: could add image_weights to bias towards close slices (they are an input to embedded_antspy_2d_multi)
 ## this can be done with
-# from scipy import signal
-# signal.windows.gaussian(num_vals, std=gauss_std)
+
+def generate_gaussian_weights(slice_order_idxs,includes_idx0=True,gauss_std=5):
+    ## slice_order_idxs has the order of slices that are put into the reg (all)
+    ## returns weights that sum to 1, in same order as slice_order_idxs
+    import numpy
+    from scipy import signal
+    max_idx = numpy.max(numpy.abs(slice_order_idxs))
+    num_vals = max_idx*2+1 #use this to define a symmetric gaussian centred on the 0th slice (i.e., itself or some kind of median or mean slice)    
+    #we are symmetric, so only need to care about 1/2, and weights do not yet sum to 1
+    weights = signal.windows.gaussian(num_vals, std=gauss_std)[max_idx:]
+    print(weights.shape)
+    out_weights = numpy.zeros(numpy.array(slice_order_idxs).shape)
+    for idx,slice_idx in enumerate(slice_order_idxs):
+        out_weights[idx] = weights[numpy.abs(slice_idx)]
+    return out_weights/out_weights.sum() #now sums to 1
+
+    
 
 def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
                      zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,

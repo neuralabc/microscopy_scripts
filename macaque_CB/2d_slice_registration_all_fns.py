@@ -38,6 +38,10 @@ if not os.path.exists(output_dir):
      os.makedirs(output_dir)
 
 ## TODO: could add image_weights to bias towards close slices (they are an input to embedded_antspy_2d_multi)
+## this can be done with
+# from scipy import signal
+# signal.windows.gaussian(num_vals, std=gauss_std)
+
 def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
                      zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,
                      run_rigid=True,previous_target_tag=None,scaling_factor=64):

@@ -38,12 +38,11 @@ all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_
 if not os.path.exists(output_dir):
      os.makedirs(output_dir)
 
-## TODO: could add image_weights to bias towards close slices (they are an input to embedded_antspy_2d_multi)
-## this can be done with
 
-def generate_gaussian_weights(slice_order_idxs,includes_idx0=True,gauss_std=5):
+def generate_gaussian_weights(slice_order_idxs,includes_idx0=True,gauss_std=3):
     ## slice_order_idxs has the order of slices that are put into the reg (all)
     ## returns weights that sum to 1, in same order as slice_order_idxs
+    ## the smaller the gaus_std, the more the weights will be biased towards the closest slice(s)
     import numpy
     from scipy import signal
     max_idx = numpy.max(numpy.abs(slice_order_idxs))
@@ -60,11 +59,16 @@ def generate_gaussian_weights(slice_order_idxs,includes_idx0=True,gauss_std=5):
 
 def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
                      zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,
-                     run_rigid=True,previous_target_tag=None,scaling_factor=64):
+                     run_rigid=True,previous_target_tag=None,scaling_factor=64,image_weights=True):
     ''' Co-register to slices before/after
     target_offset_list: negative values indicate slices prior to the current, positive after
     '''
     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
+
+    if image_weights:
+        image_weights = generate_gaussian_weights(target_slice_offet_list)
+    else:
+        image_weights = None
     if type(template) is list: #we have a list of templates, one for each slice
         per_slice_template = True
     else:
@@ -99,6 +103,7 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
         output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
         coreg_output = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
                         target_images=targets,
+                        image_weights=image_weights,
                         run_rigid=run_rigid,
                         rigid_iterations=1000,
                         run_affine=False,
@@ -117,13 +122,18 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
 
 def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
                              zfill_num=4, input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl',run_syn=True,
-                             run_rigid=True, previous_target_tag=None,scaling_factor=64):
+                             run_rigid=True, previous_target_tag=None,scaling_factor=64,image_weights=True):
     ''' Co-register to slices before/after
     target_offset_list: negative values indicate slices prior to the current, positive after
     differs in that we reverse the list (and the idx) and the offsets are the opposite sign
     TODO: can likely be combined with standard, with some more thought.
     '''
     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
+    
+    if image_weights:
+        image_weights = generate_gaussian_weights(target_slice_offet_list)
+    else:
+        image_weights = None
     if type(template) is list: #we have a list of templates, one for each slice
         per_slice_template = True
     else:
@@ -160,6 +170,7 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
         output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
         coreg_output = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
                         target_images=targets,
+                        image_weights=image_weights,
                         run_rigid=run_rigid,
                         rigid_iterations=1000,
                         run_affine=False,

@@ -22,7 +22,7 @@ subject = 'zefir'
 # prefix = '_Image_'
 # suffix = '.vsi - 20x'
 # format = '.tif'
-output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate/'
+output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights/'
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 run_syn = True #include some nonlinear reg in the initial regs as well (best to do this with hand-created slice data)
@@ -43,6 +43,7 @@ def generate_gaussian_weights(slice_order_idxs,includes_idx0=True,gauss_std=3):
     ## slice_order_idxs has the order of slices that are put into the reg (all)
     ## returns weights that sum to 1, in same order as slice_order_idxs
     ## the smaller the gaus_std, the more the weights will be biased towards the closest slice(s)
+
     import numpy
     from scipy import signal
     max_idx = numpy.max(numpy.abs(slice_order_idxs))

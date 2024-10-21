@@ -1,16 +1,17 @@
 
+import os
+import shutil
 import nighres
 import numpy
-import math
 import nibabel
 from PIL import Image
-from nighres.io import load_volume, save_volume
-import scipy.ndimage
 from scipy.signal import convolve2d
-import os
-from nibabel import processing
-import subprocess
-import shutil
+# import math
+# from nighres.io import load_volume, save_volume
+# import scipy.ndimage
+# from nibabel import processing
+# import subprocess
+
 
 
 # code by @pilou, using nighres

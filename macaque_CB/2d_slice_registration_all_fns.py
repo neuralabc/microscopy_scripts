@@ -14,7 +14,7 @@ from scipy.signal import convolve2d
 
 
 
-# code by @pilou, using nighres
+# code by @pilou, using nighres; adapted, modularized, and extended by @csteele
 
 # file parameters
 subject = 'zefir'

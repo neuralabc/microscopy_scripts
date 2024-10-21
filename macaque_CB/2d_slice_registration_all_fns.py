@@ -7,7 +7,7 @@ import nibabel
 from PIL import Image
 from scipy.signal import convolve2d
 # import math
-# from nighres.io import load_volume, save_volume
+from nighres.io import load_volume, save_volume
 # import scipy.ndimage
 # from nibabel import processing
 # import subprocess

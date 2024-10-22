@@ -248,6 +248,23 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
     else:
         return template
     
+import numpy as np
+import nighres
+from sklearn.metrics import mutual_info_score
+
+# Calculate Mutual Information between two images
+def calculate_MI(slice1, slice2):
+    """Calculate mutual information between two 2D slices."""
+    slice1_flat = slice1.ravel()
+    slice2_flat = slice2.ravel()
+    return mutual_info_score(slice1_flat, slice2_flat)
+
+# Function to check if a slice is an outlier based on MI with its neighbors
+def is_outlier(slice, neighbor_slices, threshold=0.2):
+    """Check if the slice is an outlier compared to its neighbors using MI."""
+    mi_scores = [calculate_MI(slice, neighbor) for neighbor in neighbor_slices]
+    mean_mi = np.mean(mi_scores)
+    return np.any(np.array(mi_scores) < mean_mi * (1 - threshold))  # Detect outlier if any MI is too low
 
 
 def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',
@@ -285,6 +302,10 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
             p1c,v1,vc = numpy.histogram2d(curr1.flatten(), curr.flatten(), bins=100, density=True)
             p2c,v2,vc = numpy.histogram2d(curr2.flatten(), curr.flatten(), bins=100, density=True)
         
+            #normalize joint histograms to 1
+            p1c = p1c / np.sum(p1c)
+            p2c = p2c / np.sum(p2c)
+            
             p1pc = numpy.outer(p1,pc)
             p2pc = numpy.outer(p2,pc)
                 
@@ -410,7 +431,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 #   - generate a template
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 10
+num_reg_iterations = 5
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 
 

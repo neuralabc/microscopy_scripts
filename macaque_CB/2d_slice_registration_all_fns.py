@@ -208,8 +208,8 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
                         save_data=True, overwrite=False,
                         file_name=output)
 
-def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',per_slice_template=False,
-                                missing_idxs_to_fill=None):
+def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
+                                per_slice_template=False,missing_idxs_to_fill=None):
     #we can also output a per_slice_template based on the median of the current and neighbouring slices
     stack = []
     stack_tail = f'_{reg_level_tag}_stack.nii.gz'
@@ -233,6 +233,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
         img = numpy.stack(stack,axis=-1)
 
+        missing_idxs_to_fill = None #XXX SETTING TO NONE FOR TESTING TODO
         #now we fill any missing data with the mean of the neighbouring slices
         if missing_idxs_to_fill is not None and len(missing_idxs_to_fill)>0:
             missing_idxs_to_fill.sort() #sort it
@@ -391,12 +392,43 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
                 shutil.copyfile(slice2, output)
 
             # cleanup files
-            shutil.rmtree(mapping1)
-            shutil.rmtree(mapping2)
-            shutil.rmtree(inverse1)
-            shutil.rmtree(inverse2)
-            shutil.rmtree(slice1)
-            shutil.rmtree(slice2)
+            try:
+                os.remove(mapping1)
+                print(f"File {mapping1} deleted successfully.")
+            except:
+                pass
+
+            try:
+                os.remove(mapping2)
+                print(f"File {mapping2} deleted successfully.")
+            except:
+                pass
+
+            try:
+                os.remove(inverse1)
+                print(f"File {inverse1} deleted successfully.")
+            except:
+                pass
+
+            try:
+                os.remove(inverse2)
+                print(f"File {inverse2} deleted successfully.")
+            except:
+                pass
+
+            try:
+                os.remove(slice1)
+                print(f"File {slice1} deleted successfully.")
+            except:
+                pass
+
+            try:
+                os.remove(slice2)
+                print(f"File {slice2} deleted successfully.")
+            except:
+                pass
+
+
             
 
 # 0. Convert to nifti

@@ -37,25 +37,46 @@ all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_
 if not os.path.exists(output_dir):
      os.makedirs(output_dir)
 
-
-def generate_gaussian_weights(slice_order_idxs,includes_idx0=False,gauss_std=3):
-    ## slice_order_idxs has the order of slices that are put into the reg (all)
-    ## returns weights that sum to 1, in same order as slice_order_idxs
-    ## the smaller the gaus_std, the more the weights will be biased towards the closest slice(s)
-
-    import numpy
+def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
+    """
+    Generates Gaussian weights for the given slice indices, ensuring the weights sum to 1.
+    This should be agnostic to the order in which the slice_order_indices are input.
+    
+    Parameters:
+    - slice_order_idxs: list of slice indices to generate weights for.
+    - gauss_std: Standard deviation of the Gaussian distribution, controls the spread of the weights.
+    
+    Returns:
+    - out_weights: Array of Gaussian weights corresponding to the input slice indices, summing to 1.
+    """
+    import numpy as np
     from scipy import signal
-    if not includes_idx0:
-        slice_order_idxs = numpy.hstack([[0],slice_order_idxs])        
-    max_idx = numpy.max(numpy.abs(slice_order_idxs))
-    num_vals = max_idx*2+1 #use this to define a symmetric gaussian centred on the 0th slice (i.e., itself or some kind of median or mean slice)    
-    #we are symmetric, so only need to care about 1/2, and weights do not yet sum to 1
-    weights = signal.windows.gaussian(num_vals, std=gauss_std)[max_idx:]
-    print(weights.shape)
-    out_weights = numpy.zeros(numpy.array(slice_order_idxs).shape)
-    for idx,slice_idx in enumerate(slice_order_idxs):
-        out_weights[idx] = weights[numpy.abs(slice_idx)]
-    return out_weights/out_weights.sum() #now sums to 1
+
+    # Ensure slice_order_idxs is a numpy array
+    slice_order_idxs = np.array(slice_order_idxs)
+    
+    # Insert 0 into the correct "middle" location, preserving the original order
+    if 0 not in slice_order_idxs:
+        mid_index = np.argmin(np.abs(slice_order_idxs))  # Insert 0 in the central position relative to other slices
+        slice_order_idxs = np.insert(slice_order_idxs, mid_index + 1, 0)
+    
+    # Define the range of indices to cover both positive and negative slices symmetrically
+    max_idx = np.max(np.abs(slice_order_idxs))
+    num_vals = max_idx * 2 + 1  # Total number of values in the symmetric Gaussian
+    
+    # Generate a symmetric Gaussian, centered at 0
+    gaussian_window = signal.windows.gaussian(num_vals, std=gauss_std)
+    
+    # Extract the weights corresponding to the absolute slice indices
+    out_weights = np.zeros(slice_order_idxs.shape)
+    
+    for i, slice_idx in enumerate(slice_order_idxs):
+        # Use the absolute value of the slice index to get the corresponding weight
+        out_weights[i] = gaussian_window[max_idx + slice_idx]
+    
+    # Normalize the weights to sum to 1
+    return out_weights / out_weights.sum()
+
 
 def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
                      zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,
@@ -66,7 +87,7 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
 
     if image_weights:
-        image_weights = generate_gaussian_weights(target_slice_offet_list) #we include the input slice (slice 0) in the weighting (by default)
+        image_weights = generate_gaussian_weights(target_slice_offet_list) #function adds the input slice (slice 0) in the weighting
     else:
         image_weights = None
     if type(template) is list: #we have a list of templates, one for each slice
@@ -131,7 +152,7 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
     
     if image_weights:
-        image_weights = generate_gaussian_weights(target_slice_offet_list) #we include the input slice (slice 0) in the weighting (by default)
+        image_weights = generate_gaussian_weights(target_slice_offet_list)
     else:
         image_weights = None
     if type(template) is list: #we have a list of templates, one for each slice

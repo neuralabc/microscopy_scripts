@@ -1,9 +1,11 @@
 
 import os
+import time
 import shutil
 import nighres
 import numpy
 import nibabel
+import glob
 from PIL import Image
 from scipy.signal import convolve2d
 # import math
@@ -22,7 +24,7 @@ subject = 'zefir'
 # prefix = '_Image_'
 # suffix = '.vsi - 20x'
 # format = '.tif'
-output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights/'
+output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_TEST/'
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 run_syn = True #include some nonlinear reg in the initial regs as well (best to do this with hand-created slice data)
@@ -30,7 +32,7 @@ rescale=20
 
 all_image_fnames = ['/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_01_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_01_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_02_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_02_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_03_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_03_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_04_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_04_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_05_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_05_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_06_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_06_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_07_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_07_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_08_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_08_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_09_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_09_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_10_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_10_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_11_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_11_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_12_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_12_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_13_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_13_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_14_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_14_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_15_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_16_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_17_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_18_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_19_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_20_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_21_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_22_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_23_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_24_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_25_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_26_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_27_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_28_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_29_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_30_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_31_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_32_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_33_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_34_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_35_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_36_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_37_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_38_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_39_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_40_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_41_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_42_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/slide_43_Image_01_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_43_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_44_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_45_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_46_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_48_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_49_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_50_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_51_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_52_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_53_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_54_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_55_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_56_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_57_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_58_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_59_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_60_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_61_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_62_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_63_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_64_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_65_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_66_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_67_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_68_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_69_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_70_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_71_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_72_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_73_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_74_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_75_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_76_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_77_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_78_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/slide_80_Image_01_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_79_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_80_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_81_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_82_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_83_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_84_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_85_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_86_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_87_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_88_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_89_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_90_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_91_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_92_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_93_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/slide_96_Image_01_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_94_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_95_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_96_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP1/_Image_97_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_01_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_02_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_03_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_04_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_05_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_06_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_07_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_08_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_09_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_10_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_11_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_12_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_13_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_14_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_15_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_16_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_17_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_18_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_19_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_20_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_21_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_22_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_23_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_24_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_25_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_26_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_27_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_28_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_29_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_30_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_31_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_32_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_33_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_34_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_35_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_36_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_37_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_38_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_39_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_40_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_41_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_42_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_43_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_44_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_45_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_46_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_47_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_48_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_49_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_50_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_51_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_52_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_53_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_54_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_55_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_56_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_57_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_58_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_59_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_60_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_61_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_61_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_62_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_62_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_63_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_63_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_64_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_64_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_65_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_65_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_66_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_66_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_67_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_67_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_68_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_68_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_69_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_69_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_70_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_70_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_71_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_71_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_72_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_72_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_73_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_73_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_74_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_74_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_75_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_75_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/slide_176_Image_01_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/slide_176_Image_01_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_76_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_76_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_77_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_77_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_78_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_78_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_79_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_79_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_80_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_80_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_81_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_81_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_82_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_83_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_83_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_84_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_84_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_85_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_85_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_86_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_86_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_87_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_87_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_88_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_88_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_89_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_89_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_90_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_90_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_91_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_91_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_92_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_92_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_93_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_93_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_94_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_94_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_95_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_95_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_96_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_96_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_97_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_97_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_98_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_98_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_99_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP2/_Image_99_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_01_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_01_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_02_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_02_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_03_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_03_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_04_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_04_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_05_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_05_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_06_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_06_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_07_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_07_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_08_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_08_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_09_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_09_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_10_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_10_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_11_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_11_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_12_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_12_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_13_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_13_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_14_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_14_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_15_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_15_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_16_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_16_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_17_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_17_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_18_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_18_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_19_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_19_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_20_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_20_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_21_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_22_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_22_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_23_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_23_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_24_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_24_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_25_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_25_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_26_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_26_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_27_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_27_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_28_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_28_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_29_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_29_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_30_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_30_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_31_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_31_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_32_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_32_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_33_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_33_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_34_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_34_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_35_-_20x_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_36_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_36_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_37_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_37_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_38_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_38_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_39_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_39_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_39_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_40_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_40_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_40_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_41_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_41_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_41_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_42_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_42_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_42_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_43_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_43_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_43_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_44_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_44_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_44_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_45_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_45_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_45_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_46_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_46_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_46_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_47_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_47_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_47_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_48_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_48_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_48_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_49_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_49_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_49_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_50_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_50_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_50_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_51_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_51_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_51_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_52_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_52_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_52_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_53_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_53_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_53_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_54_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_54_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_54_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_55_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_55_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_55_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_56_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_56_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_56_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_57_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_57_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_57_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_58_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_58_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_59_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_59_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_59_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_60_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_60_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_61_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_61_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_61_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_61_-_20x_04_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_62_-_20x_01_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_62_-_20x_02_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_62_-_20x_03_cellCount_29_downsample_10p002um_pix.tif', '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/TP3/_Image_62_-_20x_04_cellCount_29_downsample_10p002um_pix.tif']
 
-all_image_fnames = all_image_fnames[0:200] #for testing
+all_image_fnames = all_image_fnames[0:10] #for testing
 all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
 
@@ -40,7 +42,9 @@ if not os.path.exists(output_dir):
 def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     """
     Generates Gaussian weights for the given slice indices, ensuring the weights sum to 1.
-    This should be agnostic to the order in which the slice_order_indices are input.
+    This should be agnostic to the order in which the slice_order_indices are input, but this order
+    should be consistent with the input slices. 0 must be the first element of slice_order_idxs, as 
+    this indicates the position of the template and will receive the peak of the gaussian.
     
     Parameters:
     - slice_order_idxs: list of slice indices to generate weights for.
@@ -55,10 +59,17 @@ def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     # Ensure slice_order_idxs is a numpy array
     slice_order_idxs = np.array(slice_order_idxs)
     
-    # Insert 0 into the correct "middle" location, preserving the original order
+    # Insert 0 into the beginning of the slice_order_idxs if it is not already there
     if 0 not in slice_order_idxs:
-        mid_index = np.argmin(np.abs(slice_order_idxs))  # Insert 0 in the central position relative to other slices
-        slice_order_idxs = np.insert(slice_order_idxs, mid_index + 1, 0)
+        slice_order_idxs = np.insert(slice_order_idxs,0,0) #insert 0 at the beginning
+    if slice_order_idxs[0] != 0:
+        print("0 must be the first element of slice_order_idxs")
+        print("FIX THIS")
+        return "0 must be the first emelement of slice_order_idxs"
+    elif np.sum(slice_order_idxs==0)>1:
+        print("There are multiple 0s in slice_order_idxs")
+        print("FIX THIS")
+        return "There are multiple 0s in slice_order_idxs"
     
     # Define the range of indices to cover both positive and negative slices symmetrically
     max_idx = np.max(np.abs(slice_order_idxs))
@@ -80,16 +91,12 @@ def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
 
 def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
                      zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,
-                     run_rigid=True,previous_target_tag=None,scaling_factor=64,image_weights=True):
+                     run_rigid=True,previous_target_tag=None,scaling_factor=64,image_weights=None):
     ''' Co-register to slices before/after
     target_offset_list: negative values indicate slices prior to the current, positive after
     '''
     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
 
-    if image_weights:
-        image_weights = generate_gaussian_weights(target_slice_offet_list) #function adds the input slice (slice 0) in the weighting
-    else:
-        image_weights = None
     if type(template) is list: #we have a list of templates, one for each slice
         per_slice_template = True
     else:
@@ -102,6 +109,7 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
         nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
 
         sources = [nifti]
+        image_weights_ordered = [image_weights[0]]
         if per_slice_template:
             targets = [template[idx]]
         if previous_target_tag is not None:
@@ -109,29 +117,35 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
         else:
             tail = f'_{reg_level_tag}_ants-def0.nii.gz'
         # append additional images as additional targets to stabilize reg
-        for slice_offset in target_slice_offet_list:
+        for idx2,slice_offset in enumerate(target_slice_offet_list):
             if slice_offset < 0: #we add registration targets for the slices that came before
                 if idx > numpy.abs(slice_offset + 1):        
                     prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
                     sources.append(nifti)
                     targets.append(prev1)
+                    image_weights_ordered.append(image_weights[idx2+1]) #since we have already added the first image weight
             elif slice_offset > 0: #we add registration targets for the slices that come afterwards
                  if idx < len(all_image_fnames)-1*slice_offset:
                     prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
                     sources.append(nifti)
                     targets.append(prev1)
+                    image_weights_ordered.append(image_weights[idx2+1])
         
         output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
+        print(sources)
+        print(targets)
+        print(image_weights_ordered)
+        print(f'output: {output.split("/")[-1]}')
         coreg_output = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
                         target_images=targets,
-                        image_weights=image_weights,
+                        image_weights=image_weights_ordered,
                         run_rigid=run_rigid,
                         rigid_iterations=1000,
                         run_affine=False,
                         run_syn=run_syn,
                         coarse_iterations=2000,
                         medium_iterations=1000, fine_iterations=200,
-					    scaling_factor=scaling_factor,
+        			    scaling_factor=scaling_factor,
                         cost_function='MutualInformation',
                         interpolation='Linear',
                         regularization='High',
@@ -140,10 +154,20 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
                         ignore_affine=True, ignore_orient=True, ignore_res=True,
                         save_data=True, overwrite=False,
                         file_name=output)
+        time.sleep(1) #to avoid overloading the system
+        
+        # cleanup extra deformation files produced after registration (def? are all the same as def0 - the deformed image)
+        def_files = glob.glob(f'{output}_ants-def*')
+        for f in def_files:
+            if 'def0' in f:
+                pass
+            else:
+                os.remove(f)
+                time.sleep(.5)
 
 def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
                              zfill_num=4, input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl',run_syn=True,
-                             run_rigid=True, previous_target_tag=None,scaling_factor=64,image_weights=True):
+                             run_rigid=True, previous_target_tag=None,scaling_factor=64,image_weights=None):
     ''' Co-register to slices before/after
     target_offset_list: negative values indicate slices prior to the current, positive after
     differs in that we reverse the list (and the idx) and the offsets are the opposite sign
@@ -151,10 +175,6 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
     '''
     all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
     
-    if image_weights:
-        image_weights = generate_gaussian_weights(target_slice_offet_list)
-    else:
-        image_weights = None
     if type(template) is list: #we have a list of templates, one for each slice
         per_slice_template = True
     else:
@@ -167,7 +187,7 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
         nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
 
         sources = [nifti]
-
+        image_weights_ordered = [image_weights[0]]
         if per_slice_template:
             targets = [template[idx]]
         if previous_target_tag is not None:
@@ -176,22 +196,28 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
             tail = f'_{reg_level_tag}_ants-def0.nii.gz'
 
         # append additional images as additional targets to stabilize reg
-        for slice_offset in target_slice_offet_list:
+        for idx2, slice_offset in enumerate(target_slice_offet_list):
             if slice_offset < 0: #we add registration targets for the slices that came before
                 if idx > numpy.abs(slice_offset + 1):        
                     prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
                     sources.append(nifti)
                     targets.append(prev1)
+                    image_weights_ordered.append(image_weights[idx2+1]) #add 1 b/c we have already added the first image weight above
             elif slice_offset > 0: #we add registration targets for the slices that come afterwards
                  if idx < len(all_image_fnames)-1*slice_offset:
                     prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
                     sources.append(nifti)
                     targets.append(prev1)
+                    image_weights_ordered.append(image_weights[idx2+1])
         
         output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
+        print(sources)
+        print(targets)
+        print(image_weights_ordered)
+        print(f'output: {output.split("/")[-1]}')
         coreg_output = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
                         target_images=targets,
-                        image_weights=image_weights,
+                        image_weights=image_weights_ordered,
                         run_rigid=run_rigid,
                         rigid_iterations=1000,
                         run_affine=False,
@@ -207,6 +233,15 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
                         ignore_affine=True, ignore_orient=True, ignore_res=True,
                         save_data=True, overwrite=False,
                         file_name=output)
+        time.sleep(1) #to avoid overloading the system
+        # cleanup extra deformation files produced after registration (def? are all the same as def0 - the deformed image)
+        def_files = glob.glob(f'{output}_ants-def*')
+        for f in def_files:
+            if 'def0' in f:
+                pass
+            else:
+                os.remove(f)
+                time.sleep(.5)
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None):
@@ -303,25 +338,6 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         return template_list
     else:
         return template
-    
-# import numpy as np
-# import nighres
-# from sklearn.metrics import mutual_info_score
-
-# # Calculate Mutual Information between two images
-# def calculate_MI(slice1, slice2):
-#     """Calculate mutual information between two 2D slices."""
-#     slice1_flat = slice1.ravel()
-#     slice2_flat = slice2.ravel()
-#     return mutual_info_score(slice1_flat, slice2_flat)
-
-# # Function to check if a slice is an outlier based on MI with its neighbors
-# def is_outlier(slice, neighbor_slices, threshold=0.2):
-#     """Check if the slice is an outlier compared to its neighbors using MI."""
-#     mi_scores = [calculate_MI(slice, neighbor) for neighbor in neighbor_slices]
-#     mean_mi = np.mean(mi_scores)
-#     return np.any(np.array(mi_scores) < mean_mi * (1 - threshold))  # Detect outlier if any MI is too low
-
 
 def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',
                           zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
@@ -391,56 +407,34 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
                 shutil.copyfile(inverse2, inverse)
                 shutil.copyfile(slice2, output)
 
-            # cleanup files
-            try:
-                os.remove(mapping1)
-                print(f"File {mapping1} deleted successfully.")
-            except:
-                pass
+            # cleanup files, removing old mappings that are no longer needed
+            map_files = glob.glob(output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+"*"+'_ants-*map.nii.gz')
+            for f in map_files:
+                if out_tail in f:
+                    pass
+                else:
+                    os.remove(f)
+                    time.sleep(.5)
 
-            try:
-                os.remove(mapping2)
-                print(f"File {mapping2} deleted successfully.")
-            except:
-                pass
-
-            try:
-                os.remove(inverse1)
-                print(f"File {inverse1} deleted successfully.")
-            except:
-                pass
-
-            try:
-                os.remove(inverse2)
-                print(f"File {inverse2} deleted successfully.")
-            except:
-                pass
-
-            try:
-                os.remove(slice1)
-                print(f"File {slice1} deleted successfully.")
-            except:
-                pass
-
-            try:
-                os.remove(slice2)
-                print(f"File {slice2} deleted successfully.")
-            except:
-                pass
+            os.remove(slice1)
+            time.sleep(.5)
+            os.remove(slice2)
+            time.sleep(.5)
 
 
             
 
 # 0. Convert to nifti
+print('0. Converting images to .nii.gz')
 for idx,img_orig in enumerate(all_image_fnames):
     img = os.path.basename(img_orig).split('.')[0] 
     output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
     
     if (os.path.isfile(output)):
-        print('1. Extract lightness: done')
+        print('\t - already done, using existing image')
         nifti = output
     else:
-        print('image '+str(img_orig))
+        print('\t - image '+str(img_orig))
         # get the TIFF image
         slice_name = str(img_orig)
         if os.path.isfile(slice_name):
@@ -472,9 +466,10 @@ for idx,img_orig in enumerate(all_image_fnames):
             save_volume(output,nifti)
                  
         else:
-            print('file '+slice_name+' not found')
+            print('\tfile '+slice_name+' not found')
             
 # 1. Find largeest image as baseline
+print('2. Identifying the largest image to set image size')
 largest = -1
 size= 0
 for idx,img in enumerate(all_image_fnames):
@@ -490,6 +485,7 @@ template = output_dir+subject+'_'+str(largest).zfill(zfill_num)+'_'+os.path.base
 
 print(f"\tUsing the following image as the template for size: {template}")
 
+print('3. Bring all image slices into same place as our 2d template with an initial translation registration')
 # initial step to bring all images into the same space of our 2d template
 for idx,img in enumerate(all_image_fnames):
     img = os.path.basename(img).split('.')[0]
@@ -524,9 +520,11 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 #   - generate a template, using a per-slice template helps quite a bit
 #   - window in front and behind, forwards
 #   - window in front and behind, backwards
-#   - select the best registration
+#   - select the best registration with MI
 #   - generate a template
+#   - delete unecessary files (in progress...)
 
+print('4. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
 num_reg_iterations = 10
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
@@ -534,15 +532,22 @@ template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 for iter in range(num_reg_iterations): #here we always go back to the original coreg0 images, just refining our target template
     iter_tag = f"_rigsyn_{iter}"
+    print(f'\t iteration tag: {iter_tag}')
     if (iter == 0):
         first_run_slice_template = False
     else:
         first_run_slice_template = per_slice_template
 
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,run_syn=run_syn) 
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
-                            zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,run_syn=run_syn)
+    slice_offset_list_forward = [-1,-2,-3]
+    slice_offset_list_reverse = [1,2,3]
+    image_weights = generate_gaussian_weights([0,1,2,3]) #symmetric gaussian, so the same on both sides
+
+    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_forward, 
+                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
+                    image_weights=image_weights,run_syn=run_syn,) 
+    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_reverse, 
+                            zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
+                            image_weights=image_weights,run_syn=run_syn)
     
     print(iter)
     print(template_tag)
@@ -555,12 +560,20 @@ for iter in range(num_reg_iterations): #here we always go back to the original c
                                         missing_idxs_to_fill=missing_idxs_to_fill)
     template_tag = 'coreg12nl'+iter_tag
     
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3,1,2,3], 
+    slice_offset_list_forward = [-3,-2,-1,1] #weigted back, but also forward
+    slice_offset_list_reverse = [-1,1,2,3] #weighted forward, but also back
+    image_weights = generate_gaussian_weights([-3,-2,-1,0,1]) #symmetric gaussian, so the same on both sides
+
+    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,run_syn=run_syn) 
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3,1,2,3], 
+                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
+                    image_weights=image_weights,run_syn=run_syn) 
+    
+    image_weights = generate_gaussian_weights([-1,0,1,2,3])
+    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_reverse, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,run_syn=run_syn)
+                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
+                    image_weights=image_weights,run_syn=run_syn)
     
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
@@ -574,11 +587,13 @@ final_reg_level_tag = 'coreg12nl_win12'+iter_tag
 step1_iter_tag = iter_tag
 
 # # STEP 2: Syn only
+# print('4. Begin STAGE2 registration iterations - Syn')
 # num_syn_reg_iterations = 10
 # for iter in range(num_syn_reg_iterations):
 #     #for the nonlinear step, we base our registrations on the previous ones instead of going back to the original images, starting with the previous step and 
 #     # then using the output from each successive step
 #     iter_tag = f"{step1_iter_tag}_syn_{iter}"
+#     print(f'\t iteration tag: {iter_tag}')
 #     coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
 #                     zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, reg_level_tag='coreg1nl'+iter_tag,run_syn=True,run_rigid=False) 
 #     coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 

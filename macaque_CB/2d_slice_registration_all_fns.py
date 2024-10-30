@@ -2,6 +2,9 @@
 import os
 import time
 import shutil
+import logging
+import sys
+from datetime import datetime
 import nighres
 import numpy
 import nibabel
@@ -13,6 +16,8 @@ from nighres.io import load_volume, save_volume
 # import scipy.ndimage
 # from nibabel import processing
 # import subprocess
+
+
 
 
 
@@ -497,6 +502,66 @@ def create_affine(shape):
     affine[0, 3] = -shape[0] / 2.0
     affine[1, 3] = -shape[1] / 2.0
     return affine
+
+
+## output logger
+class StreamToLogger:
+    """Redirect `print` statements to the logger."""
+    def __init__(self, logger, level=logging.INFO):
+        self.logger = logger
+        self.level = level
+        self.linebuf = ""
+
+    def write(self, message):
+        if message.strip():  # Log only non-empty messages
+            self.logger.log(self.level, message.strip())
+
+    def flush(self):
+        pass  # Required for file-like objects, no action needed here
+
+def setup_logging(dataset_name, out_dir):
+    # Ensure the output directory exists
+    os.makedirs(out_dir, exist_ok=True)
+    
+    # Format log file name based on the dataset and current timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = os.path.join(out_dir, f"{dataset_name}_log_{timestamp}.log")
+    
+    # Configure the logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)  # Capture all messages
+    
+    # Create a file handler that writes all messages to the log file
+    file_handler = logging.FileHandler(log_filename)
+    file_handler.setLevel(logging.INFO)
+    file_formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    file_handler.setFormatter(file_formatter)
+    
+    # Add a console handler to output higher-priority messages to the console
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_formatter = logging.Formatter("%(levelname)s - %(message)s")
+    console_handler.setFormatter(console_formatter)
+    
+    # Add handlers to the logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    # Redirect `print` statements to logger
+    sys.stdout = StreamToLogger(logger, logging.INFO)
+    
+    # Log the start of processing
+    logger.info(f"Logging initialized for dataset '{dataset_name}'")
+    
+    return logger
+
+
+# start our logger, which will capture all the print statements
+script_name = os.path.basename(__file__)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+logger = setup_logging(script_name, script_dir)
 
 # 0. Convert to nifti
 print('0. Converting images to .nii.gz')

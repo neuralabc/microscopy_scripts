@@ -35,7 +35,7 @@ subject = 'zefir'
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=10 #larger scale means that you have to change the scaling_factor
-
+downsample_parallel = False
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all/'
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_{rescale}/'
 
@@ -599,9 +599,9 @@ for idx,img_orig in enumerate(all_image_fnames):
             slice_li = numpy.pad(slice_img,pad_width=((0,rescale),(0,rescale)),mode='edge')
             
             
-            try:
+            if downsample_parallel:
                 slice_img = downsample_image_parallel(slice_img, rescale, n_jobs=-1)
-            except:
+            else:
                 slice_img = downsample_image(slice_img, rescale)
 
             ## original approach, below, was v. slow

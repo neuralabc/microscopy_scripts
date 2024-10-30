@@ -35,7 +35,6 @@ subject = 'zefir'
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=10 #larger scale means that you have to change the scaling_factor
-
 downsample_parallel = False #can be much faster, since it skips the Parallel overhead
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all/'
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_{rescale}/'
@@ -628,8 +627,8 @@ for idx,img_orig in enumerate(all_image_fnames):
             print('\tfile '+slice_name+' not found')
             
 # 1. Find largeest image as baseline
-print('2. Identifying the largest image to set image size')
-logger.warning('2. Identifying the largest image to set image size')
+print('1. Identifying the largest image to set image size')
+logger.warning('1. Identifying the largest image to set image size')
 largest = -1
 size= 0
 for idx,img in enumerate(all_image_fnames):
@@ -645,8 +644,8 @@ template = output_dir+subject+'_'+str(largest).zfill(zfill_num)+'_'+os.path.base
 
 print(f"\tUsing the following image as the template for size: {template}")
 
-print('3. Bring all image slices into same place as our 2d template with an initial translation registration')
-logger.warning('3. Bring all image slices into same place as our 2d template with an initial translation registration')
+print('2. Bring all image slices into same place as our 2d template with an initial translation registration')
+logger.warning('2. Bring all image slices into same place as our 2d template with an initial translation registration')
 # initial step to bring all images into the same space of our 2d template
 for idx,img in enumerate(all_image_fnames):
     img = os.path.basename(img).split('.')[0]
@@ -685,8 +684,8 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 #   - generate a template
 #   - delete unecessary files (in progress...)
 
-print('4. Begin STAGE1 registration iterations - Rigid + Syn')
-logger.warning('4. Begin STAGE1 registration iterations - Rigid + Syn')
+print('3. Begin STAGE1 registration iterations - Rigid + Syn')
+logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
 num_reg_iterations = 10
@@ -697,12 +696,12 @@ template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # missing_idxs_to_fill = None
 for iter in range(num_reg_iterations): 
-    logger.warning(f'\titeration {iter}')
     
     #here we always go back to the original coreg0 images, we are basically just refning our target template(s)
     
     iter_tag = f"_rigsyn_{iter}"
     print(f'\t iteration tag: {iter_tag}')
+    logger.warning(f'\titeration {iter_tag}')
     if (iter == 0):
         first_run_slice_template = False
     else:
@@ -769,7 +768,7 @@ for iter in range(num_syn_reg_iterations):
     # then using the output from each successive step
     iter_tag = f"{step1_iter_tag}_syn_{iter}"
     print(f'\t iteration tag: {iter_tag}')
-    logger.warning(f'\titeration {iter}')
+    logger.warning(f'\titeration {iter_tag}')
 
     slice_offset_list_forward = [-1,-2,-3] #weigted back, but also forward
     slice_offset_list_reverse = [1,2,3] #weighted forward, but also back

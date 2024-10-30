@@ -578,6 +578,7 @@ print(f"Output directory: {output_dir}")
 exit
 # 0. Convert to nifti
 print('0. Converting images to .nii.gz')
+logger.warning('0. Converting images to .nii.gz') #use warnings so that we can see progress on command line as well as in the log file
 for idx,img_orig in enumerate(all_image_fnames):
     img = os.path.basename(img_orig).split('.')[0] 
     output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
@@ -627,6 +628,7 @@ for idx,img_orig in enumerate(all_image_fnames):
             
 # 1. Find largeest image as baseline
 print('2. Identifying the largest image to set image size')
+logger.warning('2. Identifying the largest image to set image size')
 largest = -1
 size= 0
 for idx,img in enumerate(all_image_fnames):
@@ -643,6 +645,7 @@ template = output_dir+subject+'_'+str(largest).zfill(zfill_num)+'_'+os.path.base
 print(f"\tUsing the following image as the template for size: {template}")
 
 print('3. Bring all image slices into same place as our 2d template with an initial translation registration')
+logger.warning('3. Bring all image slices into same place as our 2d template with an initial translation registration')
 # initial step to bring all images into the same space of our 2d template
 for idx,img in enumerate(all_image_fnames):
     img = os.path.basename(img).split('.')[0]
@@ -682,6 +685,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 #   - delete unecessary files (in progress...)
 
 print('4. Begin STAGE1 registration iterations - Rigid + Syn')
+logger.warning('4. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
 num_reg_iterations = 10
@@ -692,6 +696,7 @@ template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # missing_idxs_to_fill = None
 for iter in range(num_reg_iterations): 
+    logger.warning(f'\titeration {iter}')
     
     #here we always go back to the original coreg0 images, we are basically just refning our target template(s)
     
@@ -754,6 +759,7 @@ step1_iter_tag = iter_tag
 
 # # STEP 2: Syn only
 print('4. Begin STAGE2 registration iterations - Syn')
+logger.warning('4. Begin STAGE2 registration iterations - Syn')
 run_rigid = False
 run_syn = True
 num_syn_reg_iterations = 5
@@ -762,6 +768,7 @@ for iter in range(num_syn_reg_iterations):
     # then using the output from each successive step
     iter_tag = f"{step1_iter_tag}_syn_{iter}"
     print(f'\t iteration tag: {iter_tag}')
+    logger.warning(f'\titeration {iter}')
 
     slice_offset_list_forward = [-1,-2,-3] #weigted back, but also forward
     slice_offset_list_reverse = [1,2,3] #weighted forward, but also back

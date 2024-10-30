@@ -35,7 +35,8 @@ subject = 'zefir'
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=10 #larger scale means that you have to change the scaling_factor
-downsample_parallel = False
+
+downsample_parallel = False #can be much faster, since it skips the Parallel overhead
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all/'
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_{rescale}/'
 

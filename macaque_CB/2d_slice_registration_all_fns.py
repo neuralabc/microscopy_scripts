@@ -12,7 +12,7 @@ import glob
 from PIL import Image
 import pandas as pd
 from scipy.signal import convolve2d
-# import math
+import math
 from nighres.io import load_volume, save_volume
 # import scipy.ndimage
 # from nibabel import processing
@@ -44,14 +44,15 @@ output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/sl
 
 # registration parameters
 scaling_factor = 32 #32 or 64 for full?
-scaling_factor = 8
+scaling_factor = 4
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 all_image_fnames = list(_df['file_name'].values)
-all_image_fnames = all_image_fnames[0:10] #for testing
+all_image_fnames = all_image_fnames[0:22] #for testing
 
 # set missing indices, which will be iteratively filled with the mean of the neighbouring slices
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+missing_idxs_to_fill = None
 if missing_idxs_to_fill is not None:
     if numpy.max(numpy.array(missing_idxs_to_fill)) > len(all_image_fnames): #since these are indices, will start @ 0
         raise ValueError("Missing slice indices exceed the number of images in the stack.")
@@ -599,22 +600,28 @@ def downsample_block(block):
     return block.sum()
 
 
-def downsample_image(image, rescale):
+def downsample_image(image, rescale, prop_pad=.2):
     """
-    Downsamples a 2D image by summing over rescale x rescale blocks.
+    Downsamples a 2D image by summing over rescale x rescale blocks. Pad by prop_pad before downsampling to ensure all data is within the final registered image(s)
     
     Parameters:
     - image (numpy.ndarray): Input 2D image to downsample.
     - rescale (int): Factor by which to downsample.
-    
+    - prop_pad (float): Proportion of padding to add to each border of the image before downsampling
+
     Returns:
     - numpy.ndarray: Downsampled image with summed values in blocks.
     """
     from skimage.measure import block_reduce
-        
+    size0 = image.shape[0]
+    size1 = image.shape[1]
+    pad0 = math.ceil(size0+size0*prop_pad)
+    pad1 = math.ceil(size1+size1*prop_pad)
+
     # Ensure image dimensions are compatible with rescale factor
-    pad_width = ((0, rescale - image.shape[0] % rescale), 
-                 (0, rescale - image.shape[1] % rescale))
+    pad_width = ((rescale-pad0%rescale, rescale - pad0%rescale), 
+                 (rescale-pad1%rescale, rescale - pad1%rescale))
+    logging.warning(pad_width)
     padded_image = numpy.pad(image, pad_width=pad_width, mode='edge')
     
     # Downsample by block summing
@@ -769,7 +776,7 @@ for idx,img_orig in enumerate(all_image_fnames):
             # slice_img = convolve2d(image,kernel,mode='full')[::rescale,::rescale] #can divide by rescale if we want the mean, otherwise sum is good (total cell count)
 
             #exceptions that need fixing, since rigid reg does not seem to address big flips
-            if 'TP1' in img_orig: #we have files named the same within the subdirs, so we must specify specifically 
+            if ('TP1' in img_orig) or ('/testProject/' in img_orig): #we have files named the same within the subdirs, so we must specify specifically the subdir (different on local vs server) 
                 if 'Image_11_-_20x_01_cellCount' in img_orig:
                     slice_img = numpy.flip(slice_img,axis=0) #flip x
             

@@ -38,7 +38,7 @@ if not os.path.exists(output_dir):
      os.makedirs(output_dir)
 
 ## TODO: could add image_weights to bias towards close slices (they are an input to embedded_antspy_2d_multi)
-def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
+def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,-3], 
                      zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,
                      run_rigid=True,previous_target_tag=None,scaling_factor=64):
     ''' Co-register to slices before/after
@@ -64,7 +64,7 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
         else:
             tail = f'_{reg_level_tag}_ants-def0.nii.gz'
         # append additional images as additional targets to stabilize reg
-        for slice_offset in target_slice_offet_list:
+        for slice_offset in target_slice_offset_list:
             if slice_offset < 0: #we add registration targets for the slices that came before
                 if idx > numpy.abs(slice_offset + 1):        
                     prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
@@ -95,7 +95,7 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
                         save_data=True, overwrite=False,
                         file_name=output)
 
-def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
+def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[1,2,3], 
                              zfill_num=4, input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl',run_syn=True,
                              run_rigid=True, previous_target_tag=None,scaling_factor=64):
     ''' Co-register to slices before/after
@@ -125,7 +125,7 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
             tail = f'_{reg_level_tag}_ants-def0.nii.gz'
 
         # append additional images as additional targets to stabilize reg
-        for slice_offset in target_slice_offet_list:
+        for slice_offset in target_slice_offset_list:
             if slice_offset < 0: #we add registration targets for the slices that came before
                 if idx > numpy.abs(slice_offset + 1):        
                     prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
@@ -385,9 +385,9 @@ for iter in range(num_reg_iterations): #here we always go back to the original c
     else:
         first_run_slice_template = per_slice_template
 
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
+    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,-3], 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,run_syn=run_syn) 
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
+    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[1,2,3], 
                             zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,run_syn=run_syn)
     
     print(iter)
@@ -400,10 +400,10 @@ for iter in range(num_reg_iterations): #here we always go back to the original c
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template)
     template_tag = 'coreg12nl'+iter_tag
     
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3,1,2,3], 
+    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,-3,1,2,3], 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,run_syn=run_syn) 
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3,1,2,3], 
+    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,-3,1,2,3], 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,run_syn=run_syn)
     
@@ -423,9 +423,9 @@ for iter in range(num_syn_reg_iterations):
     #for the nonlinear step, we base our registrations on the previous ones instead of going back to the original images, starting with the previous step and 
     # then using the output from each successive step
     iter_tag = f"{step1_iter_tag}_syn_{iter}"
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,-3], 
+    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,-3], 
                     zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, reg_level_tag='coreg1nl'+iter_tag,run_syn=True,run_rigid=False) 
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
+    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[1,2,3], 
                             zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, reg_level_tag='coreg2nl'+iter_tag,run_syn=True,run_rigid=False) 
     
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
@@ -436,10 +436,10 @@ for iter in range(num_syn_reg_iterations):
     template_tag = 'coreg12nl'+iter_tag
     # print(template)
 
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,1,2], 
+    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,1,2], 
                     zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,run_syn=True,run_rigid=False) 
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[-1,-2,1,2], 
+    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,1,2], 
                     zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,run_syn=True,run_rigid=False)
 

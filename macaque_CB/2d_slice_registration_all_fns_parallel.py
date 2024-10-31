@@ -36,7 +36,7 @@ zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=30 #larger scale means that you have to change the scaling_factor
 downsample_parallel = False #can be much faster, since it skips the Parallel overhead
-max_workers = 1 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
+max_workers = 3 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
 
 
 output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -279,28 +279,101 @@ def process_single_slice_forward(idx, img, output_dir, subject, template, **kwar
     coreg_multislice(output_dir, subject, [img], template, **kwargs)
 
 
+
+def coreg_single_slice(idx, output_dir, subject, img, all_image_names, template, 
+                       target_slice_offset_list=[-1, -2, -3], zfill_num=4, 
+                       input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
+                       run_syn=True, run_rigid=True, previous_target_tag=None, 
+                       scaling_factor=64, image_weights=None, per_slice_template=False):
+    """
+    Register a single slice and its neighboring slices based on offsets.
+    """
+    img_basename = os.path.basename(img).split('.')[0]
+    previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
+    nifti = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{previous_tail}"
+
+    sources = [nifti]
+    image_weights_ordered = [image_weights[0]]
+
+    # Assign the correct template for this slice
+    if per_slice_template:
+        targets = [template[idx]]
+    else:
+        targets = [template]
+
+    # Determine the sources and targets based on `target_slice_offset_list`
+    for idx2, slice_offset in enumerate(target_slice_offset_list):
+        if slice_offset < 0 and idx > abs(slice_offset):        
+            prev_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{all_image_names[idx + slice_offset]}{previous_tail}"
+            sources.append(nifti)
+            targets.append(prev_nifti)
+            image_weights_ordered.append(image_weights[idx2 + 1])
+        elif slice_offset > 0 and idx < len(all_image_names) - slice_offset:
+            next_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{all_image_names[idx + slice_offset]}{previous_tail}"
+            sources.append(nifti)
+            targets.append(next_nifti)
+            image_weights_ordered.append(image_weights[idx2 + 1])
+
+    output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}"
+    coreg_output = nighres.registration.embedded_antspy_2d_multi(
+        source_images=sources,
+        target_images=targets,
+        image_weights=image_weights_ordered,
+        run_rigid=run_rigid,
+        rigid_iterations=1000,
+        run_affine=False,
+        run_syn=run_syn,
+        coarse_iterations=2000,
+        medium_iterations=1000, 
+        fine_iterations=200,
+        scaling_factor=scaling_factor,
+        cost_function='MutualInformation',
+        interpolation='Linear',
+        regularization='High',
+        convergence=1e-6,
+        mask_zero=False,
+        ignore_affine=True, 
+        ignore_orient=True, 
+        ignore_res=True,
+        save_data=True, 
+        overwrite=False,
+        file_name=output
+    )
+    
+    # Clean up unnecessary files
+    def_files = glob.glob(f'{output}_ants-def*')
+    for f in def_files:
+        if 'def0' not in f:
+            os.remove(f)
+            time.sleep(0.5)
+    logging.warning(f"\t\tRegistration completed for slice {idx}.")
+
+
+
 from concurrent.futures import ProcessPoolExecutor, as_completed
-def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, **kwargs):
+
+def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, 
+                                  target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
+                                  reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
+                                  scaling_factor=64, image_weights=None, per_slice_template=False):
     if direction not in ['forward', 'reverse']:
         raise ValueError("Invalid direction. Must be either 'forward' or 'reverse'.")
 
-    # ProcessPoolExecutor for parallelization
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        if direction == 'reverse':
-            futures = [
-                executor.submit(process_single_slice_reverse, idx, img, output_dir, subject, template, **kwargs) 
-                for idx, img in enumerate(all_image_fnames)
-            ]
-        elif direction == 'forward':
-            futures = [
-                executor.submit(process_single_slice_forward, idx, img, output_dir, subject, template, **kwargs) 
-                for idx, img in enumerate(all_image_fnames)
-            ]
+        futures = []
+        
+        for idx, img in enumerate(all_image_fnames):
+            futures.append(
+                executor.submit(coreg_single_slice, idx, img, output_dir, subject, template, 
+                                target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
+                                input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
+                                run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
+                                scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
+            )
 
-        # Use as_completed to log as each task completes
         for future in as_completed(futures):
             try:
-                future.result()  # This will raise an exception if the function call failed
+                future.result()
                 logging.warning("Registration completed for one slice.")
             except Exception as e:
                 logging.error(f"Registration failed with error: {e}")

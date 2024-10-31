@@ -257,6 +257,41 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
                 os.remove(f)
                 time.sleep(.5)
 
+def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, **kwargs):
+    """
+    Run coregistrations in parallel for all image slices
+    """
+
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    if direction not in ['forward','reverse']:
+        raise ValueError("Invalid direction. Must be either 'forward' or 'reverse'.")
+        return None
+    # Define a helper function to run coregistration for a single image slice
+    def process_single_slice_reverse(idx, img):
+        coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
+    def process_single_slice_forward(idx, img):
+        coreg_multislice(output_dir, subject, [img], template, **kwargs)
+    
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        if direction == 'reverse':
+            futures = [
+                executor.submit(process_single_slice_reverse, idx, img) 
+                for idx, img in enumerate(all_image_fnames)
+            ]
+        elif direction == 'forward':
+            futures = [
+                executor.submit(process_single_slice_forward, idx, img) 
+                for idx, img in enumerate(all_image_fnames)
+            ]
+        for future in as_completed(futures):
+            try:
+                future.result()
+                print("Registration completed for one slice.")
+            except Exception as e:
+                print(f"Registration failed with error: {e}")
+
+
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None):
     
@@ -353,6 +388,22 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         return template_list
     else:
         return template
+    
+def register_stack_to_mri(slice_stack_template, mri_template):
+    # Registration of the entire 2D slice stack to the 3D MRI template.
+    # TODO: check what outputs are and figure out how to get the full filename if it is not provided (think it is the nimg?)
+    # TODO: may not need [], as this is an overloaded function in nighres that does this itself
+    output_aligned_stack = slice_stack_template.split('.')[-1] + 'aligned_to_mri.nii.gz'
+    
+    aligned_stack = nighres.registration.embedded_antspy(
+        source_images=[slice_stack_template],
+        target_images=[mri_template],
+        run_rigid=True,
+        run_syn=True,
+        save_data=True,
+        file_name=output_aligned_stack
+    )
+    return aligned_stack
 
 def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',
                           zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
@@ -692,6 +743,7 @@ num_reg_iterations = 10
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
+max_workers = 1 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC
 
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # missing_idxs_to_fill = None
@@ -702,6 +754,7 @@ for iter in range(num_reg_iterations):
     iter_tag = f"_rigsyn_{iter}"
     print(f'\t iteration tag: {iter_tag}')
     logger.warning(f'\titeration {iter_tag}')
+    
     if (iter == 0):
         first_run_slice_template = False
     else:
@@ -711,13 +764,21 @@ for iter in range(num_reg_iterations):
     slice_offset_list_reverse = [1,2,3]
     image_weights = generate_gaussian_weights([0,1,2,3]) #symmetric gaussian, so the same on both sides
 
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_forward, 
+    if max_workers == 1 or max_workers == None:
+        coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor) 
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template, target_slice_offet_list=slice_offset_list_reverse, 
+    
+        coreg_multislice_reverse(output_dir,subject,all_image_fnames,template, target_slice_offet_list=slice_offset_list_reverse, 
                             zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
                             image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-    
+    else:
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers, target_slice_offet_list=slice_offset_list_forward, 
+                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
+                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers, target_slice_offet_list=slice_offset_list_reverse, 
+                            zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
+                            image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
 
     print(iter)
     print(template_tag)
@@ -729,23 +790,39 @@ for iter in range(num_reg_iterations):
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
+    
+    ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
+    # if iter > 0: #we do not do this on the first iteration
+        # MRI_reg_output = register_stack_to_mri(slice_stack_template, mri_template)
+
     template_tag = 'coreg12nl'+iter_tag
     
     slice_offset_list_forward = [-3,-2,-1,1,2] #weigted back, but also forward
     slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
     image_weights = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
 
-    coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_forward, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor) 
-    
-    image_weights = generate_gaussian_weights([0,-2,-1,1,2,3])
-    coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_reverse, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-    
+    if max_workers == 1 or max_workers == None:
+        coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_forward, 
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
+                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
+                        image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor) 
+        
+        image_weights = generate_gaussian_weights([0,-2,-1,1,2,3])
+        coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_reverse, 
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
+                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
+                        image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+    else:
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers,target_slice_offet_list=slice_offset_list_forward, 
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
+                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
+                        image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+        image_weights = generate_gaussian_weights([0,-2,-1,1,2,3])
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers,target_slice_offet_list=slice_offset_list_reverse, 
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
+                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
+                        image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+                                     
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
                         reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)

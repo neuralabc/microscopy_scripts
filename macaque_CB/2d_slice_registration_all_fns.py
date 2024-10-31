@@ -34,17 +34,27 @@ subject = 'zefir'
 
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
-rescale=10 #larger scale means that you have to change the scaling_factor
+rescale=30 #larger scale means that you have to change the scaling_factor
 downsample_parallel = False #can be much faster, since it skips the Parallel overhead
-# output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all/'
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_{rescale}/'
+max_workers = 1 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
+
+
+output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
+# output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_{rescale}/'
 
 # registration parameters
 scaling_factor = 32 #32 or 64 for full?
-
-# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+scaling_factor = 8
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 all_image_fnames = list(_df['file_name'].values)
+all_image_fnames = all_image_fnames[0:10] #for testing
+
+# set missing indices, which will be iteratively filled with the mean of the neighbouring slices
+missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+if missing_idxs_to_fill is not None:
+    if numpy.max(numpy.array(missing_idxs_to_fill)) > len(all_image_fnames): #since these are indices, will start @ 0
+        raise ValueError("Missing slice indices exceed the number of images in the stack.")
 
 # all_image_fnames = all_image_fnames[0:10] #for testing
 all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
@@ -146,9 +156,9 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
                     image_weights_ordered.append(image_weights[idx2+1])
         
         output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
-        print(sources)
-        print(targets)
-        print(image_weights_ordered)
+        # print(sources)
+        # print(targets)
+        # print(image_weights_ordered)
         print(f'output: {output.split("/")[-1]}')
         coreg_output = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
                         target_images=targets,
@@ -178,6 +188,7 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
             else:
                 os.remove(f)
                 time.sleep(.5)
+        logging.warning(f"\t\tForward registration completed for slice {idx}.")
 
 def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=[1,2,3], 
                              zfill_num=4, input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl',run_syn=True,
@@ -256,6 +267,15 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
             else:
                 os.remove(f)
                 time.sleep(.5)
+        logging.warning(f"\t\tReverse registration completed for slice {idx}.")
+
+
+def process_single_slice_reverse(idx, img, output_dir, subject, template, **kwargs):
+    coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
+
+def process_single_slice_forward(idx, img, output_dir, subject, template, **kwargs):
+    logging.warning('******************** Processing slice: {}'.format(idx))
+    coreg_multislice(output_dir, subject, [img], template, **kwargs)
 
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, **kwargs):
     """
@@ -266,31 +286,118 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
 
     if direction not in ['forward','reverse']:
         raise ValueError("Invalid direction. Must be either 'forward' or 'reverse'.")
-        return None
     # Define a helper function to run coregistration for a single image slice
-    def process_single_slice_reverse(idx, img):
-        coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
-    def process_single_slice_forward(idx, img):
-        coreg_multislice(output_dir, subject, [img], template, **kwargs)
-    
+
+    # def process_single_slice_reverse(idx, img):
+    #     coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
+    # def process_single_slice_forward(idx, img):
+    #     coreg_multislice(output_dir, subject, [img], template, **kwargs)
+    # logging.warning(all_image_fnames)    
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         if direction == 'reverse':
             futures = [
-                executor.submit(process_single_slice_reverse, idx, img) 
+                executor.submit(process_single_slice_reverse, idx, img, output_dir, subject, template, **kwargs) 
                 for idx, img in enumerate(all_image_fnames)
             ]
         elif direction == 'forward':
             futures = [
-                executor.submit(process_single_slice_forward, idx, img) 
+                executor.submit(process_single_slice_forward, idx, img, output_dir, subject, template, **kwargs) 
                 for idx, img in enumerate(all_image_fnames)
             ]
         for future in as_completed(futures):
             try:
                 future.result()
-                print("Registration completed for one slice.")
+                logging.warning("Registration completed for one slice.")
             except Exception as e:
                 print(f"Registration failed with error: {e}")
 
+        # Wait for all futures to complete
+        for idx,future in enumerate(futures):
+            logging.warning(idx)
+            future.result()
+
+# from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# def process_single_slice_reverse(args):
+#     """
+#     Wrapper function for reverse coregistration that can be pickled
+    
+#     :param args: Tuple containing (output_dir, subject, img, template, kwargs)
+#     :return: None
+#     """
+#     output_dir, subject, img, template, kwargs = args
+#     # Unpack kwargs and pass them to the coregistration function
+#     coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
+
+# def process_single_slice_forward(args):
+#     """
+#     Wrapper function for forward coregistration that can be pickled
+    
+#     :param args: Tuple containing (output_dir, subject, img, template, kwargs)
+#     :return: None
+#     """
+#     output_dir, subject, img, template, kwargs = args
+#     # Unpack kwargs and pass them to the coregistration function
+#     coreg_multislice(output_dir, subject, [img], template, **kwargs)
+
+# def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, **kwargs):
+#     """
+#     Run coregistrations in parallel for all image slices
+    
+#     Example usage:
+#     run_parallel_coregistrations(
+#         output_dir='/path/output', 
+#         subject='subj001', 
+#         all_image_fnames=['img1.nii', 'img2.nii'], 
+#         template='standard_template.nii',
+#         direction='forward',
+#         interpolation='linear',  # Additional kwargs passed through
+#         smoothing_factor=0.5
+#     )
+    
+#     :param output_dir: Directory to save output
+#     :param subject: Subject identifier
+#     :param all_image_fnames: List of image filenames to process
+#     :param template: Registration template
+#     :param direction: 'forward' or 'reverse' registration
+#     :param max_workers: Maximum number of parallel processes
+#     :param kwargs: Additional arguments to pass to coregistration function
+#     :return: None
+#     """
+#     print("***********************************************************************")
+#     for arg in kwargs:
+#         print(arg)
+#     # Validate direction
+#     if direction not in ['forward', 'reverse']:
+#         raise ValueError("Invalid direction. Must be either 'forward' or 'reverse'.")
+    
+#     # Select appropriate processing function based on direction
+#     if direction == 'reverse':
+#         process_func = process_single_slice_reverse
+#     else:
+#         process_func = process_single_slice_forward
+    
+#     # Prepare arguments for each slice, including all kwargs
+#     slice_args = [
+#         (output_dir, subject, img, template, kwargs) 
+#         for img in all_image_fnames
+#     ]
+    
+#     # Run parallel processing
+#     with ProcessPoolExecutor(max_workers=max_workers) as executor:
+#         # Submit all tasks
+#         futures = [
+#             executor.submit(process_func, args) 
+#             for args in slice_args
+#         ]
+        
+#         # Process results
+#         for future in as_completed(futures):
+#             try:
+#                 future.result()
+#                 print("Registration completed for one slice.")
+#             except Exception as e:
+#                 print(f"Registration failed with error: {e}")
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None):
@@ -393,7 +500,7 @@ def register_stack_to_mri(slice_stack_template, mri_template):
     # Registration of the entire 2D slice stack to the 3D MRI template.
     # TODO: check what outputs are and figure out how to get the full filename if it is not provided (think it is the nimg?)
     # TODO: may not need [], as this is an overloaded function in nighres that does this itself
-    output_aligned_stack = slice_stack_template.split('.')[-1] + 'aligned_to_mri.nii.gz'
+    output_aligned_stack = slice_stack_template.split('.')[0] + 'aligned_to_mri.nii.gz'
     
     aligned_stack = nighres.registration.embedded_antspy(
         source_images=[slice_stack_template],
@@ -743,10 +850,7 @@ num_reg_iterations = 10
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
-max_workers = 1 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC
 
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
-# missing_idxs_to_fill = None
 for iter in range(num_reg_iterations): 
     
     #here we always go back to the original coreg0 images, we are basically just refning our target template(s)
@@ -773,6 +877,7 @@ for iter in range(num_reg_iterations):
                             zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
                             image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     else:
+        logger.warning('\t\tAttempting parallel coregistrations')
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers, target_slice_offet_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
@@ -783,10 +888,12 @@ for iter in range(num_reg_iterations):
     print(iter)
     print(template_tag)
     print(first_run_slice_template)
+    logging.warning('\t\tSelecting best registration by MI')
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
                         reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template) #use the per slice templates after the first round, if requested
     print(f'all_image_fnames len: {len(all_image_fnames)}')
+    logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
@@ -822,10 +929,11 @@ for iter in range(num_reg_iterations):
                         zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                         previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
                         image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-                                     
+    logging.warning('\t\tSelecting best registration by MI')                                     
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
                         reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
+    logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
@@ -854,10 +962,11 @@ for iter in range(num_syn_reg_iterations):
                     zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, reg_level_tag='coreg1nl'+iter_tag,image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_reverse, 
                             zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, reg_level_tag='coreg2nl'+iter_tag,image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor) 
-    
+    logging.warning('\t\tSelecting best registration by MI')    
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
                         reg_output_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template)
+    logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
@@ -874,10 +983,11 @@ for iter in range(num_syn_reg_iterations):
     coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offet_list=slice_offset_list_reverse, 
                     zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid)
-
+    logging.warning('\t\tSelecting best registration by MI')
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
                         reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
+    logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)

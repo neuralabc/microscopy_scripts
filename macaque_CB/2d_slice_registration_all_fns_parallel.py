@@ -36,7 +36,7 @@ zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=30 #larger scale means that you have to change the scaling_factor
 downsample_parallel = False #can be much faster, since it skips the Parallel overhead
-max_workers = 3 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
+max_workers = 10 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
 
 
 output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -44,11 +44,11 @@ output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/sl
 
 # registration parameters
 scaling_factor = 32 #32 or 64 for full?
-scaling_factor = 4
+scaling_factor = 8
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 all_image_fnames = list(_df['file_name'].values)
-all_image_fnames = all_image_fnames[0:22] #for testing
+all_image_fnames = all_image_fnames[0:7] #for testing
 
 # set missing indices, which will be iteratively filled with the mean of the neighbouring slices
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
@@ -280,7 +280,7 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
 
 
 
-def coreg_single_slice(idx, output_dir, subject, img, all_image_names, template, 
+def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, template, 
                        target_slice_offset_list=[-1, -2, -3], zfill_num=4, 
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
@@ -349,6 +349,198 @@ def coreg_single_slice(idx, output_dir, subject, img, all_image_names, template,
     logging.warning(f"\t\tRegistration completed for slice {idx}.")
 
 
+def coreg_single_slice_reverse(idx, output_dir, subject, img, all_image_names, template, 
+                               target_slice_offset_list=[1, 2, 3], zfill_num=4, 
+                               input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl', 
+                               run_syn=True, run_rigid=True, previous_target_tag=None, 
+                               scaling_factor=64, image_weights=None, per_slice_template=False):
+    ''' Single slice reverse coregistration to slices before/after the current slice.
+        Works in reverse order of all_image_fnames and offsets are opposite signs from forward coregistration.
+    '''
+    # Extract the base name of the current image
+    img_name = os.path.basename(img).split('.')[0]
+    
+    # Construct the path for the current source image
+    previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
+    nifti = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}{previous_tail}"
+    
+    # Initialize source and target lists for the reverse registration
+    sources = [nifti]
+    image_weights_ordered = [image_weights[0]]
+
+    # Assign slice-specific or single template based on input
+    targets = [template[idx]] if per_slice_template else [template]
+    
+    # Define the target tag for previous/iterative registrations
+    tail = f"_{previous_target_tag}_ants-def0.nii.gz" if previous_target_tag else f"_{reg_level_tag}_ants-def0.nii.gz"
+    
+    # TODO: this is not registering properly
+    logging.warning(sources)
+    logging.warning(targets)
+    
+    # Iterate over target slice offsets in reverse order
+    for idx2, slice_offset in enumerate(target_slice_offset_list):
+        if slice_offset < 0:  # Register to previous slices in the reverse pass
+            if idx > abs(slice_offset + 1):        
+                prev_target = (
+                    f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_"
+                    f"{all_image_names[idx + slice_offset]}{tail}"
+                )
+                sources.append(nifti)
+                targets.append(prev_target)
+                image_weights_ordered.append(image_weights[idx2 + 1])
+                
+        elif slice_offset > 0:  # Register to forward slices in the reverse pass
+            if idx < len(all_image_names) - slice_offset:
+                next_target = (
+                    f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_"
+                    f"{all_image_names[idx + slice_offset]}{tail}"
+                )
+                sources.append(nifti)
+                targets.append(next_target)
+                image_weights_ordered.append(image_weights[idx2 + 1])
+
+    # Output file setup
+    output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}"
+    
+    # Run the registration using nighres embedded ants
+    coreg_output = nighres.registration.embedded_antspy_2d_multi(
+        source_images=sources,
+        target_images=targets,
+        image_weights=image_weights_ordered,
+        run_rigid=run_rigid,
+        rigid_iterations=1000,
+        run_affine=False,
+        run_syn=run_syn,
+        coarse_iterations=2000,
+        medium_iterations=1000,
+        fine_iterations=200,
+        scaling_factor=scaling_factor,
+        cost_function='MutualInformation',
+        interpolation='Linear',
+        regularization='High',
+        convergence=1e-6,
+        mask_zero=False,
+        ignore_affine=True,
+        ignore_orient=True,
+        ignore_res=True,
+        save_data=True,
+        overwrite=False,
+        file_name=output
+    )
+    
+    # Remove extra deformation files
+    def_files = glob.glob(f"{output}_ants-def*")
+    for f in def_files:
+        if "def0" not in f:
+            os.remove(f)
+            time.sleep(0.5)
+    
+    logging.warning(f"\t\tReverse registration completed for slice {idx}.")
+
+
+def coreg_single_slice(idx, output_dir, subject, img, all_image_names, template, 
+                       target_slice_offset_list=[-1, -2, -3], direction='forward', 
+                       zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl', 
+                       run_syn=True, run_rigid=True, previous_target_tag=None, 
+                       scaling_factor=64, image_weights=None, per_slice_template=False):
+    ''' 
+    Co-register a single slice with support for forward and reverse directions.
+    
+    Parameters:
+    - idx: index of the slice in the overall list.
+    - direction: either 'forward' or 'reverse', controls slice order and offset signs.
+    - all other parameters remain consistent with forward/reverse processes.
+    '''
+    
+    # Adjust offsets and order for reverse direction
+    if direction == 'reverse':
+        target_slice_offset_list = [-offset for offset in target_slice_offset_list]
+        slice_order = reversed(range(len(all_image_names)))
+    else:
+        slice_order = range(len(all_image_names))
+    
+    # Ensure idx aligns with the desired direction
+    if idx not in slice_order:
+        return  # Skip if idx is not relevant in this order
+    
+    # Extract the base name of the current image
+    img_name = os.path.basename(img).split('.')[0]
+    
+    # Construct the path for the current source image
+    previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
+    nifti = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}{previous_tail}"
+    
+    # Initialize source and target lists for registration
+    sources = [nifti]
+    image_weights_ordered = [image_weights[0]]
+    
+    # Set slice-specific template if applicable
+    targets = [template[idx]] if per_slice_template else [template]
+    
+    # Define the target tag for previous/iterative registrations
+    tail = f"_{previous_target_tag}_ants-def0.nii.gz" if previous_target_tag else f"_{reg_level_tag}_ants-def0.nii.gz"
+    
+    # Append additional images as additional targets based on the direction
+    for idx2, slice_offset in enumerate(target_slice_offset_list):
+        if slice_offset < 0:  # Add registration targets for previous slices
+            if idx > abs(slice_offset + 1):
+                prev_target = (
+                    f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_"
+                    f"{all_image_names[idx + slice_offset]}{tail}"
+                )
+                sources.append(nifti)
+                targets.append(prev_target)
+                image_weights_ordered.append(image_weights[idx2 + 1])
+                
+        elif slice_offset > 0:  # Add registration targets for subsequent slices
+            if idx < len(all_image_names) - slice_offset:
+                next_target = (
+                    f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_"
+                    f"{all_image_names[idx + slice_offset]}{tail}"
+                )
+                sources.append(nifti)
+                targets.append(next_target)
+                image_weights_ordered.append(image_weights[idx2 + 1])
+
+    # Output file setup
+    output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}"
+    
+    # Run the registration using nighres embedded ants
+    coreg_output = nighres.registration.embedded_antspy_2d_multi(
+        source_images=sources,
+        target_images=targets,
+        image_weights=image_weights_ordered,
+        run_rigid=run_rigid,
+        rigid_iterations=1000,
+        run_affine=False,
+        run_syn=run_syn,
+        coarse_iterations=2000,
+        medium_iterations=1000,
+        fine_iterations=200,
+        scaling_factor=scaling_factor,
+        cost_function='MutualInformation',
+        interpolation='Linear',
+        regularization='High',
+        convergence=1e-6,
+        mask_zero=False,
+        ignore_affine=True,
+        ignore_orient=True,
+        ignore_res=True,
+        save_data=True,
+        overwrite=False,
+        file_name=output
+    )
+    
+    # Remove extra deformation files
+    def_files = glob.glob(f"{output}_ants-def*")
+    for f in def_files:
+        if "def0" not in f:
+            os.remove(f)
+            time.sleep(0.5)
+    
+    logging.warning(f"\t\t{direction.capitalize()} registration completed for slice {idx}.")
+
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -361,22 +553,31 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = []
-        
-        for idx, img in enumerate(all_image_fnames):
-            futures.append(
-                executor.submit(coreg_single_slice, idx, output_dir, subject, img, all_image_names, template, 
-                                target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
-                                input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
-                                run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
-                                scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
-            )
-        
+        if direction == 'forward':
+            for idx, img in enumerate(all_image_fnames):
+                futures.append(
+                    executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_names, template, 
+                                    target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
+                                    input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
+                                    run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
+                                    scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
+                )
+        elif direction == 'reverse':
+            for idx, img in enumerate(all_image_fnames):
+                futures.append(
+                    executor.submit(coreg_single_slice_reverse, idx, output_dir, subject, img, all_image_names, template, 
+                                    target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
+                                    input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
+                                    run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
+                                    scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
+                )
         for future in as_completed(futures):
             try:
                 future.result()
                 logging.warning("Registration completed for one slice.")
             except Exception as e:
                 logging.error(f"Registration failed with error: {e}")
+
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None):
@@ -845,7 +1046,7 @@ for iter in range(num_reg_iterations):
     logger.warning(f'\titeration {iter_tag}')
     
     if (iter == 0):
-        first_run_slice_template = False
+        first_run_slice_template = True
     else:
         first_run_slice_template = per_slice_template
 

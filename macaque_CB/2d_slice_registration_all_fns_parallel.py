@@ -271,12 +271,12 @@ def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target
         logging.warning(f"\t\tReverse registration completed for slice {idx}.")
 
 
-def process_single_slice_reverse(idx, img, output_dir, subject, template, **kwargs):
-    coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
+# def process_single_slice_reverse(idx, img, output_dir, subject, template, **kwargs):
+#     coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
 
-def process_single_slice_forward(idx, img, output_dir, subject, template, **kwargs):
-    logging.warning('******************** Processing slice: {}'.format(idx))
-    coreg_multislice(output_dir, subject, [img], template, **kwargs)
+# def process_single_slice_forward(idx, img, output_dir, subject, template, **kwargs):
+#     logging.warning('******************** Processing slice: {}'.format(idx))
+#     coreg_multislice(output_dir, subject, [img], template, **kwargs)
 
 
 
@@ -364,102 +364,19 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         
         for idx, img in enumerate(all_image_fnames):
             futures.append(
-                executor.submit(coreg_single_slice, idx, img, output_dir, subject, template, 
+                executor.submit(coreg_single_slice, idx, output_dir, subject, img, all_image_names, template, 
                                 target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
                                 input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
                                 scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
             )
-
+        
         for future in as_completed(futures):
             try:
                 future.result()
                 logging.warning("Registration completed for one slice.")
             except Exception as e:
                 logging.error(f"Registration failed with error: {e}")
-
-# from concurrent.futures import ProcessPoolExecutor, as_completed
-
-# def process_single_slice_reverse(args):
-#     """
-#     Wrapper function for reverse coregistration that can be pickled
-    
-#     :param args: Tuple containing (output_dir, subject, img, template, kwargs)
-#     :return: None
-#     """
-#     output_dir, subject, img, template, kwargs = args
-#     # Unpack kwargs and pass them to the coregistration function
-#     coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
-
-# def process_single_slice_forward(args):
-#     """
-#     Wrapper function for forward coregistration that can be pickled
-    
-#     :param args: Tuple containing (output_dir, subject, img, template, kwargs)
-#     :return: None
-#     """
-#     output_dir, subject, img, template, kwargs = args
-#     # Unpack kwargs and pass them to the coregistration function
-#     coreg_multislice(output_dir, subject, [img], template, **kwargs)
-
-# def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, **kwargs):
-#     """
-#     Run coregistrations in parallel for all image slices
-    
-#     Example usage:
-#     run_parallel_coregistrations(
-#         output_dir='/path/output', 
-#         subject='subj001', 
-#         all_image_fnames=['img1.nii', 'img2.nii'], 
-#         template='standard_template.nii',
-#         direction='forward',
-#         interpolation='linear',  # Additional kwargs passed through
-#         smoothing_factor=0.5
-#     )
-    
-#     :param output_dir: Directory to save output
-#     :param subject: Subject identifier
-#     :param all_image_fnames: List of image filenames to process
-#     :param template: Registration template
-#     :param direction: 'forward' or 'reverse' registration
-#     :param max_workers: Maximum number of parallel processes
-#     :param kwargs: Additional arguments to pass to coregistration function
-#     :return: None
-#     """
-#     print("***********************************************************************")
-#     for arg in kwargs:
-#         print(arg)
-#     # Validate direction
-#     if direction not in ['forward', 'reverse']:
-#         raise ValueError("Invalid direction. Must be either 'forward' or 'reverse'.")
-    
-#     # Select appropriate processing function based on direction
-#     if direction == 'reverse':
-#         process_func = process_single_slice_reverse
-#     else:
-#         process_func = process_single_slice_forward
-    
-#     # Prepare arguments for each slice, including all kwargs
-#     slice_args = [
-#         (output_dir, subject, img, template, kwargs) 
-#         for img in all_image_fnames
-#     ]
-    
-#     # Run parallel processing
-#     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-#         # Submit all tasks
-#         futures = [
-#             executor.submit(process_func, args) 
-#             for args in slice_args
-#         ]
-        
-#         # Process results
-#         for future in as_completed(futures):
-#             try:
-#                 future.result()
-#                 print("Registration completed for one slice.")
-#             except Exception as e:
-#                 print(f"Registration failed with error: {e}")
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None):

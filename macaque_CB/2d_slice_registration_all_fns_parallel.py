@@ -22,7 +22,7 @@ from nighres.io import load_volume, save_volume
 
 
 
-# code by @pilou, using nighres; adapted, modularized, and extended by @csteele
+# code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
 
 # file parameters
 subject = 'zefir'
@@ -35,8 +35,8 @@ subject = 'zefir'
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=30 #larger scale means that you have to change the scaling_factor
-downsample_parallel = False #can be much faster, since it skips the Parallel overhead
-max_workers = 1 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
+downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
+max_workers = 10 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
 
 
 output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -299,6 +299,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     """
 
     logging.warning('----------------------')
+
     # logging.warning(input_source_file_tag)
     # logging.warning(template)
     # logging.warning(input_source_file_tag)
@@ -308,19 +309,24 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
     else:
-        previous_tail = f'_{reg_level_tag}_ants-def0.nii.gz'
+        previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
     # previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
     
-    
     nifti = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{previous_tail}"
-
+    logging.warning(nifti)
     sources = [nifti]
     image_weights_ordered = [image_weights[0]]
     # Assign the correct template for this slice
-    if per_slice_template:
+    
+    ## TODO: remove per_slice_template from function call and just use the template directly
+    if type(template) is list:
         targets = [template[idx]]
     else:
         targets = [template]
+    # if per_slice_template:
+    #     targets = [template[idx]]
+    # else:
+    #     targets = [template]
     
     # Determine the sources and targets based on `target_slice_offset_list`
     for idx2, slice_offset in enumerate(target_slice_offset_list):
@@ -349,7 +355,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
         except:
             logging.warning(s)
     logging.warning(image_weights_ordered)
-    logging.warning('IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII')
+    # logging.warning('IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII')
 
     output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}"
     coreg_output = nighres.registration.embedded_antspy_2d_multi(
@@ -1093,7 +1099,7 @@ for iter in range(num_reg_iterations):
     logger.warning('****************************************************************************')
     
     if (iter == 0):
-        first_run_slice_template = False
+        first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created)
     else:
         first_run_slice_template = per_slice_template
 
@@ -1113,22 +1119,24 @@ for iter in range(num_reg_iterations):
     # logger.warning('\t\tAttempting parallel coregistrations')
 
     #TODO: RELEASE THIS for actual running XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-    # run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers, target_slice_offset_list=slice_offset_list_forward, 
-    #             zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
-    #             image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-    # run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers, target_slice_offset_list=slice_offset_list_reverse, 
-    #                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
-    #                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers, 
+                                 target_slice_offset_list=slice_offset_list_forward, 
+                zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
+                image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers, 
+                                 target_slice_offset_list=slice_offset_list_reverse, 
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
+                        image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
 
-    print(iter)
-    print(template_tag)
-    print(first_run_slice_template)
-    logging.warning('\t\tSelecting best registration by MI')
-    # TODO: release this XXXXXXXXXXXXXXXXXXXXXXXXXXXX
-    # select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
-    #                     zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-    #                     reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template) #use the per slice templates after the first round, if requested
-    print(f'all_image_fnames len: {len(all_image_fnames)}')
+    # print(iter)
+    # print(template_tag)
+    # print(first_run_slice_template)
+    # logging.warning('\t\tSelecting best registration by MI')
+    # # TODO: release this XXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+                        zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template) #use the per slice templates after the first round, if requested
+    # print(f'all_image_fnames len: {len(all_image_fnames)}')
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
@@ -1156,6 +1164,7 @@ for iter in range(num_reg_iterations):
     #                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
     #                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     # else:
+
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers,
                                  target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 

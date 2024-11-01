@@ -36,7 +36,7 @@ zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=30 #larger scale means that you have to change the scaling_factor
 downsample_parallel = False #can be much faster, since it skips the Parallel overhead
-max_workers = 10 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
+max_workers = 1 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
 
 
 output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -135,6 +135,7 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
 
         sources = [nifti]
         image_weights_ordered = [image_weights[0]]
+            
         if per_slice_template:
             targets = [template[idx]]
         if previous_target_tag is not None:
@@ -155,6 +156,14 @@ def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_o
                     sources.append(nifti)
                     targets.append(prev1)
                     image_weights_ordered.append(image_weights[idx2+1])
+        
+        logging.warning('Targets:')
+        for t in targets:
+            logging.warning(f'\t{t.split("/")[-1]}')
+        logging.warning('Sources:')
+        for s in sources:
+            logging.warning(f'\t{s.split("/")[-1]}')
+        logging.warning(image_weights_ordered)
         
         output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
         # print(sources)
@@ -288,6 +297,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     """
     Register a single slice and its neighboring slices based on offsets.
     """
+
     img_basename = os.path.basename(img).split('.')[0]
     previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
     nifti = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{previous_tail}"
@@ -303,7 +313,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
 
     # Determine the sources and targets based on `target_slice_offset_list`
     for idx2, slice_offset in enumerate(target_slice_offset_list):
-        if slice_offset < 0 and idx > abs(slice_offset):        
+        if slice_offset < 0 and idx >= abs(slice_offset):        
             prev_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{all_image_names[idx + slice_offset]}{previous_tail}"
             sources.append(nifti)
             targets.append(prev_nifti)
@@ -313,6 +323,14 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             sources.append(nifti)
             targets.append(next_nifti)
             image_weights_ordered.append(image_weights[idx2 + 1])
+    logging.warning(idx)
+    logging.warning('Targets:')
+    for t in targets:
+        logging.warning(f'\t{t.split("/")[-1]}')
+    logging.warning('Sources:')
+    for s in sources:
+        logging.warning(f'\t{s.split("/")[-1]}')
+    logging.warning(image_weights_ordered)
 
     output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}"
     coreg_output = nighres.registration.embedded_antspy_2d_multi(
@@ -348,7 +366,6 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             time.sleep(0.5)
     logging.warning(f"\t\tRegistration completed for slice {idx}.")
 
-
 def coreg_single_slice_reverse(idx, output_dir, subject, img, all_image_names, template, 
                                target_slice_offset_list=[1, 2, 3], zfill_num=4, 
                                input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl', 
@@ -374,10 +391,6 @@ def coreg_single_slice_reverse(idx, output_dir, subject, img, all_image_names, t
     # Define the target tag for previous/iterative registrations
     tail = f"_{previous_target_tag}_ants-def0.nii.gz" if previous_target_tag else f"_{reg_level_tag}_ants-def0.nii.gz"
     
-    # TODO: this is not registering properly
-    logging.warning(sources)
-    logging.warning(targets)
-    
     # Iterate over target slice offsets in reverse order
     for idx2, slice_offset in enumerate(target_slice_offset_list):
         if slice_offset < 0:  # Register to previous slices in the reverse pass
@@ -400,6 +413,14 @@ def coreg_single_slice_reverse(idx, output_dir, subject, img, all_image_names, t
                 targets.append(next_target)
                 image_weights_ordered.append(image_weights[idx2 + 1])
 
+    logging.warning('Targets:')
+    for t in targets:
+        logging.warning(f'\t{t.split("/")[-1]}')
+    logging.warning('Sources:')
+    for s in sources:
+        logging.warning(f'\t{s.split("/")[-1]}')
+    logging.warning(image_weights_ordered)
+    
     # Output file setup
     output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}"
     
@@ -548,6 +569,11 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, per_slice_template=False):
+    # reverse direction uses the same function, but target_slice_offset list is negative to ensure proper lookup.
+    # the actual order of registrations is the same 0 -> n:
+    #   for the reverse direction, we register to slices after the current slice (named by how you would walk through the loop of the stack)
+    #   for the forward direction, we register to slices before the current slice
+
     if direction not in ['forward', 'reverse']:
         raise ValueError("Invalid direction. Must be either 'forward' or 'reverse'.")
 
@@ -565,7 +591,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         elif direction == 'reverse':
             for idx, img in enumerate(all_image_fnames):
                 futures.append(
-                    executor.submit(coreg_single_slice_reverse, idx, output_dir, subject, img, all_image_names, template, 
+                    executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_names, template, 
                                     target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
                                     input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
                                     run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
@@ -574,7 +600,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         for future in as_completed(futures):
             try:
                 future.result()
-                logging.warning("Registration completed for one slice.")
+                # logging.warning("Registration completed for one slice.")
             except Exception as e:
                 logging.error(f"Registration failed with error: {e}")
 
@@ -1046,7 +1072,7 @@ for iter in range(num_reg_iterations):
     logger.warning(f'\titeration {iter_tag}')
     
     if (iter == 0):
-        first_run_slice_template = True
+        first_run_slice_template = False
     else:
         first_run_slice_template = per_slice_template
 
@@ -1054,7 +1080,7 @@ for iter in range(num_reg_iterations):
     slice_offset_list_reverse = [1,2,3]
     image_weights = generate_gaussian_weights([0,1,2,3]) #symmetric gaussian, so the same on both sides
 
-    if max_workers == 1 or max_workers == None:
+    if max_workers == 100 or max_workers == None:
         coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor) 

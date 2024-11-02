@@ -19,6 +19,11 @@ from nighres.io import load_volume, save_volume
 
 
 # code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
+## Potential list of todo's
+# TODO: keep track of MI fits, only update template when MI indicates it is necessary? 
+# TODO: additional weight of registrations by MI to downweight slices that are much different (much more processing)
+# TODO: potentially incorporate mesh creation to either identify mask (limiting registration)
+#       potentially included as a distance map in some way to weight boundary?
 
 # file parameters
 subject = 'zefir'

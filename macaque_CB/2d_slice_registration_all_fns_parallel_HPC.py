@@ -14,6 +14,7 @@ import pandas as pd
 from scipy.signal import convolve2d
 import math
 from nighres.io import load_volume, save_volume
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 
@@ -28,11 +29,20 @@ from nighres.io import load_volume, save_volume
 # file parameters
 subject = 'zefir'
 
+#TODO: potentially carry this through to the nibabel images so that the header and affines are correct
+# tried this quickly and it messed everything up...
+in_plane_res_x = 10 #10 microns per pixel
+in_plane_res_y = 10 #10 microns per pixel
+in_plane_res_z = 50 #slice thickness of 50 microns
 
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 # rescale=10 #larger scale means that you have to change the scaling_factor
 rescale=40
+#based on the rescale value, we adjust our in-plane resolution
+in_plane_res_x = rescale*in_plane_res_x
+in_plane_res_y = rescale*in_plane_res_y
+
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 # max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
@@ -124,13 +134,6 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     Register a single slice and its neighboring slices based on offsets.
     """
 
-    # logging.warning('----------------------')
-
-    # logging.warning(input_source_file_tag)
-    # logging.warning(template)
-    # logging.warning(input_source_file_tag)
-    # logging.warning(input_source_file_tag)
-
     img_basename = os.path.basename(img).split('.')[0]
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
@@ -167,19 +170,22 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             targets.append(next_nifti)
             image_weights_ordered.append(image_weights[idx2 + 1])
             
-    # logging.warning('Targets:')
-    # for t in targets:
-    #     try:
-    #         logging.warning(f'\t{t.split("/")[-1]}')
-    #     except:
-    #         logging.warning(t)    
-    # logging.warning('Sources:')
+    
+    logging.info(f'\n\tslice_idx: {idx}\n\t\tsources: {sources[0].split("/")[-1]}\n\t\ttargets: {[t.split("/")[-1] for t in targets]}\n\t\tweights: {image_weights_ordered}') #source is always the same 
+
+    # logging.info('Sources:')
     # for s in sources:
     #     try:
-    #         logging.warning(f'\t{s.split("/")[-1]}')
+    #         logging.info(f'\t{s.split("/")[-1]}')
     #     except:
-    #         logging.warning(s)
-    # logging.warning(image_weights_ordered)
+    #         logging.info(s)
+    # logging.info('Targets:')
+    # for t in targets:
+    #     try:
+    #         logging.info(f'\t{t.split("/")[-1]}')
+    #     except:
+    #         logging.info(t)    
+    # logging.info(image_weights_ordered)
 
     output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}"
     coreg_output = nighres.registration.embedded_antspy_2d_multi(
@@ -216,8 +222,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     logging.warning(f"\t\tRegistration completed for slice {idx}.")
 
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
-
+#TODO: these end up being the same thing, can remove one of them since direction is now encoded in the offset list!
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
@@ -258,8 +263,10 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                 logging.error(f"Registration failed with error: {e}")
 
 
+# this is not ideal, but it is a massive improvement over the mean
+# could adapt to perform an additional coreg and then average the two?
 
-def compute_intermediate_non_linear_slice(pre_img, post_img):
+def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_mean = True):
     """
     Computes an intermediate slice by averaging both rigid and non-linear transformations.
     Images must already fit within the same matrix (i.e., have the same dimensions).
@@ -295,6 +302,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img):
     pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0])
     post_to_pre_field = ants.image_read(post_to_pre_nonlin['fwdtransforms'][0])
 
+
     # Step 5: Convert the deformation fields to NumPy arrays and average them
     avg_field_data = (pre_to_post_field.numpy() + post_to_pre_field.numpy()) / 2
     avg_field = ants.from_numpy(avg_field_data, spacing=pre_to_post_field.spacing+(1.0,)) #need a 3rd dimension for spacing
@@ -308,11 +316,34 @@ def compute_intermediate_non_linear_slice(pre_img, post_img):
         # Step 6: Apply the averaged non-linear deformation field to the rigidly aligned pre-image
         intermediate_img = ants.apply_transforms(fixed=post_ants, moving=pre_aligned, transformlist=[avg_field_path])
 
+    intermediate_img_np = intermediate_img.numpy()
+
     # Convert to NumPy array
-    # TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
-    intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces (RAS vs LPI, I think...)
+    ## TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
+    ## intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces (RAS vs LPI, I think...)
+
+    # if you want to, we now coregister the images to the new target and then take their mean
+    if additional_coreg_mean: 
+        # Step 1: Perform rigid registration from pre to post slice and post to pre slice
+        pre_to_post_rigid = ants.registration(fixed=intermediate_img, moving=pre_ants, type_of_transform='Rigid')
+        post_to_pre_rigid = ants.registration(fixed=intermediate_img, moving=post_ants, type_of_transform='Rigid')
+
+        # Step 2: Apply the rigid transformation to each image for initial alignment
+        pre_aligned = ants.apply_transforms(fixed=intermediate_img, moving=pre_ants, transformlist=pre_to_post_rigid['fwdtransforms'])
+        post_aligned = ants.apply_transforms(fixed=intermediate_img, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
 
 
+        # # Step 3: Perform non-linear registration on the rigidly aligned images
+        pre_to_post_nonlin = ants.registration(fixed=intermediate_img, moving=pre_aligned, type_of_transform='SyN')
+        post_to_pre_nonlin = ants.registration(fixed=intermediate_img, moving=post_aligned, type_of_transform='SyN')
+
+        # Step 4: Load the deformed images
+        pre_to_post_img = pre_to_post_nonlin['warpedmovout']
+        post_to_pre_img = post_to_pre_nonlin['warpedmovout']
+
+        # Step 5: Compute the average of the deformed images
+        intermediate_img_np = (pre_to_post_img.numpy() + post_to_pre_img.numpy()) / 2
+    
     return intermediate_img_np
 
 
@@ -933,7 +964,7 @@ for iter in range(num_reg_iterations):
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
    
-    missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
+    # missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
     
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
     # if iter > 0: #we do not do this on the first iteration

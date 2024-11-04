@@ -537,7 +537,7 @@ def register_stack_to_mri(slice_stack_template, mri_template):
     )
     return aligned_stack
 
-def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='coreg0nl',
+def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, template_tag='coreg0nl',
                           zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
                           overwrite=True):
     '''
@@ -551,6 +551,10 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
     
     for idx,img_name in enumerate(all_image_fnames):
         img_name = os.path.basename(img_name).split('.')[0]
+        if idx == 0: #create lists for mutual information comparisons
+            mi1c_l = []
+            mi2c_l = []
+            img_name_l = []
 
         if not per_slice_template:
             template = output_dir+subject+template_tail #we use the generally defined template
@@ -588,7 +592,10 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
             mi2c = numpy.sum(p2c*numpy.log(p2c/(p2pc),where=(p2c*p2pc>0)))
         
             print("MI: "+str(mi1c)+", "+str(mi2c))
-            
+            mi1c_l.append(mi1c)
+            mi2c_l.append(mi2c)
+            img_name_l.append(img_name)
+
             # copy the best result
             mapping= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+out_tail+'_ants-map.nii.gz'
             inverse= output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+out_tail+'_ants-invmap.nii.gz'
@@ -618,6 +625,14 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag='core
             time.sleep(.5)
             os.remove(slice2)
             time.sleep(.5)
+    if df_struct is not None: #we dump out lists into the dataframe-like structure to keep track of MI values 
+        df_struct['MI1c'+out_tail] = mi1c_l
+        df_struct['MI2c'+out_tail] = mi2c_l
+        df_struct['img_name'+out_tail] = img_name_l
+        return df_struct
+    else:
+        return None
+
 
 def downsample_block(block):
     """Helper function to compute the sum of a block."""
@@ -881,6 +896,7 @@ num_reg_iterations = 10
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
+MI_df_struct = {}
 
 for iter in range(num_reg_iterations): 
     
@@ -916,7 +932,7 @@ for iter in range(num_reg_iterations):
     logging.warning('\t\tSelecting best registration by MI')
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template) #use the per slice templates after the first round, if requested
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct) #use the per slice templates after the first round, if requested
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
@@ -946,7 +962,7 @@ for iter in range(num_reg_iterations):
     logging.warning('\t\tSelecting best registration by MI')                                     
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
-                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
+                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
@@ -994,7 +1010,7 @@ for iter in range(num_syn_reg_iterations):
     logging.warning('\t\tSelecting best registration by MI')    
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template)
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
@@ -1029,10 +1045,14 @@ for iter in range(num_syn_reg_iterations):
     logging.warning('\t\tSelecting best registration by MI')
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
-                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template)
+                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
     final_reg_level_tag = 'coreg12nl_win12'+iter_tag
     template_tag = 'coreg12nl_win12'+iter_tag
+
+    if MI_df_struct is not None:
+        pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
+        # MI_df_struct.to_csv(output_dir+subject+'_MI_values.csv',index=False)

@@ -283,13 +283,19 @@ def compute_intermediate_non_linear_slice(pre_img, post_img):
     pre_aligned = ants.apply_transforms(fixed=post_ants, moving=pre_ants, transformlist=pre_to_post_rigid['fwdtransforms'])
     post_aligned = ants.apply_transforms(fixed=pre_ants, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
 
-    # Step 3: Perform non-linear registration on the rigidly aligned images
+
+    # # Step 3: Perform non-linear registration on the rigidly aligned images
     pre_to_post_nonlin = ants.registration(fixed=post_ants, moving=pre_aligned, type_of_transform='SyN')
     post_to_pre_nonlin = ants.registration(fixed=pre_ants, moving=post_aligned, type_of_transform='SyN')
+
+    # # Step 3: Perform non-linear registration on the rigidly aligned images
+    # pre_to_post_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
+    # post_to_pre_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN')
 
     # Step 4: Load the non-linear deformation fields as images
     pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0])
     post_to_pre_field = ants.image_read(post_to_pre_nonlin['fwdtransforms'][0])
+
 
     # Step 5: Convert the deformation fields to NumPy arrays and average them
     avg_field_data = (pre_to_post_field.numpy() + post_to_pre_field.numpy()) / 2
@@ -305,7 +311,9 @@ def compute_intermediate_non_linear_slice(pre_img, post_img):
         intermediate_img = ants.apply_transforms(fixed=post_ants, moving=pre_aligned, transformlist=[avg_field_path])
 
     # Convert to NumPy array
-    intermediate_img_np = intermediate_img.numpy()
+    # TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
+    intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces
+
 
     return intermediate_img_np
 

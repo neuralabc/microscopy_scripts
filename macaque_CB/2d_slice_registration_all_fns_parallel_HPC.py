@@ -19,6 +19,11 @@ from nighres.io import load_volume, save_volume
 
 
 # code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
+## Potential list of todo's
+# TODO: keep track of MI fits, only update template when MI indicates it is necessary? 
+# TODO: additional weight of registrations by MI to downweight slices that are much different (much more processing)
+# TODO: potentially incorporate mesh creation to either identify mask (limiting registration)
+#       potentially included as a distance map in some way to weight boundary?
 
 # file parameters
 subject = 'zefir'
@@ -28,7 +33,7 @@ zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 rescale=10 #larger scale means that you have to change the scaling_factor
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
-max_workers = 50 #number of parallel workers to run for registration, which is slow but not CPU bound on an HPC (192 cores could take 9-10?)
+max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 
 
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -424,6 +429,96 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                 logging.error(f"Registration failed with error: {e}")
 
 
+
+def compute_intermediate_non_linear_slice(pre_img, post_img):
+    """
+    Computes an intermediate slice by averaging both rigid and non-linear transformations.
+    Images must already fit within the same matrix (i.e., have the same dimensions).
+
+    Parameters:
+    pre_img (str): Filename of the pre-slice image.
+    post_img (str): Filename of the post-slice image.
+
+    Returns:
+    intermediate_img_np (numpy.ndarray): Intermediate slice computed between pre_img and post_img as a NumPy array.
+    """
+    import tempfile
+    import ants
+
+    # Load images using ANTs
+    pre_ants = ants.image_read(pre_img)
+    post_ants = ants.image_read(post_img)
+
+    # Step 1: Perform rigid registration from pre to post slice and post to pre slice
+    pre_to_post_rigid = ants.registration(fixed=post_ants, moving=pre_ants, type_of_transform='Rigid')
+    post_to_pre_rigid = ants.registration(fixed=pre_ants, moving=post_ants, type_of_transform='Rigid')
+
+    # Step 2: Apply the rigid transformation to each image for initial alignment
+    pre_aligned = ants.apply_transforms(fixed=post_ants, moving=pre_ants, transformlist=pre_to_post_rigid['fwdtransforms'])
+    post_aligned = ants.apply_transforms(fixed=pre_ants, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
+
+    # Step 3: Perform non-linear registration on the rigidly aligned images
+    pre_to_post_nonlin = ants.registration(fixed=post_ants, moving=pre_aligned, type_of_transform='SyN')
+    post_to_pre_nonlin = ants.registration(fixed=pre_ants, moving=post_aligned, type_of_transform='SyN')
+
+    # Step 4: Load the non-linear deformation fields as images
+    pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0])
+    post_to_pre_field = ants.image_read(post_to_pre_nonlin['fwdtransforms'][0])
+
+    # Step 5: Convert the deformation fields to NumPy arrays and average them
+    avg_field_data = (pre_to_post_field.numpy() + post_to_pre_field.numpy()) / 2
+    avg_field = ants.from_numpy(avg_field_data, spacing=pre_to_post_field.spacing+(1.0,)) #need a 3rd dimension for spacing
+    
+    #we need to have the transform as a file, so we create a temp version here
+    with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
+        avg_field_path = temp_file.name
+        ants.image_write(avg_field, avg_field_path)
+
+        ## apply within the with statement to use the file prior to deletion (default is non- persistence)
+        # Step 6: Apply the averaged non-linear deformation field to the rigidly aligned pre-image
+        intermediate_img = ants.apply_transforms(fixed=post_ants, moving=pre_aligned, transformlist=[avg_field_path])
+
+    # Convert to NumPy array
+    intermediate_img_np = intermediate_img.numpy()
+
+    return intermediate_img_np
+
+
+
+def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='intermediate_nonlin_mean'):
+    '''
+    Generate missing slices by averaging the neighbouring slices in multiple ways
+    method = 'mean' : average of two neighbouring slices
+    method = 'intermediate_nonlin_mean': applying a non-linear transformation to the neighbouring slices, averaging the deformation, then applying to the pre-slice
+
+    '''
+    if method == 'mean':
+        # Load pre and post images
+        pre_slices = []
+        for img_fname in missing_fnames_pre:
+            img_data = nighres.io.load_volume(img_fname).get_fdata()
+            pre_slices.append(img_data)
+        pre_slices = numpy.stack(pre_slices, axis=-1)
+
+        post_slices = []
+        for img_fname in missing_fnames_post:
+            img_data = nighres.io.load_volume(img_fname).get_fdata()
+            post_slices.append(img_data)
+        post_slices = numpy.stack(post_slices, axis=-1)
+    
+        missing_slices_interpolated = .5*(pre_slices+post_slices)
+    
+    elif method == 'intermediate_nonlin_mean':
+        missing_slices_interpolated = []
+        for idx,img_fname in enumerate(missing_fnames_pre):
+            img_fname_pre = missing_fnames_pre[idx]
+            img_fname_post = missing_fnames_post[idx]
+            missing_slices_interpolated.append(compute_intermediate_non_linear_slice(img_fname_pre,img_fname_post))
+        missing_slices_interpolated= numpy.stack(missing_slices_interpolated, axis=-1)
+    else:
+        missing_slices_interpolated = None
+    return missing_slices_interpolated
+
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None):
     
@@ -453,30 +548,55 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
         #now we fill any missing data with the mean of the neighbouring slices
         if missing_idxs_to_fill is not None and len(missing_idxs_to_fill)>0:
+
+            #we generate the filenames and then pass them to a helper function to generate the missing slices (as an array)
             missing_idxs_to_fill.sort() #sort it
-            missing_slices_interpolated = []
             missing_idxs_pre = numpy.array(missing_idxs_to_fill)-1
             missing_idxs_post = numpy.array(missing_idxs_to_fill)+1
-            
+                        
             for idx,img_idx in enumerate(missing_idxs_pre):
+                if idx ==0:
+                    missing_fnames_pre = []
+                
                 img_name = all_image_fnames[img_idx]
                 img_name = os.path.basename(img_name).split('.')[0]
                 reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
-                _t = nighres.io.load_volume(reg).get_fdata()
-                if idx==0:
-                    pre_d = numpy.zeros(_t.shape+(len(missing_idxs_to_fill),))
-                pre_d[...,idx] = _t
-
+                missing_fnames_pre.append(reg)
+                
             for idx,img_idx in enumerate(missing_idxs_post):
+                if idx == 0:
+                    missing_fnames_post = []
                 img_name = all_image_fnames[img_idx]
                 img_name = os.path.basename(img_name).split('.')[0]
                 reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
-                _t = nighres.io.load_volume(reg).get_fdata()
-                if idx==0:
-                    post_d = numpy.zeros(_t.shape+(len(missing_idxs_to_fill),))
-                post_d[...,idx] = _t
+                missing_fnames_post.append(reg)
+
+            missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,missing_fnames_post)
+
+            ## OLD WAY, restricted to just the mean
+            # missing_idxs_to_fill.sort() #sort it
+            # missing_slices_interpolated = []
+            # missing_idxs_pre = numpy.array(missing_idxs_to_fill)-1
+            # missing_idxs_post = numpy.array(missing_idxs_to_fill)+1            
+            # for idx,img_idx in enumerate(missing_idxs_pre):
+            #     img_name = all_image_fnames[img_idx]
+            #     img_name = os.path.basename(img_name).split('.')[0]
+            #     reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
+            #     _t = nighres.io.load_volume(reg).get_fdata()
+            #     if idx==0:
+            #         pre_d = numpy.zeros(_t.shape+(len(missing_idxs_to_fill),))
+            #     pre_d[...,idx] = _t
+
+            # for idx,img_idx in enumerate(missing_idxs_post):
+            #     img_name = all_image_fnames[img_idx]
+            #     img_name = os.path.basename(img_name).split('.')[0]
+            #     reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
+            #     _t = nighres.io.load_volume(reg).get_fdata()
+            #     if idx==0:
+            #         post_d = numpy.zeros(_t.shape+(len(missing_idxs_to_fill),))
+            #     post_d[...,idx] = _t
             
-            missing_slices_interpolated = .5*(pre_d+post_d)
+            # missing_slices_interpolated = .5*(pre_d+post_d)
 
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):
@@ -944,7 +1064,7 @@ for iter in range(num_reg_iterations):
 
     template_tag = 'coreg12nl'+iter_tag
     
-    slice_offset_list_forward = [-3,-2,-1,1,2] #weigted back, but also forward
+    slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
     slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
     image_weights = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
 
@@ -987,8 +1107,8 @@ for iter in range(num_syn_reg_iterations):
     print(f'\t iteration tag: {iter_tag}')
     logger.warning(f'\titeration {iter_tag}')
 
-    slice_offset_list_forward = [-1,-2,-3] #weigted back, but also forward
-    slice_offset_list_reverse = [1,2,3] #weighted forward, but also back
+    slice_offset_list_forward = [-1,-2,-3] #weighted back
+    slice_offset_list_reverse = [1,2,3] #weighted forward
     image_weights = generate_gaussian_weights([0,1,2,3])
 
     # coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=slice_offset_list_forward, 
@@ -1016,42 +1136,42 @@ for iter in range(num_syn_reg_iterations):
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
     template_tag = 'coreg12nl'+iter_tag
-    # print(template)
-
-    slice_offset_list_forward = [-3,-2,-1,1,2] #weigted back, but also forward
-    slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
-    image_weights = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
-
-    # coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=slice_offset_list_forward, 
-    #                 zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
-    #                 previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid) 
-    # image_weights = generate_gaussian_weights([0,-2,-1,1,2,3]) #symmetric gaussian, so the same on both sides
-    # coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=slice_offset_list_reverse, 
-    #                 zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
-    #                 previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid)
     
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers,
-                                 target_slice_offset_list=slice_offset_list_forward, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-    image_weights = generate_gaussian_weights([0,-2,-1,1,2,3])
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers,
-                                 target_slice_offset_list=slice_offset_list_reverse, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+    ## This is, in practice, completely unecessary - staged for removal
+    # slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
+    # slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
+    # image_weights = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
+
+    # # coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=slice_offset_list_forward, 
+    # #                 zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
+    # #                 previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid) 
+    # # image_weights = generate_gaussian_weights([0,-2,-1,1,2,3]) #symmetric gaussian, so the same on both sides
+    # # coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=slice_offset_list_reverse, 
+    # #                 zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
+    # #                 previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid)
     
-    logging.warning('\t\tSelecting best registration by MI')
-    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
-                        zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
-                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
-    logging.warning('\t\tGenerating new template')
-    template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                        zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
-                                        missing_idxs_to_fill=missing_idxs_to_fill)
-    final_reg_level_tag = 'coreg12nl_win12'+iter_tag
-    template_tag = 'coreg12nl_win12'+iter_tag
+    # run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers,
+    #                              target_slice_offset_list=slice_offset_list_forward, 
+    #                 zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
+    #                 previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
+    #                 image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+    # image_weights = generate_gaussian_weights([0,-2,-1,1,2,3])
+    # run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers,
+    #                              target_slice_offset_list=slice_offset_list_reverse, 
+    #                 zfill_num=zfill_num, input_source_file_tag='coreg12nl'+iter_tag, 
+    #                 previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
+    #                 image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+    
+    # logging.warning('\t\tSelecting best registration by MI')
+    # select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+    #                     zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
+    #                     reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
+    # logging.warning('\t\tGenerating new template')
+    # template = generate_stack_and_template(output_dir,subject,all_image_fnames,
+    #                                     zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
+    #                                     missing_idxs_to_fill=missing_idxs_to_fill)
+    # final_reg_level_tag = 'coreg12nl_win12'+iter_tag
+    # template_tag = 'coreg12nl_win12'+iter_tag
 
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)

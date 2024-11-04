@@ -14,6 +14,7 @@ import pandas as pd
 from scipy.signal import convolve2d
 import math
 from nighres.io import load_volume, save_volume
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 
@@ -50,11 +51,11 @@ scaling_factor = 8
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 all_image_fnames = list(_df['file_name'].values)
-all_image_fnames = all_image_fnames[0:7] #for testing
+all_image_fnames = all_image_fnames[0:35] #for testing
 
 # set missing indices, which will be iteratively filled with the mean of the neighbouring slices
 # missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
-missing_idxs_to_fill = [5]
+missing_idxs_to_fill = [32]
 if missing_idxs_to_fill is not None:
     if numpy.max(numpy.array(missing_idxs_to_fill)) > len(all_image_fnames): #since these are indices, will start @ 0
         raise ValueError("Missing slice indices exceed the number of images in the stack.")
@@ -216,8 +217,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     logging.warning(f"\t\tRegistration completed for slice {idx}.")
 
 
-from concurrent.futures import ProcessPoolExecutor, as_completed
-
+#TODO: these end up being the same thing, can remove one of them since direction is now encoded in the offset list!
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
@@ -258,8 +258,10 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                 logging.error(f"Registration failed with error: {e}")
 
 
+# this is not ideal, but it is a massive improvement over the mean
+# could adapt to perform an additional coreg and then average the two?
 
-def compute_intermediate_non_linear_slice(pre_img, post_img):
+def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_mean = True):
     """
     Computes an intermediate slice by averaging both rigid and non-linear transformations.
     Images must already fit within the same matrix (i.e., have the same dimensions).
@@ -309,11 +311,34 @@ def compute_intermediate_non_linear_slice(pre_img, post_img):
         # Step 6: Apply the averaged non-linear deformation field to the rigidly aligned pre-image
         intermediate_img = ants.apply_transforms(fixed=post_ants, moving=pre_aligned, transformlist=[avg_field_path])
 
+    intermediate_img_np = intermediate_img.numpy()
+
     # Convert to NumPy array
-    # TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
-    intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces (RAS vs LPI, I think...)
+    ## TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
+    ## intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces (RAS vs LPI, I think...)
+
+    # if you want to, we now coregister the images to the new target and then take their mean
+    if additional_coreg_mean: 
+        # Step 1: Perform rigid registration from pre to post slice and post to pre slice
+        pre_to_post_rigid = ants.registration(fixed=intermediate_img, moving=pre_ants, type_of_transform='Rigid')
+        post_to_pre_rigid = ants.registration(fixed=intermediate_img, moving=post_ants, type_of_transform='Rigid')
+
+        # Step 2: Apply the rigid transformation to each image for initial alignment
+        pre_aligned = ants.apply_transforms(fixed=intermediate_img, moving=pre_ants, transformlist=pre_to_post_rigid['fwdtransforms'])
+        post_aligned = ants.apply_transforms(fixed=intermediate_img, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
 
 
+        # # Step 3: Perform non-linear registration on the rigidly aligned images
+        pre_to_post_nonlin = ants.registration(fixed=intermediate_img, moving=pre_aligned, type_of_transform='SyN')
+        post_to_pre_nonlin = ants.registration(fixed=intermediate_img, moving=post_aligned, type_of_transform='SyN')
+
+        # Step 4: Load the deformed images
+        pre_to_post_img = pre_to_post_nonlin['warpedmovout']
+        post_to_pre_img = post_to_pre_nonlin['warpedmovout']
+
+        # Step 5: Compute the average of the deformed images
+        intermediate_img_np = (pre_to_post_img.numpy() + post_to_pre_img.numpy()) / 2
+    
     return intermediate_img_np
 
 

@@ -31,25 +31,27 @@ subject = 'zefir'
 
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
-rescale=10 #larger scale means that you have to change the scaling_factor
+# rescale=10 #larger scale means that you have to change the scaling_factor
+rescale=40
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
-max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+# max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 
 
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_{rescale}/'
 
 # registration parameters
-scaling_factor = 32 #32 or 64 for full?
-# scaling_factor = 8
-# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+# scaling_factor = 32 #32 or 64 for full?
+scaling_factor = 8
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 all_image_fnames = list(_df['file_name'].values)
-# all_image_fnames = all_image_fnames[0:7] #for testing
+all_image_fnames = all_image_fnames[0:7] #for testing
 
 # set missing indices, which will be iteratively filled with the mean of the neighbouring slices
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
-# missing_idxs_to_fill = None
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+missing_idxs_to_fill = [5]
 if missing_idxs_to_fill is not None:
     if numpy.max(numpy.array(missing_idxs_to_fill)) > len(all_image_fnames): #since these are indices, will start @ 0
         raise ValueError("Missing slice indices exceed the number of images in the stack.")
@@ -109,182 +111,6 @@ def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     
     # Normalize the weights to sum to 1
     return out_weights / out_weights.sum()
-
-
-def coreg_multislice(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[-1,-2,-3], 
-                     zfill_num=4, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',run_syn=True,
-                     run_rigid=True,previous_target_tag=None,scaling_factor=64,image_weights=None):
-    ''' Co-register to slices before/after
-    target_offset_list: negative values indicate slices prior to the current, positive after
-    '''
-    all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
-
-    if type(template) is list: #we have a list of templates, one for each slice
-        per_slice_template = True
-    else:
-        per_slice_template = False
-        targets = [template]
-    for idx,img in enumerate(all_image_fnames):
-        img = os.path.basename(img).split('.')[0]
-        # current image
-        previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
-        nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
-
-        sources = [nifti]
-        image_weights_ordered = [image_weights[0]]
-            
-        if per_slice_template:
-            targets = [template[idx]]
-        if previous_target_tag is not None:
-            tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
-        else:
-            tail = f'_{reg_level_tag}_ants-def0.nii.gz'
-        # append additional images as additional targets to stabilize reg
-        for idx2,slice_offset in enumerate(target_slice_offset_list):
-            if slice_offset < 0: #we add registration targets for the slices that came before
-                if idx > numpy.abs(slice_offset + 1):        
-                    prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
-                    sources.append(nifti)
-                    targets.append(prev1)
-                    image_weights_ordered.append(image_weights[idx2+1]) #since we have already added the first image weight
-            elif slice_offset > 0: #we add registration targets for the slices that come afterwards
-                 if idx < len(all_image_fnames)-1*slice_offset:
-                    prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
-                    sources.append(nifti)
-                    targets.append(prev1)
-                    image_weights_ordered.append(image_weights[idx2+1])
-        
-        logging.warning('Targets:')
-        for t in targets:
-            logging.warning(f'\t{t.split("/")[-1]}')
-        logging.warning('Sources:')
-        for s in sources:
-            logging.warning(f'\t{s.split("/")[-1]}')
-        logging.warning(image_weights_ordered)
-        
-        output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
-        # print(sources)
-        # print(targets)
-        # print(image_weights_ordered)
-        print(f'output: {output.split("/")[-1]}')
-        coreg_output = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
-                        target_images=targets,
-                        image_weights=image_weights_ordered,
-                        run_rigid=run_rigid,
-                        rigid_iterations=1000,
-                        run_affine=False,
-                        run_syn=run_syn,
-                        coarse_iterations=2000,
-                        medium_iterations=1000, fine_iterations=200,
-        			    scaling_factor=scaling_factor,
-                        cost_function='MutualInformation',
-                        interpolation='Linear',
-                        regularization='High',
-                        convergence=1e-6,
-                        mask_zero=False,
-                        ignore_affine=True, ignore_orient=True, ignore_res=True,
-                        save_data=True, overwrite=False,
-                        file_name=output)
-        time.sleep(1) #to avoid overloading the system
-        
-        # cleanup extra deformation files produced after registration (def? are all the same as def0 - the deformed image)
-        def_files = glob.glob(f'{output}_ants-def*')
-        for f in def_files:
-            if 'def0' in f:
-                pass
-            else:
-                os.remove(f)
-                time.sleep(.5)
-        logging.warning(f"\t\tForward registration completed for slice {idx}.")
-
-def coreg_multislice_reverse(output_dir,subject,all_image_fnames,template,target_slice_offset_list=[1,2,3], 
-                             zfill_num=4, input_source_file_tag='coreg1nl', reg_level_tag='coreg2nl',run_syn=True,
-                             run_rigid=True, previous_target_tag=None,scaling_factor=64,image_weights=None):
-    ''' Co-register to slices before/after
-    target_offset_list: negative values indicate slices prior to the current, positive after
-    differs in that we reverse the list (and the idx) and the offsets are the opposite sign
-    TODO: can likely be combined with standard, with some more thought.
-    '''
-    all_image_names = [os.path.basename(image_fname).split('.')[0] for image_fname in all_image_fnames]
-    
-    if type(template) is list: #we have a list of templates, one for each slice
-        per_slice_template = True
-    else:
-        per_slice_template = False
-        targets = [template]
-    for idx,img in reversed(list(enumerate(all_image_fnames))):
-        img = os.path.basename(img).split('.')[0]
-        # current image
-        previous_tail = f'_{input_source_file_tag}_ants-def0.nii.gz'
-        nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+previous_tail
-
-        sources = [nifti]
-        image_weights_ordered = [image_weights[0]]
-        if per_slice_template:
-            targets = [template[idx]]
-        if previous_target_tag is not None:
-            tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
-        else:
-            tail = f'_{reg_level_tag}_ants-def0.nii.gz'
-
-        # append additional images as additional targets to stabilize reg
-        for idx2, slice_offset in enumerate(target_slice_offset_list):
-            if slice_offset < 0: #we add registration targets for the slices that came before
-                if idx > numpy.abs(slice_offset + 1):        
-                    prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
-                    sources.append(nifti)
-                    targets.append(prev1)
-                    image_weights_ordered.append(image_weights[idx2+1]) #add 1 b/c we have already added the first image weight above
-            elif slice_offset > 0: #we add registration targets for the slices that come afterwards
-                 if idx < len(all_image_fnames)-1*slice_offset:
-                    prev1 = output_dir+subject+'_'+str(idx+slice_offset).zfill(zfill_num)+'_'+all_image_names[idx+slice_offset]+tail
-                    sources.append(nifti)
-                    targets.append(prev1)
-                    image_weights_ordered.append(image_weights[idx2+1])
-        
-        output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+"_"+reg_level_tag
-        print(sources)
-        print(targets)
-        print(image_weights_ordered)
-        print(f'output: {output.split("/")[-1]}')
-        coreg_output = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
-                        target_images=targets,
-                        image_weights=image_weights_ordered,
-                        run_rigid=run_rigid,
-                        rigid_iterations=1000,
-                        run_affine=False,
-                        run_syn=run_syn,
-                        coarse_iterations=2000,
-                        medium_iterations=1000, fine_iterations=200,
-					    scaling_factor=scaling_factor,
-                        cost_function='MutualInformation',
-                        interpolation='Linear',
-                        regularization='High',
-                        convergence=1e-6,
-                        mask_zero=False,
-                        ignore_affine=True, ignore_orient=True, ignore_res=True,
-                        save_data=True, overwrite=False,
-                        file_name=output)
-        time.sleep(1) #to avoid overloading the system
-        # cleanup extra deformation files produced after registration (def? are all the same as def0 - the deformed image)
-        def_files = glob.glob(f'{output}_ants-def*')
-        for f in def_files:
-            if 'def0' in f:
-                pass
-            else:
-                os.remove(f)
-                time.sleep(.5)
-        logging.warning(f"\t\tReverse registration completed for slice {idx}.")
-
-
-# def process_single_slice_reverse(idx, img, output_dir, subject, template, **kwargs):
-#     coreg_multislice_reverse(output_dir, subject, [img], template, **kwargs)
-
-# def process_single_slice_forward(idx, img, output_dir, subject, template, **kwargs):
-#     logging.warning('******************** Processing slice: {}'.format(idx))
-#     coreg_multislice(output_dir, subject, [img], template, **kwargs)
-
-
 
 def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, template, 
                        target_slice_offset_list=[-1, -2, -3], zfill_num=4, 
@@ -759,7 +585,7 @@ def downsample_block(block):
     return block.sum()
 
 
-def downsample_image(image, rescale, prop_pad=.2):
+def downsample_image_ORIG(image, rescale, prop_pad=.2):
     """
     Downsamples a 2D image by summing over rescale x rescale blocks. Pad by prop_pad before downsampling to ensure all data is within the final registered image(s)
     
@@ -785,6 +611,46 @@ def downsample_image(image, rescale, prop_pad=.2):
     
     # Downsample by block summing
     downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
+    return downsampled_image
+
+def downsample_image(image, rescale, prop_pad=0.2):
+    """
+    Downsamples a 2D image by summing over rescale x rescale blocks. Pad by prop_pad 
+    before downsampling to ensure all data is within the final registered image(s).
+    
+    Parameters:
+    - image (numpy.ndarray): Input 2D image to downsample.
+    - rescale (int): Factor by which to downsample.
+    - prop_pad (float): Proportion of padding to add to each border of the image before downsampling.
+
+    Returns:
+    - numpy.ndarray: Downsampled image with summed values in blocks.
+    """
+    from skimage.measure import block_reduce
+
+    # Original dimensions
+    size0, size1 = image.shape
+
+    # Calculate padding based on proportion
+    pad0 = math.ceil(size0 * prop_pad)
+    pad1 = math.ceil(size1 * prop_pad)
+
+    # Pad each side equally
+    total_pad_width = ((pad0, pad0), (pad1, pad1))
+    padded_image = numpy.pad(image, pad_width=total_pad_width, mode='constant', constant_values=0)
+
+    # Adjust padding to ensure divisibility by rescale
+    padded_size0, padded_size1 = padded_image.shape
+    extra_pad_width = ((rescale - padded_size0 % rescale) % rescale,
+                       (rescale - padded_size1 % rescale) % rescale)
+
+    padded_image = numpy.pad(padded_image, 
+                          ((0, extra_pad_width[0]), (0, extra_pad_width[1])),
+                          mode='constant', constant_values=0)
+
+    # Downsample by block summing
+    downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
+    
     return downsampled_image
 
 def downsample_image_parallel(image, rescale, n_jobs=-1):
@@ -1053,10 +919,15 @@ for iter in range(num_reg_iterations):
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
                         reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct) #use the per slice templates after the first round, if requested
+    if MI_df_struct is not None:
+        pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
+    
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
+   
+
     
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
     # if iter > 0: #we do not do this on the first iteration
@@ -1083,6 +954,9 @@ for iter in range(num_reg_iterations):
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
                         reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
+    if MI_df_struct is not None:
+        pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
+    
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
@@ -1131,6 +1005,9 @@ for iter in range(num_syn_reg_iterations):
     select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
                         reg_output_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
+    if MI_df_struct is not None:
+        pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
+    
     logging.warning('\t\tGenerating new template')
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,

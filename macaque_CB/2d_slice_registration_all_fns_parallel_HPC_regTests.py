@@ -171,9 +171,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             image_weights_ordered.append(image_weights[idx2 + 1])
             
     
-    logging.info(sources)
-    logging.info(targets)
-    logging.info(image_weights_ordered)
+    logging.info('sources: {sources}')
+    logging.info('targets: {targets}')
+    logging.info('weights: {image_weights_ordered}')
 
     # logging.info('Sources:')
     # for s in sources:

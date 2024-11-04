@@ -171,7 +171,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             image_weights_ordered.append(image_weights[idx2 + 1])
             
     
-    logging.info(f'slice_idx: {idx}\nsources: {sources[0].split("/")[-1]}\ntargets:\n{[t.split("/")[-1] for t in targets]}\nweights:\n{image_weights_ordered}') #source is always the same 
+    logging.info(f'\n\tslice_idx: {idx}\n\t\tsources: {sources[0].split("/")[-1]}\n\t\ttargets: {[t.split("/")[-1] for t in targets]}\n\t\tweights: {image_weights_ordered}') #source is always the same 
 
     # logging.info('Sources:')
     # for s in sources:

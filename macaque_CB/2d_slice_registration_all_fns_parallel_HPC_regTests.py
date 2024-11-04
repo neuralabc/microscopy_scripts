@@ -291,10 +291,6 @@ def compute_intermediate_non_linear_slice(pre_img, post_img):
     pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN')
     post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
 
-    # # Step 3: Perform non-linear registration on the rigidly aligned images
-    # pre_to_post_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
-    # post_to_pre_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN')
-
     # Step 4: Load the non-linear deformation fields as images
     pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0])
     post_to_pre_field = ants.image_read(post_to_pre_nonlin['fwdtransforms'][0])

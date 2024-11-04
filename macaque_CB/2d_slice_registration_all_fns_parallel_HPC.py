@@ -40,6 +40,9 @@ max_workers = 10 #number of parallel workers to run for registration -> registra
 
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_{rescale}/'
+print('*********************************************************************************************************')
+print(f'Output directory: {output_dir}')
+print('*********************************************************************************************************')
 
 # registration parameters
 # scaling_factor = 32 #32 or 64 for full?
@@ -312,7 +315,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img):
 
     # Convert to NumPy array
     # TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
-    intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces
+    intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces (RAS vs LPI, I think...)
 
 
     return intermediate_img_np
@@ -580,9 +583,9 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, te
             os.remove(slice2)
             time.sleep(.5)
     if df_struct is not None: #we dump out lists into the dataframe-like structure to keep track of MI values 
+        df_struct['img_name'+out_tail] = img_name_l
         df_struct['MI1c'+out_tail] = mi1c_l
         df_struct['MI2c'+out_tail] = mi2c_l
-        df_struct['img_name'+out_tail] = img_name_l
         return df_struct
     else:
         return None
@@ -935,7 +938,7 @@ for iter in range(num_reg_iterations):
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
    
-
+    missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
     
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
     # if iter > 0: #we do not do this on the first iteration

@@ -29,11 +29,20 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 # file parameters
 subject = 'zefir'
 
+#TODO: potentially carry this through to the nibabel images so that the header and affines are correct
+# tried this quickly and it messed everything up...
+in_plane_res_x = 10 #10 microns per pixel
+in_plane_res_y = 10 #10 microns per pixel
+in_plane_res_z = 50 #slice thickness of 50 microns
 
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 # rescale=10 #larger scale means that you have to change the scaling_factor
 rescale=40
+#based on the rescale value, we adjust our in-plane resolution
+in_plane_res_x = rescale*in_plane_res_x
+in_plane_res_y = rescale*in_plane_res_y
+
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 # max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
@@ -125,13 +134,6 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     Register a single slice and its neighboring slices based on offsets.
     """
 
-    # logging.warning('----------------------')
-
-    # logging.warning(input_source_file_tag)
-    # logging.warning(template)
-    # logging.warning(input_source_file_tag)
-    # logging.warning(input_source_file_tag)
-
     img_basename = os.path.basename(img).split('.')[0]
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
@@ -168,19 +170,24 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             targets.append(next_nifti)
             image_weights_ordered.append(image_weights[idx2 + 1])
             
-    # logging.warning('Targets:')
-    # for t in targets:
-    #     try:
-    #         logging.warning(f'\t{t.split("/")[-1]}')
-    #     except:
-    #         logging.warning(t)    
-    # logging.warning('Sources:')
+    
+    logging.info(sources)
+    logging.info(targets)
+    logging.info(image_weights_ordered)
+
+    # logging.info('Sources:')
     # for s in sources:
     #     try:
-    #         logging.warning(f'\t{s.split("/")[-1]}')
+    #         logging.info(f'\t{s.split("/")[-1]}')
     #     except:
-    #         logging.warning(s)
-    # logging.warning(image_weights_ordered)
+    #         logging.info(s)
+    # logging.info('Targets:')
+    # for t in targets:
+    #     try:
+    #         logging.info(f'\t{t.split("/")[-1]}')
+    #     except:
+    #         logging.info(t)    
+    # logging.info(image_weights_ordered)
 
     output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}"
     coreg_output = nighres.registration.embedded_antspy_2d_multi(
@@ -959,7 +966,7 @@ for iter in range(num_reg_iterations):
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill)
    
-    missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
+    # missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
     
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
     # if iter > 0: #we do not do this on the first iteration

@@ -44,11 +44,11 @@ in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
-max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
-#max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+# max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_parallel/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_parallel_test/'
 # scaling_factor = 32 #32 or 64 for full?
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 # missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
@@ -57,7 +57,8 @@ output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v
 scaling_factor = 8
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 #missing_idxs_to_fill = [32]
-missing_idxs_to_fill = None
+missing_idxs_to_fill = [3]
+# missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
 all_image_fnames = all_image_fnames[0:5] #for testing
@@ -251,8 +252,59 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                 logging.error(f"Registration failed with error: {e}")
 
 
-# this is not ideal, but it is a massive improvement over the mean
-# could adapt to perform an additional coreg and then average the two?
+def compute_intermediate_non_linear_slice_v2(pre_img, post_img, additional_coreg_mean = True):
+    """
+    Computes an intermediate slice by averaging both rigid and non-linear transformations.
+    Images must already fit within the same matrix (i.e., have the same dimensions).
+
+    Parameters:
+    pre_img (str): Filename of the pre-slice image.
+    post_img (str): Filename of the post-slice image.
+
+    Returns:
+    intermediate_img_np (numpy.ndarray): Intermediate slice computed between pre_img and post_img as a NumPy array.
+    """
+    import tempfile
+    import ants
+
+    # Load images using ANTs
+    pre_ants = ants.image_read(pre_img)
+    post_ants = ants.image_read(post_img)
+
+    # Step 1: Perform rigid registration from pre to post slice and post to pre slice
+    pre_to_post_rigid = ants.registration(fixed=post_ants, moving=pre_ants, type_of_transform='Rigid')
+    post_to_pre_rigid = ants.registration(fixed=pre_ants, moving=post_ants, type_of_transform='Rigid')
+
+    # Step 2: Apply the rigid transformation to each image for initial alignment
+    pre_aligned = ants.apply_transforms(fixed=post_ants, moving=pre_ants, transformlist=pre_to_post_rigid['fwdtransforms'])
+    post_aligned = ants.apply_transforms(fixed=pre_ants, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
+
+
+    # # Step 3: Perform non-linear registration on the rigidly aligned images
+    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN')
+    post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
+    
+    # Step 4: Load the non-linear deformation fields as images
+    # https://antspy.readthedocs.io/en/latest/registration.html #for reference
+    pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0]) # 2nd on the stack is the Affine
+    post_to_pre_field = ants.image_read(post_to_pre_nonlin['invtransforms'][1]) # grab the inverse deformation field, which is the 2nd on the stack for inverted
+
+
+    # Step 5: Convert the deformation fields to NumPy arrays and average them
+    avg_field_data = (pre_to_post_field.numpy() + post_to_pre_field.numpy()) / 2
+    avg_field = ants.from_numpy(avg_field_data, spacing=pre_to_post_field.spacing+(1.0,)) #need a 3rd dimension for spacing
+    
+    #we need to have the transform as a file, so we create a temp version here
+    with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
+        avg_field_path = temp_file.name
+        ants.image_write(avg_field, avg_field_path)
+
+        ## apply within the with statement to use the file prior to deletion (default is non- persistence)
+        # Step 6: Apply the averaged non-linear deformation field to the rigidly aligned pre-image
+        intermediate_img = ants.apply_transforms(fixed=post_ants, moving=pre_aligned, transformlist=[avg_field_path])
+
+    intermediate_img_np = intermediate_img.numpy()
+
 
 def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_mean = True):
     """
@@ -287,8 +339,9 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
     post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
 
     # Step 4: Load the non-linear deformation fields as images
-    pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0])
-    post_to_pre_field = ants.image_read(post_to_pre_nonlin['fwdtransforms'][0])
+    # https://antspy.readthedocs.io/en/latest/registration.html #for reference
+    pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0]) # 2nd on the stack is the Affine
+    post_to_pre_field = ants.image_read(post_to_pre_nonlin['invtransforms'][1]) # grab the inverse deformation field, which is the 2nd on the stack for inverted
 
 
     # Step 5: Convert the deformation fields to NumPy arrays and average them
@@ -306,7 +359,6 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
 
     intermediate_img_np = intermediate_img.numpy()
 
-    # Convert to NumPy array
     ## TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
     ## intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces (RAS vs LPI, I think...)
 
@@ -406,6 +458,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             missing_idxs_post = numpy.array(missing_idxs_to_fill)+1
                         
             for idx,img_idx in enumerate(missing_idxs_pre):
+                logging.warning(f"Processing missing slice: {img_idx}")
                 if idx ==0:
                     missing_fnames_pre = []
                 
@@ -603,16 +656,7 @@ def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_str
         for future in as_completed(future_to_img):
             result = future.result()
             if result:
-                logging.warning(result[0])
                 results.append(result)
-    
-    
-    # Store results in df_struct if provided
-    #TODO: this will need to be reordered by the idx
-
-    # Step 1: Transpose the list so each "row" becomes a tuple
-    # Step 2: Sort by the first element in each tuple (i.e., the index from results[0])
-    # Step 3: Transpose back to get the sorted list of lists
     
     
     #convert from tuple to list of lists, then sort by index

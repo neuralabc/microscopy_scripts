@@ -48,23 +48,25 @@ max_workers = 100 #number of parallel workers to run for registration -> registr
 #max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 
 
-#output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_parallel/'
+# scaling_factor = 32 #32 or 64 for full?
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+
+# output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
+scaling_factor = 8
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+#missing_idxs_to_fill = [32]
+missing_idxs_to_fill = None
+all_image_fnames = list(_df['file_name'].values)
+
+all_image_fnames = all_image_fnames[0:5] #for testing
+
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
 print('*********************************************************************************************************')
 
-# registration parameters
-scaling_factor = 32 #32 or 64 for full?
-#scaling_factor = 8
-#_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-all_image_fnames = list(_df['file_name'].values)
-#all_image_fnames = all_image_fnames[0:35] #for testing
-
 # set missing indices, which will be iteratively filled with the mean of the neighbouring slices
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
-#missing_idxs_to_fill = [32]
 if missing_idxs_to_fill is not None:
     if numpy.max(numpy.array(missing_idxs_to_fill)) > len(all_image_fnames): #since these are indices, will start @ 0
         raise ValueError("Missing slice indices exceed the number of images in the stack.")
@@ -172,20 +174,6 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             
     
     logging.info(f'\n\tslice_idx: {idx}\n\t\tsources: {sources[0].split("/")[-1]}\n\t\ttargets: {[t.split("/")[-1] for t in targets]}\n\t\tweights: {image_weights_ordered}') #source is always the same 
-
-    # logging.info('Sources:')
-    # for s in sources:
-    #     try:
-    #         logging.info(f'\t{s.split("/")[-1]}')
-    #     except:
-    #         logging.info(s)
-    # logging.info('Targets:')
-    # for t in targets:
-    #     try:
-    #         logging.info(f'\t{t.split("/")[-1]}')
-    #     except:
-    #         logging.info(t)    
-    # logging.info(image_weights_ordered)
 
     output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}"
     coreg_output = nighres.registration.embedded_antspy_2d_multi(
@@ -520,6 +508,127 @@ def register_stack_to_mri(slice_stack_template, mri_template):
     )
     return aligned_stack
 
+
+# from concurrent.futures import ProcessPoolExecutor, as_completed
+# import os
+# import shutil
+# import glob
+# import time
+# import numpy
+# import nighres.io
+
+def compute_MI_for_slice(idx, img_name, output_dir, subject, template_tail, out_tail, tag1_tail, tag2_tail, zfill_num, per_slice_template, overwrite):
+    from sklearn.metrics import mutual_info_score
+    
+    img_name = os.path.basename(img_name).split('.')[0]
+    if not per_slice_template:
+        template_path = output_dir + subject + template_tail
+    else:
+        template_path = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + template_tail
+    
+    output_path = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + out_tail + '_ants-def0.nii.gz'
+    if os.path.isfile(output_path) and not overwrite:
+        return None
+
+    slice1_path = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag1_tail + '_ants-def0.nii.gz'
+    slice2_path = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag2_tail + '_ants-def0.nii.gz'
+    
+    curr1 = nighres.io.load_volume(slice1_path).get_fdata()
+    curr2 = nighres.io.load_volume(slice2_path).get_fdata()
+    curr = nighres.io.load_volume(template_path).get_fdata()
+    
+    # Flatten the images
+    curr1_flat = curr1.flatten()
+    curr2_flat = curr2.flatten()            
+    curr_flat = curr.flatten()
+
+    # Define bin edges based on the data range
+    min_val = min(curr1_flat.min(), curr2_flat.min(), curr_flat.min())
+    max_val = max(curr1_flat.max(), curr2_flat.max(), curr_flat.max())
+    bins = numpy.linspace(min_val, max_val, 100) #100 bins
+
+    # Digitize each array to convert to discrete bins
+    curr1_binned = numpy.digitize(curr1_flat, bins)
+    curr2_binned = numpy.digitize(curr2_flat, bins)
+    curr_binned = numpy.digitize(curr_flat, bins)
+
+    mi1c = mutual_info_score(curr1_binned, curr_binned)
+    mi2c = mutual_info_score(curr2_binned, curr_binned)
+
+    # Copy the best result
+    mapping = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + out_tail + '_ants-map.nii.gz'
+    inverse = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + out_tail + '_ants-invmap.nii.gz'
+    
+    if mi1c > mi2c:
+        mapping1 = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag1_tail + '_ants-map.nii.gz'
+        inverse1 = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag1_tail + '_ants-invmap.nii.gz'
+        shutil.copyfile(mapping1, mapping)
+        shutil.copyfile(inverse1, inverse)
+        shutil.copyfile(slice1_path, output_path)
+    else:
+        mapping2 = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag2_tail + '_ants-map.nii.gz'
+        inverse2 = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag2_tail + '_ants-invmap.nii.gz'
+        shutil.copyfile(mapping2, mapping)
+        shutil.copyfile(inverse2, inverse)
+        shutil.copyfile(slice2_path, output_path)
+    
+    # Clean up old files
+    for f in glob.glob(output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + "*_ants-*map.nii.gz"):
+        if out_tail not in f:
+            os.remove(f)
+            time.sleep(0.5)
+    os.remove(slice1_path)
+    time.sleep(0.5)
+    os.remove(slice2_path)
+    time.sleep(0.5)
+    
+    return idx, mapping, img_name, mi1c, mi2c
+
+def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_struct=None, template_tag='coreg0nl',
+                                   zfill_num=3, reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',
+                                   reg_output_tag='coreg12nl', per_slice_template=False, overwrite=True):
+    template_tail = f'_{template_tag}_template.nii.gz'
+    out_tail = f'_{reg_output_tag}'
+    tag1_tail = f'_{reg_level_tag1}'
+    tag2_tail = f'_{reg_level_tag2}'
+    
+    results = []
+    args = [
+        (idx, img_name, output_dir, subject, template_tail, out_tail, tag1_tail, tag2_tail, zfill_num, per_slice_template, overwrite)
+        for idx, img_name in enumerate(all_image_fnames)
+    ]
+    
+    with ProcessPoolExecutor() as executor:
+        future_to_img = {executor.submit(compute_MI_for_slice, *arg): arg[1] for arg in args}
+        for future in as_completed(future_to_img):
+            result = future.result()
+            if result:
+                logging.warning(result[0])
+                results.append(result)
+    
+    
+    # Store results in df_struct if provided
+    #TODO: this will need to be reordered by the idx
+
+    # Step 1: Transpose the list so each "row" becomes a tuple
+    # Step 2: Sort by the first element in each tuple (i.e., the index from results[0])
+    # Step 3: Transpose back to get the sorted list of lists
+    
+    
+    #convert from tuple to list of lists, then sort by index
+    sorted_results = [list(r) for r in results]
+    sorted_results.sort(key=lambda x: x[0])
+    if df_struct is not None:
+        df_struct['idx'] = [r[0] for r in sorted_results]
+        df_struct['selected_transform'] = [r[1] for r in sorted_results]
+        df_struct['img_name' + out_tail] = [r[2] for r in sorted_results]
+        df_struct['MI1c' + out_tail] = [r[3] for r in sorted_results]
+        df_struct['MI2c' + out_tail] = [r[4] for r in sorted_results]
+        return df_struct
+    else:
+        return None
+
+
 def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, template_tag='coreg0nl',
                           zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
                           overwrite=True):
@@ -527,6 +636,7 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, te
     Use MI to determine best registration (forwards or backwards) and select going forward
     reg_output_tag identifies the best registration outputs
     '''
+    from sklearn.metrics import mutual_info_score
     template_tail = f'_{template_tag}_template.nii.gz'
     out_tail = f'_{reg_output_tag}'
     tag1_tail = f'_{reg_level_tag1}'
@@ -552,28 +662,46 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, te
             curr2 = nighres.io.load_volume(slice2).get_fdata()
             curr = nighres.io.load_volume(template).get_fdata()
             
-            p1,v1 = numpy.histogram(curr1.flatten(), bins=100, density=True)
-            p2,v2 = numpy.histogram(curr2.flatten(), bins=100, density=True)
-            pc,vc = numpy.histogram(curr.flatten(), bins=100, density=True)
+            # p1,v1 = numpy.histogram(curr1.flatten(), bins=100, density=True)
+            # p2,v2 = numpy.histogram(curr2.flatten(), bins=100, density=True)
+            # pc,vc = numpy.histogram(curr.flatten(), bins=100, density=True)
 
-            # normalize histograms to 1
-            p1 = p1/numpy.sum(p1)
-            p2 = p2/numpy.sum(p2)
-            pc = pc/numpy.sum(pc)
+            # # normalize histograms to 1
+            # p1 = p1/numpy.sum(p1)
+            # p2 = p2/numpy.sum(p2)
+            # pc = pc/numpy.sum(pc)
             
-            p1c,v1,vc = numpy.histogram2d(curr1.flatten(), curr.flatten(), bins=100, density=True)
-            p2c,v2,vc = numpy.histogram2d(curr2.flatten(), curr.flatten(), bins=100, density=True)
+            # p1c,v1,vc = numpy.histogram2d(curr1.flatten(), curr.flatten(), bins=100, density=True)
+            # p2c,v2,vc = numpy.histogram2d(curr2.flatten(), curr.flatten(), bins=100, density=True)
         
-            # normalize joint histograms to 1
-            p1c = p1c / numpy.sum(p1c)
-            p2c = p2c / numpy.sum(p2c)
+            # # normalize joint histograms to 1
+            # p1c = p1c / numpy.sum(p1c)
+            # p2c = p2c / numpy.sum(p2c)
             
-            p1pc = numpy.outer(p1,pc)
-            p2pc = numpy.outer(p2,pc)
+            # p1pc = numpy.outer(p1,pc)
+            # p2pc = numpy.outer(p2,pc)
                 
-            mi1c = numpy.sum(p1c*numpy.log(p1c/(p1pc),where=(p1c*p1pc>0)))
-            mi2c = numpy.sum(p2c*numpy.log(p2c/(p2pc),where=(p2c*p2pc>0)))
-        
+            # mi1c = numpy.sum(p1c*numpy.log(p1c/(p1pc),where=(p1c*p1pc>0)))
+            # mi2c = numpy.sum(p2c*numpy.log(p2c/(p2pc),where=(p2c*p2pc>0)))
+            
+            # Flatten the images
+            curr1_flat = curr1.flatten()
+            curr2_flat = curr2.flatten()            
+            curr_flat = curr.flatten()
+
+            # Define bin edges based on the data range
+            min_val = min(curr1_flat.min(), curr2_flat.min(), curr_flat.min())
+            max_val = max(curr1_flat.max(), curr2_flat.max(), curr_flat.max())
+            bins = numpy.linspace(min_val, max_val, 100) #100 bins
+    
+            # Digitize each array to convert to discrete bins
+            curr1_binned = numpy.digitize(curr1_flat, bins)
+            curr2_binned = numpy.digitize(curr2_flat, bins)
+            curr_binned = numpy.digitize(curr_flat, bins)
+
+            mi1c = mutual_info_score(curr1_binned, curr_binned)
+            mi2c = mutual_info_score(curr2_binned, curr_binned)
+
             print("MI: "+str(mi1c)+", "+str(mi2c))
             mi1c_l.append(mi1c)
             mi2c_l.append(mi2c)
@@ -953,9 +1081,13 @@ for iter in range(num_reg_iterations):
     # print(template_tag)
     # print(first_run_slice_template)
     logging.warning('\t\tSelecting best registration by MI')
-    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+    # select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+    #                     zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
+    #                     reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct) #use the per slice templates after the first round, if requested
+    
+    select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct) #use the per slice templates after the first round, if requested
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct)
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     
@@ -989,7 +1121,10 @@ for iter in range(num_reg_iterations):
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     logging.warning('\t\tSelecting best registration by MI')                                     
-    select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+    # select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
+    #                     zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
+    #                     reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
+    select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
                         reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
     if MI_df_struct is not None:

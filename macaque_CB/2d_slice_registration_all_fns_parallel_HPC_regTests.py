@@ -252,60 +252,6 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                 logging.error(f"Registration failed with error: {e}")
 
 
-def compute_intermediate_non_linear_slice_v2(pre_img, post_img, additional_coreg_mean = True):
-    """
-    Computes an intermediate slice by averaging both rigid and non-linear transformations.
-    Images must already fit within the same matrix (i.e., have the same dimensions).
-
-    Parameters:
-    pre_img (str): Filename of the pre-slice image.
-    post_img (str): Filename of the post-slice image.
-
-    Returns:
-    intermediate_img_np (numpy.ndarray): Intermediate slice computed between pre_img and post_img as a NumPy array.
-    """
-    import tempfile
-    import ants
-
-    # Load images using ANTs
-    pre_ants = ants.image_read(pre_img)
-    post_ants = ants.image_read(post_img)
-
-    # Step 1: Perform rigid registration from pre to post slice and post to pre slice
-    pre_to_post_rigid = ants.registration(fixed=post_ants, moving=pre_ants, type_of_transform='Rigid')
-    post_to_pre_rigid = ants.registration(fixed=pre_ants, moving=post_ants, type_of_transform='Rigid')
-
-    # Step 2: Apply the rigid transformation to each image for initial alignment
-    pre_aligned = ants.apply_transforms(fixed=post_ants, moving=pre_ants, transformlist=pre_to_post_rigid['fwdtransforms'])
-    post_aligned = ants.apply_transforms(fixed=pre_ants, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
-
-
-    # # Step 3: Perform non-linear registration on the rigidly aligned images
-    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN')
-    post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
-    
-    # Step 4: Load the non-linear deformation fields as images
-    # https://antspy.readthedocs.io/en/latest/registration.html #for reference
-    pre_to_post_field = ants.image_read(pre_to_post_nonlin['fwdtransforms'][0]) # 2nd on the stack is the Affine
-    post_to_pre_field = ants.image_read(post_to_pre_nonlin['invtransforms'][1]) # grab the inverse deformation field, which is the 2nd on the stack for inverted
-
-
-    # Step 5: Convert the deformation fields to NumPy arrays and average them
-    avg_field_data = (pre_to_post_field.numpy() + post_to_pre_field.numpy()) / 2
-    avg_field = ants.from_numpy(avg_field_data, spacing=pre_to_post_field.spacing+(1.0,)) #need a 3rd dimension for spacing
-    
-    #we need to have the transform as a file, so we create a temp version here
-    with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
-        avg_field_path = temp_file.name
-        ants.image_write(avg_field, avg_field_path)
-
-        ## apply within the with statement to use the file prior to deletion (default is non- persistence)
-        # Step 6: Apply the averaged non-linear deformation field to the rigidly aligned pre-image
-        intermediate_img = ants.apply_transforms(fixed=post_ants, moving=pre_aligned, transformlist=[avg_field_path])
-
-    intermediate_img_np = intermediate_img.numpy()
-
-
 def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_mean = True):
     """
     Computes an intermediate slice by averaging both rigid and non-linear transformations.
@@ -314,6 +260,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
     Parameters:
     pre_img (str): Filename of the pre-slice image.
     post_img (str): Filename of the post-slice image.
+    additional_coreg_mean (bool): If True, the intermediate slice is then used as the target for pre/post reg, and the mean of this reg is taken as the final image
 
     Returns:
     intermediate_img_np (numpy.ndarray): Intermediate slice computed between pre_img and post_img as a NumPy array.
@@ -913,6 +860,15 @@ def create_affine(shape):
     affine[1, 3] = -shape[1] / 2.0
     return affine
 
+def generate_slice_mask(img_data, threshold_pct = 5):
+    '''
+    Generate a mask for the slice based on the threshold percentage
+    '''
+    vec = img_data.flatten()
+    cut = numpy.percentile(vec[vec>=1],threshold_pct)
+    mask = numpy.zeros(img_data.shape,bool)
+    mask[img_data>=cut] = True
+    return mask.astype(int)
 
 ## output logger
 class StreamToLogger:
@@ -1091,7 +1047,11 @@ num_reg_iterations = 10
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
-MI_df_struct = {}
+MI_df_struct = {} #output for MI values, will be saved in a csv file
+
+# TODO: 1. Test bewtween slice registrations as a way to refine stack
+# TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
+
 
 for iter in range(num_reg_iterations): 
     

@@ -370,13 +370,23 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='inter
     return missing_slices_interpolated
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
-                                per_slice_template=False,missing_idxs_to_fill=None):
+                                per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'):
+    """
+    The output img_stack is the stack of all registered slices, with missing slices filled in with registration to the intermediate point and averaging
+    The _template.nii.gz and _template_nonlin.nii.gz files are the median and a nonlinear version of the mean of slice positions [-1,0,1], respectively.
+
+    Output single slice template file is always a median (i.e., across all images in the stack, useful for first step in registration)
+
+    slice_template_type: can be 'mean', 'median', or 'nonlin', or a list of 'mean'|'median' with 'nonlin' to generate two template types 
+    """
     
     #we can also output a per_slice_template based on the median of the current and neighbouring slices
     stack = []
     stack_tail = f'_{reg_level_tag}_stack.nii.gz'
     img_stack = output_dir+subject+stack_tail
+    img_stack_nonlin = img_stack.replace('.nii.gz','_nonlin.nii.gz')
     template_tail = f'_{reg_level_tag}_template.nii.gz'
+    template_nonlin_tail = f'_{reg_level_tag}_template_nonlin.nii.gz'
     template = output_dir+subject+template_tail
 
     template_list = []
@@ -424,31 +434,6 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
             missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,missing_fnames_post)
 
-            ## OLD WAY, restricted to just the mean
-            # missing_idxs_to_fill.sort() #sort it
-            # missing_slices_interpolated = []
-            # missing_idxs_pre = numpy.array(missing_idxs_to_fill)-1
-            # missing_idxs_post = numpy.array(missing_idxs_to_fill)+1            
-            # for idx,img_idx in enumerate(missing_idxs_pre):
-            #     img_name = all_image_fnames[img_idx]
-            #     img_name = os.path.basename(img_name).split('.')[0]
-            #     reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
-            #     _t = nighres.io.load_volume(reg).get_fdata()
-            #     if idx==0:
-            #         pre_d = numpy.zeros(_t.shape+(len(missing_idxs_to_fill),))
-            #     pre_d[...,idx] = _t
-
-            # for idx,img_idx in enumerate(missing_idxs_post):
-            #     img_name = all_image_fnames[img_idx]
-            #     img_name = os.path.basename(img_name).split('.')[0]
-            #     reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
-            #     _t = nighres.io.load_volume(reg).get_fdata()
-            #     if idx==0:
-            #         post_d = numpy.zeros(_t.shape+(len(missing_idxs_to_fill),))
-            #     post_d[...,idx] = _t
-            
-            # missing_slices_interpolated = .5*(pre_d+post_d)
-
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):
                 print(idx)
@@ -465,30 +450,97 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
         if per_slice_template:
             num_slices = img.shape[-1]
-            for idx,img_name in enumerate(all_image_fnames):
-                img_name = os.path.basename(img_name).split('.')[0]
-                slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
-                if idx == 0: #if at the front, take the first two only
-                    slice_template = numpy.median(img[...,0:2],axis=-1)
-                elif idx == num_slices-1: #if at the end, take the last two only
-                    slice_template = numpy.median(img[...,-2:],axis=-1)
-                else: #take one on each side and the current slice
-                    start = idx-1
-                    stop = idx+2
-                    slice_template = numpy.median(img[...,start:stop],axis=-1)
+            if not (type(slice_template_type) == list):
+                slice_template_type = [slice_template_type]
+            if 'median' in slice_template_type:
+                logging.warning('Generation median slice templates')
+                for idx,img_name in enumerate(all_image_fnames):
+                    img_name = os.path.basename(img_name).split('.')[0]
+                    slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
+                    if idx == 0: #if at the front, take the first two only
+                        slice_template = numpy.median(img[...,0:2],axis=-1)
+                    elif idx == num_slices-1: #if at the end, take the last two only
+                        slice_template = numpy.median(img[...,-2:],axis=-1)
+                    else: #take one on each side and the current slice
+                        start = idx-1
+                        stop = idx+2
+                        slice_template = numpy.median(img[...,start:stop],axis=-1)
+            
+                    header.set_data_shape(slice_template.shape)
+                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    nifti.update_header()
+                    save_volume(slice_template_fname,nifti)
+                    template_list.append(slice_template_fname)            
+      
+            elif 'mean' in slice_template_type:
+                logging.warning('Generation mean slice templates')
+                for idx,img_name in enumerate(all_image_fnames):
+                    img_name = os.path.basename(img_name).split('.')[0]
+                    slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
+                    if idx == 0: #if at the front, take the first two only
+                        slice_template = numpy.mean(img[...,0:2],axis=-1)
+                    elif idx == num_slices-1: #if at the end, take the last two only
+                        slice_template = numpy.mean(img[...,-2:],axis=-1)
+                    else: #take one on each side and the current slice
+                        start = idx-1
+                        stop = idx+2
+                        slice_template = numpy.mean(img[...,start:stop],axis=-1)
+            
+                    header.set_data_shape(slice_template.shape)
+                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    nifti.update_header()
+                    save_volume(slice_template_fname,nifti)
+                    template_list.append(slice_template_fname)            
 
-                header.set_data_shape(slice_template.shape)
-                nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
-                nifti.update_header()
-                save_volume(slice_template_fname,nifti)
-                template_list.append(slice_template_fname)            
+            if 'nonlin' in slice_template_type:
+                logging.warning('Generating non-linear slice templates')
+                template_nonlin_list=[]
+                
+                # first write the slices "as is" from our stack
+                for idx,img_name in enumerate(all_image_fnames):
+                    img_name = os.path.basename(img_name).split('.')[0]
+                    slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
+                    slice_template = img[...,idx]
 
+                    header.set_data_shape(slice_template.shape)
+                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    nifti.update_header()
+                    save_volume(slice_template_fname,nifti)
+                    template_list.append(slice_template_fname)
+                
+                # then use these images to generate the interpolations, skipping the first and last images (as anchors) 
+                missing_fnames_pre_1 = template_list[:-2] #starting from 0, skip the last two (b/c last has no pair), treated as pre
+                missing_fnames_post_1 = template_list[2:] #starting from 1 (skip the first one), treated as pre
+                interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,method='intermediate_nonlin_mean')
+
+                #fill the image stack with the interpolated slices
+                # save with a differnt fname so that we can see what this looks like
+                img[...,1:-1] = interp_template_slices
+                nifti = nibabel.Nifti1Image(img,affine=None,header=header)
+                save_volume(img_stack_nonlin,nifti)
+
+                #save them as their own individual templates
+                for idx,template_fname in enumerate(template_list):
+                    slice_template_fname_nonlin = template_fname.replace(template_tail,template_nonlin_tail)
+                    slice_template = img[...,idx]
+                    header.set_data_shape(slice_template.shape)
+                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    nifti.update_header()
+                    save_volume(slice_template_fname_nonlin,nifti)
+                    template_nonlin_list.append(slice_template_fname_nonlin)
+            
+        #now save the single template (as a median only)
         img = numpy.median(img,axis=2)
         nifti = nibabel.Nifti1Image(img,affine=None,header=header)
         save_volume(template,nifti)
         print('Stacking: done - {}'.format(template))
+    
+    #return the template filename(s)
     if per_slice_template:
-        return template_list
+        if len(slice_template_type) == 1:
+            return template_list
+        else:
+            return template_list, template_nonlin_list
     else:
         return template
     
@@ -1049,7 +1101,7 @@ run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 
-# TODO: 1. Test bewtween slice registrations as a way to refine stack
+# TODO: 1. Test between slice registrations as a way to refine stack
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
 
 
@@ -1105,6 +1157,7 @@ for iter in range(num_reg_iterations):
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
     # if iter > 0: #we do not do this on the first iteration
         # MRI_reg_output = register_stack_to_mri(slice_stack_template, mri_template)
+
 
     template_tag = 'coreg12nl'+iter_tag
     

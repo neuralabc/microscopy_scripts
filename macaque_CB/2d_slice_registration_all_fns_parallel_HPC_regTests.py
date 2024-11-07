@@ -61,7 +61,7 @@ _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_coun
 missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[0:5] #for testing
+all_image_fnames = all_image_fnames[50:56] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -454,7 +454,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             if not (type(slice_template_type) == list):
                 slice_template_type = [slice_template_type]
             if 'median' in slice_template_type:
-                logging.warning('Generation median slice templates')
+                logging.warning('Generating median slice templates')
                 for idx,img_name in enumerate(all_image_fnames):
                     img_name = os.path.basename(img_name).split('.')[0]
                     slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
@@ -474,7 +474,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     template_list.append(slice_template_fname)            
       
             elif 'mean' in slice_template_type:
-                logging.warning('Generation mean slice templates')
+                logging.warning('Generating mean slice templates')
                 for idx,img_name in enumerate(all_image_fnames):
                     img_name = os.path.basename(img_name).split('.')[0]
                     slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
@@ -514,9 +514,6 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 missing_fnames_post_1 = template_nonlin_list[2:] #starting from 1 (skip the first one), treated as pre
                 interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,method='intermediate_nonlin_mean')
 
-                logging.warning(len(missing_fnames_pre_1))
-                logging.warning(len(missing_fnames_post_1))
-                logging.warning(interp_template_slices.shape)
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
                 img[...,1:-1] = interp_template_slices

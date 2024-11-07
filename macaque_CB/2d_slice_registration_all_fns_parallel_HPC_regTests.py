@@ -1137,14 +1137,8 @@ for iter in range(num_reg_iterations):
                         zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
                         image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
 
-    # print(iter)
-    # print(template_tag)
-    # print(first_run_slice_template)
     logging.warning('\t\tSelecting best registration by MI')
-    # select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
-    #                     zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-    #                     reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct) #use the per slice templates after the first round, if requested
-    
+   
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
                         reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=use_nonlin_slice_templates)
@@ -1158,7 +1152,7 @@ for iter in range(num_reg_iterations):
     
     if use_nonlin_slice_templates:
         template = template_nonlin
-    # missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
+    # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template
     
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
     # if iter > 0: #we do not do this on the first iteration
@@ -1184,9 +1178,7 @@ for iter in range(num_reg_iterations):
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     logging.warning('\t\tSelecting best registration by MI')                                     
-    # select_best_reg_by_MI(output_dir,subject,all_image_fnames,template_tag=template_tag,
-    #                     zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
-    #                     reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
+
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
                         reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=use_nonlin_slice_templates)

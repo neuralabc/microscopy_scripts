@@ -1148,10 +1148,9 @@ for iter in range(num_reg_iterations):
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     
     logging.warning('\t\tGenerating new template')
-    template = generate_stack_and_template(output_dir,subject,all_image_fnames,
+    template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
-                                        missing_idxs_to_fill=missing_idxs_to_fill)
-   
+                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'])
     # missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
     
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
@@ -1188,9 +1187,9 @@ for iter in range(num_reg_iterations):
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     
     logging.warning('\t\tGenerating new template')
-    template = generate_stack_and_template(output_dir,subject,all_image_fnames,
+    template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
-                                        missing_idxs_to_fill=missing_idxs_to_fill)
+                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'])
     template_tag = 'coreg12nl_win12'+iter_tag
     
 final_reg_level_tag = 'coreg12nl_win12'+iter_tag

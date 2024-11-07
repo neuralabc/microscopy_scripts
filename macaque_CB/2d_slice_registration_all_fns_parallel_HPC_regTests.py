@@ -282,7 +282,6 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
     pre_aligned = ants.apply_transforms(fixed=post_ants, moving=pre_ants, transformlist=pre_to_post_rigid['fwdtransforms'])
     post_aligned = ants.apply_transforms(fixed=pre_ants, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
 
-
     # # Step 3: Perform non-linear registration on the rigidly aligned images
     pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN')
     post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
@@ -307,9 +306,6 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
         intermediate_img = ants.apply_transforms(fixed=post_ants, moving=pre_aligned, transformlist=[avg_field_path])
 
     intermediate_img_np = intermediate_img.numpy()
-
-    ## TODO: FIGURE OUT HOW TO IDENTIFY THE ROTATION ISSUE and SOLVE directly rather than hacking to this rotation (b/c this is relative to the input orientation...)
-    ## intermediate_img_np = numpy.rot90(intermediate_img.numpy(),k=2) #rotate 180 degrees, since we are in different spaces (RAS vs LPI, I think...)
 
     # if you want to, we now coregister the images to the new target and then take their mean
     if additional_coreg_mean: 

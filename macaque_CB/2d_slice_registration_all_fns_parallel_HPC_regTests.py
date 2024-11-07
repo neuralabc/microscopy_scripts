@@ -356,8 +356,9 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='inter
     
         missing_slices_interpolated = .5*(pre_slices+post_slices)
     
+    # HERE we should parallelize this TODO: b/c this is v. slow on the HPC but there are many more cores avail.
     elif method == 'intermediate_nonlin_mean':
-        missing_slices_interpolated = []
+        missing_slices_interpolated = []    
         for idx,img_fname in enumerate(missing_fnames_pre):
             img_fname_pre = missing_fnames_pre[idx]
             img_fname_post = missing_fnames_post[idx]

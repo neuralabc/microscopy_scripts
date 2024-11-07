@@ -37,8 +37,8 @@ in_plane_res_z = 50 #slice thickness of 50 microns
 
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
-rescale=10 #larger scale means that you have to change the scaling_factor
-#rescale=40
+# rescale=10 #larger scale means that you have to change the scaling_factor
+rescale=30
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
@@ -46,12 +46,13 @@ in_plane_res_y = rescale*in_plane_res_y
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 # max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+use_nonlin_slice_templates = True #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_parallel_test/'
 # scaling_factor = 32 #32 or 64 for full?
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 scaling_factor = 8
@@ -61,7 +62,7 @@ _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_coun
 missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[50:56] #for testing
+# all_image_fnames = all_image_fnames[50:56] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -637,8 +638,12 @@ def compute_MI_for_slice(idx, img_name, output_dir, subject, template_tail, out_
 
 def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_struct=None, template_tag='coreg0nl',
                                    zfill_num=3, reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',
-                                   reg_output_tag='coreg12nl', per_slice_template=False, overwrite=True):
-    template_tail = f'_{template_tag}_template.nii.gz'
+                                   reg_output_tag='coreg12nl', per_slice_template=False, overwrite=True, use_nonlin_slice_template=False):
+    if use_nonlin_slice_template:
+        template_tail = f'_{template_tag}_template_nonlin.nii.gz'
+    else:
+        template_tail = f'_{template_tag}_template.nii.gz'
+    
     out_tail = f'_{reg_output_tag}'
     tag1_tail = f'_{reg_level_tag1}'
     tag2_tail = f'_{reg_level_tag2}'
@@ -1142,7 +1147,7 @@ for iter in range(num_reg_iterations):
     
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct)
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=use_nonlin_slice_templates)
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     
@@ -1150,6 +1155,9 @@ for iter in range(num_reg_iterations):
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'])
+    
+    if use_nonlin_slice_templates:
+        template = template_nonlin
     # missing_idxs_to_fill = None #we only need to fill in missing slices on the first iteration, then we just use that image as the template
     
     ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
@@ -1181,7 +1189,7 @@ for iter in range(num_reg_iterations):
     #                     reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
-                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct)
+                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=use_nonlin_slice_templates)
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     
@@ -1189,6 +1197,9 @@ for iter in range(num_reg_iterations):
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'])
+    
+    if use_nonlin_slice_templates:
+        template = template_nonlin
     template_tag = 'coreg12nl_win12'+iter_tag
     
 final_reg_level_tag = 'coreg12nl_win12'+iter_tag

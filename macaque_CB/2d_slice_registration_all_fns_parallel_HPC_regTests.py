@@ -1120,7 +1120,7 @@ for iter in range(num_reg_iterations):
     logger.warning('****************************************************************************')
     
     if (iter == 0):
-        first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created)
+        first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created), same for use_nonlin_slice_templates
     else:
         first_run_slice_template = per_slice_template
 
@@ -1141,7 +1141,7 @@ for iter in range(num_reg_iterations):
    
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=use_nonlin_slice_templates)
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=first_run_slice_template)
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     

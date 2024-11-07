@@ -62,7 +62,7 @@ _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_coun
 missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-# all_image_fnames = all_image_fnames[50:56] #for testing
+all_image_fnames = all_image_fnames[50:56] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -638,8 +638,8 @@ def compute_MI_for_slice(idx, img_name, output_dir, subject, template_tail, out_
 
 def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_struct=None, template_tag='coreg0nl',
                                    zfill_num=3, reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',
-                                   reg_output_tag='coreg12nl', per_slice_template=False, overwrite=True, use_nonlin_slice_template=False):
-    if use_nonlin_slice_template:
+                                   reg_output_tag='coreg12nl', per_slice_template=False, overwrite=True, use_nonlin_slice_templates=False):
+    if use_nonlin_slice_templates:
         template_tail = f'_{template_tag}_template_nonlin.nii.gz'
     else:
         template_tail = f'_{template_tag}_template.nii.gz'

@@ -37,32 +37,33 @@ in_plane_res_z = 50 #slice thickness of 50 microns
 
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
-# rescale=10 #larger scale means that you have to change the scaling_factor
-rescale=30
+use_nonlin_slice_templates = True #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
+rescale=10 #larger scale means that you have to change the scaling_factor
+scaling_factor = 8 #32 or 64 for full scaling of resolutions on the registrations
+# rescale=30
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
-# max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
-max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
-use_nonlin_slice_templates = True #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
+max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+# max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_parallel_test/'
 # scaling_factor = 32 #32 or 64 for full?
-# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
-
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-scaling_factor = 8
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+
 #missing_idxs_to_fill = [32]
 # missing_idxs_to_fill = [3]
-missing_idxs_to_fill = None
+# missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[50:56] #for testing
+# all_image_fnames = all_image_fnames[50:56] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')

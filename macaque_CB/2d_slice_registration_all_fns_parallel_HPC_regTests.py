@@ -57,8 +57,8 @@ output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v
 scaling_factor = 8
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 #missing_idxs_to_fill = [32]
-missing_idxs_to_fill = [3]
-# missing_idxs_to_fill = None
+# missing_idxs_to_fill = [3]
+missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
 all_image_fnames = all_image_fnames[0:5] #for testing
@@ -390,6 +390,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
     template = output_dir+subject+template_tail
 
     template_list = []
+    template_nonlin_list = []
 
     img_tail = f'_{reg_level_tag}_ants-def0.nii.gz'
 
@@ -494,40 +495,41 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
             if 'nonlin' in slice_template_type:
                 logging.warning('Generating non-linear slice templates')
-                template_nonlin_list=[]
                 
-                # first write the slices "as is" from our stack
+                # first write the slices "as is" from our stack, using our template_nonlin_tail
+                # these slice templates will be overwritten with the interpolated versions
                 for idx,img_name in enumerate(all_image_fnames):
                     img_name = os.path.basename(img_name).split('.')[0]
-                    slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_tail
+                    slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_nonlin_tail
                     slice_template = img[...,idx]
 
                     header.set_data_shape(slice_template.shape)
                     nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
-                    template_list.append(slice_template_fname)
+                    template_nonlin_list.append(slice_template_fname)
                 
                 # then use these images to generate the interpolations, skipping the first and last images (as anchors) 
-                missing_fnames_pre_1 = template_list[:-2] #starting from 0, skip the last two (b/c last has no pair), treated as pre
-                missing_fnames_post_1 = template_list[2:] #starting from 1 (skip the first one), treated as pre
+                missing_fnames_pre_1 = template_nonlin_list[:-2] #starting from 0, skip the last two (b/c last has no pair), treated as pre
+                missing_fnames_post_1 = template_nonlin_list[2:] #starting from 1 (skip the first one), treated as pre
                 interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,method='intermediate_nonlin_mean')
 
+                logging.warning(len(missing_fnames_pre_1))
+                logging.warning(len(missing_fnames_post_1))
+                logging.warning(interp_template_slices.shape)
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
                 img[...,1:-1] = interp_template_slices
                 nifti = nibabel.Nifti1Image(img,affine=None,header=header)
                 save_volume(img_stack_nonlin,nifti)
 
-                #save them as their own individual templates
-                for idx,template_fname in enumerate(template_list):
-                    slice_template_fname_nonlin = template_fname.replace(template_tail,template_nonlin_tail)
+                #save them as their own individual templates, saving over the original ones that were not yet interpolated
+                for idx,slice_template_fname_nonlin in enumerate(template_nonlin_list):
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
                     nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname_nonlin,nifti)
-                    template_nonlin_list.append(slice_template_fname_nonlin)
             
         #now save the single template (as a median only)
         img = numpy.median(img,axis=2)

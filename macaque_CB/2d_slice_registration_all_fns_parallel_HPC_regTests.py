@@ -357,6 +357,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
             logging.warning('final nonlin done')
                 
             intermediate_img_np = new_intermediate_img.numpy()
+            logging.warning(intermediate_img_np.shape)
 
     if idx is not None: #if we passed an index value, this is to keep track of parallel so we pass it back
         return idx, intermediate_img_np

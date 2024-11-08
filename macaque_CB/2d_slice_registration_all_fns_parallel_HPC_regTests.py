@@ -36,9 +36,15 @@ in_plane_res_z = 50 #slice thickness of 50 microns
 
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
-use_nonlin_slice_templates = True #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
-rescale=10 #larger scale means that you have to change the scaling_factor
-scaling_factor = 32 #32 or 64 for full scaling of resolutions on the registrations
+
+use_nonlin_slice_templates = False #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
+                                    # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
+slice_template_type = 'median'
+if use_nonlin_slice_templates:
+    slice_template_type = [slice_template_type,'nonlin']
+    
+rescale=30 #larger scale means that you have to change the scaling_factor
+scaling_factor = 8 #32 or 64 for full scaling of resolutions on the registrations
 # rescale=30
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
@@ -52,19 +58,19 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_parallel_test_v2_fixedTarget/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_orig/'
 # scaling_factor = 32 #32 or 64 for full?
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 # _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
-#missing_idxs_to_fill = [32]
+missing_idxs_to_fill = [8]
 # missing_idxs_to_fill = [3]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-# all_image_fnames = all_image_fnames[0:5] #for testing
+all_image_fnames = all_image_fnames[220:240] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -215,7 +221,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
 
 
 #TODO: these end up being the same thing, can remove one of them since direction is now encoded in the offset list!
-def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction=None, max_workers=3, 
+def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, per_slice_template=False):
@@ -224,29 +230,16 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
     #   for the reverse direction, we register to slices after the current slice (named by how you would walk through the loop of the stack)
     #   for the forward direction, we register to slices before the current slice
 
-    if direction not in ['forward', 'reverse']:
-        raise ValueError("Invalid direction. Must be either 'forward' or 'reverse'.")
-
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = []
-        if direction == 'forward':
-            for idx, img in enumerate(all_image_fnames):
-                futures.append(
-                    executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_names, template, 
-                                    target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
-                                    input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
-                                    run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
-                                    scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
-                )
-        elif direction == 'reverse':
-            for idx, img in enumerate(all_image_fnames):
-                futures.append(
-                    executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_names, template, 
-                                    target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
-                                    input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
-                                    run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
-                                    scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
-                )
+        for idx, img in enumerate(all_image_fnames):
+            futures.append(
+                executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_names, template, 
+                                target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
+                                input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
+                                run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
+                                scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
+            )
         for future in as_completed(futures):
             try:
                 future.result()
@@ -1229,11 +1222,11 @@ for iter in range(num_reg_iterations):
     slice_offset_list_reverse = [1,2,3]
     image_weights = generate_gaussian_weights([0,1,2,3]) #symmetric gaussian, so the same on both sides
 
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers, 
+    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                  target_slice_offset_list=slice_offset_list_forward, 
                 zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
                 image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers, 
+    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                  target_slice_offset_list=slice_offset_list_reverse, 
                         zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
                         image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
@@ -1250,7 +1243,7 @@ for iter in range(num_reg_iterations):
     logging.warning('\t\tGenerating new template')
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
-                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'],
+                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                         nonlin_interp_max_workers=nonlin_interp_max_workers)
     
     if use_nonlin_slice_templates:
@@ -1268,14 +1261,14 @@ for iter in range(num_reg_iterations):
     slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
     image_weights = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
 
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='forward', max_workers=max_workers,
+    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                  target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
                     image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     
     image_weights = generate_gaussian_weights([0,-2,-1,1,2,3])
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, direction='reverse', max_workers=max_workers,
+    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                  target_slice_offset_list=slice_offset_list_reverse, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
@@ -1292,7 +1285,7 @@ for iter in range(num_reg_iterations):
     logging.warning('\t\tGenerating new template')
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
-                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'],
+                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                         nonlin_interp_max_workers=nonlin_interp_max_workers)
     
     if use_nonlin_slice_templates:

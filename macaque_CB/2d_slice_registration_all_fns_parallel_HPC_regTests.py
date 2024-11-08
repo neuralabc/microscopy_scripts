@@ -38,7 +38,7 @@ zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 use_nonlin_slice_templates = True #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
 rescale=10 #larger scale means that you have to change the scaling_factor
-scaling_factor = 8 #32 or 64 for full scaling of resolutions on the registrations
+scaling_factor = 32 #32 or 64 for full scaling of resolutions on the registrations
 # rescale=30
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
@@ -61,7 +61,7 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 
 #missing_idxs_to_fill = [32]
 # missing_idxs_to_fill = [3]
-missing_idxs_to_fill = None
+# missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
 # all_image_fnames = all_image_fnames[0:5] #for testing
@@ -390,7 +390,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
         futures = []
         the_idxs = []
         the_slices = []
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        with ProcessPoolExecutor(max_workers=nonlin_interp_max_workers) as executor:
             for idx, _ in enumerate(missing_fnames_pre):
                 img_fname_pre = missing_fnames_pre[idx]
                 img_fname_post = missing_fnames_post[idx]
@@ -421,7 +421,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
         idxs_order = numpy.argsort(the_idxs)
         sorted_slices = [the_slices[i] for i in idxs_order]
         missing_slices_interpolated= numpy.stack(sorted_slices, axis=-1) #reorder based on the indices that were passed
-        logging.warning(f'missing_slices_shape: {missing_slices_interpolated.shape}')
+        # logging.warning(f'missing_slices_shape: {missing_slices_interpolated.shape}')
         # missing_slices_interpolated = []    
         # for idx,img_fname in enumerate(missing_fnames_pre):
         #     img_fname_pre = missing_fnames_pre[idx]
@@ -1128,15 +1128,21 @@ print(f"\tUsing the following image as the template for size: {template}")
 print('2. Bring all image slices into same place as our 2d template with an initial translation registration')
 logger.warning('2. Bring all image slices into same place as our 2d template with an initial translation registration')
 # initial step to bring all images into the same space of our 2d template
-for idx,img in enumerate(all_image_fnames):
-    img = os.path.basename(img).split('.')[0]
-    nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
 
-    sources = [nifti]
-    targets = [template]
+with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    futures = []
+    for idx, img in enumerate(all_image_fnames):
+        img = os.path.basename(img).split('.')[0]
+        nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
+
+        sources = [nifti]
+        targets = [template]
+            
+        output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
         
-    output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
-    coreg1nl = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
+        futures.append(
+            executor.submit(
+                 nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
                     target_images=targets,
                     run_rigid=False,
                     run_affine=False,
@@ -1150,6 +1156,31 @@ for idx,img in enumerate(all_image_fnames):
                     ignore_affine=False, ignore_orient=False, ignore_res=False,
                     save_data=True, overwrite=False,
                     file_name=output)
+            )
+        )
+                                    
+# for idx,img in enumerate(all_image_fnames):
+#     img = os.path.basename(img).split('.')[0]
+#     nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
+
+#     sources = [nifti]
+#     targets = [template]
+        
+#     output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
+#     coreg1nl = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
+#                     target_images=targets,
+#                     run_rigid=False,
+#                     run_affine=False,
+#                     run_syn=False,
+#                     scaling_factor=64,
+#                     cost_function='MutualInformation',
+#                     interpolation='Linear',
+#                     regularization='High',
+#                     convergence=1e-6,
+#                     mask_zero=False,
+#                     ignore_affine=False, ignore_orient=False, ignore_res=False,
+#                     save_data=True, overwrite=False,
+#                     file_name=output)
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg0nl',
                                        missing_idxs_to_fill=None)

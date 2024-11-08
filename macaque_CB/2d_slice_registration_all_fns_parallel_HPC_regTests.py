@@ -347,17 +347,16 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
             new_image.set_direction(pre_ants.direction)
             # ants.image_write(new_image, intermediate_img_fname)
             
+            
+            #rigid
             current_to_template_rigid = ants.registration(fixed=new_image,moving=current_img,type_of_transform='Rigid') 
-            logging.warning(current_to_template_rigid['fwdtransforms'])
             current_aligned_rigid = ants.apply_transforms(fixed=new_image, moving=current_img, transformlist=current_to_template_rigid['fwdtransforms'])
-            logging.warning('final rig done')
+            
             #nonlin
             current_to_template_nonlin = ants.registration(fixed=new_image,moving=current_aligned_rigid,type_of_transform='SyN')
             new_intermediate_img = current_to_template_nonlin['warpedmovout']
-            logging.warning('final nonlin done')
                 
             intermediate_img_np = new_intermediate_img.numpy()
-            logging.warning(intermediate_img_np.shape)
 
     if idx is not None: #if we passed an index value, this is to keep track of parallel so we pass it back
         return idx, intermediate_img_np

@@ -64,7 +64,7 @@ _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idx
 missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[113:200] #for testing
+all_image_fnames = all_image_fnames[0:5] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')

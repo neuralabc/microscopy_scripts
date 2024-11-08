@@ -263,6 +263,8 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
     Parameters:
     pre_img (str): Filename of the pre-slice image.
     post_img (str): Filename of the post-slice image.
+    current_img (str): Filename of the current slice image to be registered to the intermediate slice.
+
     additional_coreg_mean (bool): If True, the intermediate slice is then used as the target for pre/post reg, and the mean of this reg is taken as the final image
 
     Returns:
@@ -331,28 +333,28 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
         intermediate_img_np = (pre_to_post_img.numpy() + post_to_pre_img.numpy()) / 2
 
         if current_img is not None: #if we have a current image to push into this space, we should do this here
+            current_img = ants.image_read(current_img)
             # Step 6: Register the current slice to the interpolated slice
-            with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
-                intermediate_img_fname = temp_file.name
-                logging.warning(f'{temp_file.name}')
-                                
-                # Convert the data array to an ANTs image
-                new_image = ants.from_numpy(intermediate_img_np)
-                # Set the spatial information (origin, spacing, direction) from the reference image
-                new_image.set_origin(pre_ants.origin)
-                new_image.set_spacing(pre_ants.spacing)
-                new_image.set_direction(pre_ants.direction)
-                ants.image_write(new_image, intermediate_img_fname)
-                
-                #rigid
-                current_to_template_rigid = ants.registration(fixed=intermediate_img_fname,moving=current_img,type_of_transform='Rigid') 
-                logging.warning(current_to_template_rigid['fwdtransforms'])
-                current_aligned_rigid = ants.apply_transforms(fixed=intermediate_img_fname, moving=current_img, transformlist=[current_to_template_rigid['fwdtransforms']])
-                logging.warning('final rig done')
-                #nonlin
-                current_to_template_nonlin = ants.registration(fixed=intermediate_img_fname,moving=current_aligned_rigid,type_of_transform='SyN')
-                new_intermediate_img = current_to_template_nonlin['warpedmovout']
-                logging.warning('final nonlin done')
+            # with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
+            #     intermediate_img_fname = temp_file.name
+            #     logging.warning(f'{temp_file.name}')
+                            
+            # Convert the data array to an ANTs image
+            new_image = ants.from_numpy(intermediate_img_np)
+            # Set the spatial information (origin, spacing, direction) from the reference image
+            new_image.set_origin(pre_ants.origin)
+            new_image.set_spacing(pre_ants.spacing)
+            new_image.set_direction(pre_ants.direction)
+            # ants.image_write(new_image, intermediate_img_fname)
+            
+            current_to_template_rigid = ants.registration(fixed=new_image,moving=current_img,type_of_transform='Rigid') 
+            logging.warning(current_to_template_rigid['fwdtransforms'])
+            current_aligned_rigid = ants.apply_transforms(fixed=new_image, moving=current_img, transformlist=current_to_template_rigid['fwdtransforms'])
+            logging.warning('final rig done')
+            #nonlin
+            current_to_template_nonlin = ants.registration(fixed=new_image,moving=current_aligned_rigid,type_of_transform='SyN')
+            new_intermediate_img = current_to_template_nonlin['warpedmovout']
+            logging.warning('final nonlin done')
                 
             intermediate_img_np = new_intermediate_img.numpy()
 

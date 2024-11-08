@@ -399,10 +399,10 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                 else:
                     img_fname_current=None
                             # Submit each task to the executor with keyword arguments
-                logging.warning(f"Processing missing slice: {idx}")
-                logging.warning(f"Pre: {img_fname_pre}")
-                logging.warning(f"Post: {img_fname_post}")
-                logging.warning(img_fname_current)
+                # logging.warning(f"Processing missing slice: {idx}")
+                # logging.warning(f"Pre: {img_fname_pre}")
+                # logging.warning(f"Post: {img_fname_post}")
+                # logging.warning(img_fname_current)
                 futures.append(executor.submit(
                     compute_intermediate_non_linear_slice,
                     pre_img=img_fname_pre,
@@ -415,7 +415,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     the_idx, the_slice = future.result()
                     the_idxs.append(the_idx)
                     the_slices.append(the_slice)
-                    logging.warning(f'Parallel missing slice generation completed for slice: {the_idx}')
+                    logging.warning(f'\t\tParallel missing slice generation completed for slice: {the_idx}')
                 except Exception as e:
                     logging.warning('Parallel missing slice generation failed: {e}')
         idxs_order = numpy.argsort(the_idxs)

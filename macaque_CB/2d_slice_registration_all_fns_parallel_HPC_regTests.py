@@ -58,7 +58,7 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_lesswin12/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_longfwdback/'
 # scaling_factor = 32 #32 or 64 for full?
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 # missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
@@ -1264,13 +1264,16 @@ for iter in range(num_reg_iterations):
 
     template_tag = 'coreg12nl'+iter_tag
     
-    # slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
-    # slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
+
+    ## No diff between these two approaches
     # image_weights_win1 = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
     # image_weights_win2 = generate_gaussian_weights([0,-2,-1,1,2,3])
 
-    slice_offset_list_forward = [-3,-2,-1,1] #weighted back, but also forward
-    slice_offset_list_reverse = [-1,1,2,3] #weighted forward, but also back
+    # slice_offset_list_forward = [-3,-2,-1,1] #weighted back, but also forward
+    # slice_offset_list_reverse = [-1,1,2,3] #weighted forward, but also back
+
+    slice_offset_list_forward = [-1,-2,-3,-4,-5] 
+    slice_offset_list_reverse = [1,2,3,4,5] 
     image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward) #symmetric gaussian, so the same on both sides
     image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse)
 

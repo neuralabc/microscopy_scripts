@@ -394,19 +394,22 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     img_fname_current = current_fnames[idx]
                 else:
                     img_fname_current=None
-                futures.append(executor.submit(compute_intermediate_non_linear_slice,
-                                            img_fname_pre,
-                                            img_fname_post,
-                                            idx=idx,current_img=img_fname_current)
-                )
+                            # Submit each task to the executor with keyword arguments
+                futures.append(executor.submit(
+                    compute_intermediate_non_linear_slice,
+                    pre_img=img_fname_pre,
+                    post_img=img_fname_post,
+                    current_img=img_fname_current,
+                    idx=idx
+                ))
             for future in as_completed(futures):
 
                 try:
                     the_idx, the_slice = future.result()
+                    the_idxs.append(the_idx)
+                    the_slices.append(the_slice)
                 except Exception as e:
                     logging.warning('Parallel missing slice generation failed: {e}')
-                the_idxs.append(the_idx)
-                the_slices.append(the_slice)
         idxs_order = numpy.argsort(the_idxs)
         missing_slices_interpolated= numpy.stack(the_slices, axis=-1)[idxs_order,...] #reorder based on the indices that were passed
 

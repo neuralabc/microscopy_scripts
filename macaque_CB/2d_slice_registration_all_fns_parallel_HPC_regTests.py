@@ -422,8 +422,9 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                 except Exception as e:
                     logging.warning('Parallel missing slice generation failed: {e}')
         idxs_order = numpy.argsort(the_idxs)
-        missing_slices_interpolated= numpy.stack(the_slices, axis=-1)[idxs_order,...] #reorder based on the indices that were passed
-
+        sorted_slices = [the_slices[i] for i in idxs_order]
+        missing_slices_interpolated= numpy.stack(sorted_slices, axis=-1) #reorder based on the indices that were passed
+        logging.warning(f'missing_slices_shape: {missing_slices_interpolated.shape}')
         # missing_slices_interpolated = []    
         # for idx,img_fname in enumerate(missing_fnames_pre):
         #     img_fname_pre = missing_fnames_pre[idx]

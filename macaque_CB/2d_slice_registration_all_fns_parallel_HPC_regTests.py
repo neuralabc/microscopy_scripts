@@ -46,6 +46,8 @@ in_plane_res_y = rescale*in_plane_res_y
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice interpolation when use_nonlin_slice_templates = True
+
 # max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 
 
@@ -253,7 +255,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                 logging.error(f"Registration failed with error: {e}")
 
 
-def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_mean = True, idx=None):
+def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, additional_coreg_mean = True, idx=None):
     """
     Computes an intermediate slice by averaging both rigid and non-linear transformations.
     Images must already fit within the same matrix (i.e., have the same dimensions).
@@ -327,6 +329,29 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
 
         # Step 5: Compute the average of the deformed images
         intermediate_img_np = (pre_to_post_img.numpy() + post_to_pre_img.numpy()) / 2
+
+        if current_img is not None: #if we have a current image to push into this space, we should do this here
+            # Step 6: Register the current slice to the interpolated slice
+            with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
+                intermediate_img_fname = temp_file.name
+                                
+                # Convert the data array to an ANTs image
+                new_image = ants.from_numpy(intermediate_img_np)
+
+                # Set the spatial information (origin, spacing, direction) from the reference image
+                new_image.set_origin(pre_ants.origin)
+                new_image.set_spacing(pre_ants.spacing)
+                new_image.set_direction(pre_ants.direction)
+                ants.image_write(new_image, intermediate_img_fname)
+                
+                #rigid
+                current_to_template_rigid = ants.registration(fixed=intermediate_img_fname,moving=current_img,type_of_transform='Rigid') 
+                current_aligned_rigid = ants.apply_transforms(fixed=intermediate_img_fname, moving=current_img, transformlist=current_to_template_rigid['fwdtransforms'])
+                #nonlin
+                current_to_template_nonlin = ants.registration(fixed=intermediate_img_fname,moving=current_aligned_rigid,type_of_transform='SyN')
+                new_intermediate_img = current_to_template_nonlin['warpedmovout']
+            intermediate_img_np = new_intermediate_img.numpy()
+
     if idx is not None: #if we passed an index value, this is to keep track of parallel so we pass it back
         return idx, intermediate_img_np
     else: 
@@ -334,9 +359,10 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
 
 
 
-def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='intermediate_nonlin_mean'):
+def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',nonlin_interp_max_workers=1):
     '''
     Generate missing slices by averaging the neighbouring slices in multiple ways
+    Takes in pre list, post list, and current (matching lists)
     method = 'mean' : average of two neighbouring slices
     method = 'intermediate_nonlin_mean': applying a non-linear transformation to the neighbouring slices, averaging the deformation, then applying to the pre-slice
 
@@ -354,22 +380,24 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='inter
             img_data = nighres.io.load_volume(img_fname).get_fdata()
             post_slices.append(img_data)
         post_slices = numpy.stack(post_slices, axis=-1)
-    
-        missing_slices_interpolated = .5*(pre_slices+post_slices)
-    
+            
     # HERE we should parallelize this TODO: b/c this is v. slow on the HPC but there are many more cores avail.
     elif method == 'intermediate_nonlin_mean':
         futures = []
         the_idxs = []
         the_slices = []
-        with ProcessPoolExecutor() as executor:
-            for idx, missing_fname in enumerate(missing_fnames_pre):
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for idx, _ in enumerate(missing_fnames_pre):
                 img_fname_pre = missing_fnames_pre[idx]
                 img_fname_post = missing_fnames_post[idx]
+                if current_fnames is not None:
+                    img_fname_current = current_fnames[idx]
+                else:
+                    img_fname_current=None
                 futures.append(executor.submit(compute_intermediate_non_linear_slice,
                                             img_fname_pre,
                                             img_fname_post,
-                                            idx)
+                                            idx=idx,current_img=img_fname_current)
                 )
             for future in as_completed(futures):
 
@@ -393,7 +421,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='inter
     return missing_slices_interpolated
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
-                                per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'):
+                                per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median',nonlin_interp_max_workers=1):
     """
     The output img_stack is the stack of all registered slices, with missing slices filled in with registration to the intermediate point and averaging
     The _template.nii.gz and _template_nonlin.nii.gz files are the median and a nonlinear version of the mean of slice positions [-1,0,1], respectively.
@@ -535,7 +563,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 # then use these images to generate the interpolations, skipping the first and last images (as anchors) 
                 missing_fnames_pre_1 = template_nonlin_list[:-2] #starting from 0, skip the last two (b/c last has no pair), treated as pre
                 missing_fnames_post_1 = template_nonlin_list[2:] #starting from 1 (skip the first one), treated as pre
-                interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,method='intermediate_nonlin_mean')
+                interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,current_fnames=template_nonlin_list[1:-1],method='intermediate_nonlin_mean',nonlin_interp_max_workers=nonlin_interp_max_workers)
 
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
@@ -660,7 +688,8 @@ def compute_MI_for_slice(idx, img_name, output_dir, subject, template_tail, out_
 
 def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_struct=None, template_tag='coreg0nl',
                                    zfill_num=3, reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',
-                                   reg_output_tag='coreg12nl', per_slice_template=False, overwrite=True, use_nonlin_slice_templates=False):
+                                   reg_output_tag='coreg12nl', per_slice_template=False, overwrite=True, use_nonlin_slice_templates=False,
+                                   max_workers=1):
     if use_nonlin_slice_templates:
         template_tail = f'_{template_tag}_template_nonlin.nii.gz'
     else:
@@ -676,7 +705,7 @@ def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_str
         for idx, img_name in enumerate(all_image_fnames)
     ]
     
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_img = {executor.submit(compute_MI_for_slice, *arg): arg[1] for arg in args}
         for future in as_completed(future_to_img):
             result = future.result()
@@ -1007,8 +1036,12 @@ script_name = os.path.basename(__file__)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 logger = setup_logging(script_name, output_dir)
 
+
+
 print(f"Output directory: {output_dir}")
-exit
+shutil.copyfile(__file__,os.path.join(output_dir,script_name)
+logger.info(f'Original script file copied to output directory.')
+
 # 0. Convert to nifti
 print('0. Converting images to .nii.gz')
 logger.warning('0. Converting images to .nii.gz') #use warnings so that we can see progress on command line as well as in the log file
@@ -1163,14 +1196,16 @@ for iter in range(num_reg_iterations):
    
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=first_run_slice_template)
+                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,
+                        use_nonlin_slice_templates=first_run_slice_template,max_workers=max_workers)
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     
     logging.warning('\t\tGenerating new template')
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
-                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'])
+                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'],
+                                        max_workers=nonlin_interp_max_workers)
     
     if use_nonlin_slice_templates:
         template = template_nonlin
@@ -1203,14 +1238,16 @@ for iter in range(num_reg_iterations):
 
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
-                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct,use_nonlin_slice_templates=use_nonlin_slice_templates)
+                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct,
+                        use_nonlin_slice_templates=use_nonlin_slice_templates,max_workers=max_workers)
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     
     logging.warning('\t\tGenerating new template')
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
-                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'])
+                                        missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'],
+                                        max_workers=nonlin_interp_max_workers)
     
     if use_nonlin_slice_templates:
         template = template_nonlin

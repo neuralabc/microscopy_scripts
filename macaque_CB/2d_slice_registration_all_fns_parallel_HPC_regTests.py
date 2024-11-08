@@ -360,23 +360,25 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='inter
     # HERE we should parallelize this TODO: b/c this is v. slow on the HPC but there are many more cores avail.
     elif method == 'intermediate_nonlin_mean':
         futures = []
-        for idx, missing_fname in enumerate(missing_fnames_pre):
-            img_fname_pre = missing_fnames_pre[idx]
-            img_fname_post = missing_fnames_post[idx]
-            futures.append(executor.submit(compute_intermediate_non_linear_slice,
-                                           img_fname_pre,
-                                           img_fname_post,
-                                           idx)
-            )
-        for future in as_completed(futures):
-            the_idxs = []
-            the_slices = []
-            try:
-                the_idx, the_slice = future.result()
-            except:
-                logging.warning('Parallel missing slice generation failed')
-            the_idxs.append(the_idx)
-            the_slices.append(the_slice)
+        the_idxs = []
+        the_slices = []
+        with ProcessPoolExecutor() as executor:
+            for idx, missing_fname in enumerate(missing_fnames_pre):
+                img_fname_pre = missing_fnames_pre[idx]
+                img_fname_post = missing_fnames_post[idx]
+                futures.append(executor.submit(compute_intermediate_non_linear_slice,
+                                            img_fname_pre,
+                                            img_fname_post,
+                                            idx)
+                )
+            for future in as_completed(futures):
+
+                try:
+                    the_idx, the_slice = future.result()
+                except Exception as e:
+                    logging.warning('Parallel missing slice generation failed: {e}')
+                the_idxs.append(the_idx)
+                the_slices.append(the_slice)
         idxs_order = numpy.argsort(the_idxs)
         missing_slices_interpolated= numpy.stack(the_slices, axis=-1)[idxs_order,...] #reorder based on the indices that were passed
 

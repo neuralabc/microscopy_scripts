@@ -43,8 +43,8 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
-rescale=30 #larger scale means that you have to change the scaling_factor
-scaling_factor = 8 #32 or 64 for full scaling of resolutions on the registrations
+rescale=5 #larger scale means that you have to change the scaling_factor
+scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
 # rescale=30
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
@@ -58,7 +58,7 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_orig_moreGauss/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_orig_fullRes/'
 # scaling_factor = 32 #32 or 64 for full?
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 # missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
@@ -1222,7 +1222,7 @@ for iter in range(num_reg_iterations):
 
     slice_offset_list_forward = [-1,-2,-3]
     slice_offset_list_reverse = [1,2,3]
-    image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=5) #symmetric gaussian, so the same on both sides
+    image_weights = generate_gaussian_weights([0,1,2,3]) #symmetric gaussian, so the same on both sides
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                  target_slice_offset_list=slice_offset_list_forward, 
@@ -1279,10 +1279,12 @@ for iter in range(num_reg_iterations):
     # slice_offset_list_forward = [-1] 
     # slice_offset_list_reverse = [1] 
 
+    #increasing the gaussian weigting also results in worse (3-> 5)
+
     slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
     slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
-    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward,gauss_std=5) #symmetric gaussian, so the same on both sides
-    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse,gauss_std=5)
+    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward) #symmetric gaussian, so the same on both sides
+    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse)
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                  target_slice_offset_list=slice_offset_list_forward, 

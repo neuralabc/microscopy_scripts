@@ -58,7 +58,7 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_orig/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_lesswin12/'
 # scaling_factor = 32 #32 or 64 for full?
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 # missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
@@ -1264,22 +1264,27 @@ for iter in range(num_reg_iterations):
 
     template_tag = 'coreg12nl'+iter_tag
     
-    slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
-    slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
-    image_weights = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
+    # slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
+    # slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
+    # image_weights_win1 = generate_gaussian_weights([0,-3,-2,-1,1,2]) #symmetric gaussian, so the same on both sides
+    # image_weights_win2 = generate_gaussian_weights([0,-2,-1,1,2,3])
+
+    slice_offset_list_forward = [-3,-2,-1,1] #weighted back, but also forward
+    slice_offset_list_reverse = [-1,1,2,3] #weighted forward, but also back
+    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward) #symmetric gaussian, so the same on both sides
+    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse)
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                  target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+                    image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     
-    image_weights = generate_gaussian_weights([0,-2,-1,1,2,3])
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                  target_slice_offset_list=slice_offset_list_reverse, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+                    image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     logging.warning('\t\tSelecting best registration by MI')                                     
 
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,

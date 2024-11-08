@@ -335,9 +335,6 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
         if current_img is not None: #if we have a current image to push into this space, we should do this here
             current_img = ants.image_read(current_img)
             # Step 6: Register the current slice to the interpolated slice
-            # with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
-            #     intermediate_img_fname = temp_file.name
-            #     logging.warning(f'{temp_file.name}')
                             
             # Convert the data array to an ANTs image
             new_image = ants.from_numpy(intermediate_img_np)
@@ -352,6 +349,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
             current_to_template_rigid = ants.registration(fixed=new_image,moving=current_img,type_of_transform='Rigid') 
             current_aligned_rigid = ants.apply_transforms(fixed=new_image, moving=current_img, transformlist=current_to_template_rigid['fwdtransforms'])
             
+            ## TODO: uncertain if this is necessary, as incorporating the nonlin step here may hurt more than help, since we are deforming to the intermediate img
             #nonlin
             current_to_template_nonlin = ants.registration(fixed=new_image,moving=current_aligned_rigid,type_of_transform='SyN')
             new_intermediate_img = current_to_template_nonlin['warpedmovout']
@@ -413,11 +411,11 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     idx=idx
                 ))
             for future in as_completed(futures):
-
                 try:
                     the_idx, the_slice = future.result()
                     the_idxs.append(the_idx)
                     the_slices.append(the_slice)
+                    logging.warning(f'Parallel missing slice generation completed for slice: {the_idx}')
                 except Exception as e:
                     logging.warning('Parallel missing slice generation failed: {e}')
         idxs_order = numpy.argsort(the_idxs)

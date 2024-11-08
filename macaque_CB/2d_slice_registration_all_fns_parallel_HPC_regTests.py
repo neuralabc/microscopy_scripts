@@ -343,11 +343,11 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
                 new_image.set_spacing(pre_ants.spacing)
                 new_image.set_direction(pre_ants.direction)
                 ants.image_write(new_image, intermediate_img_fname)
-                logging.warning('wrote intermediate img')
                 
                 #rigid
                 current_to_template_rigid = ants.registration(fixed=intermediate_img_fname,moving=current_img,type_of_transform='Rigid') 
-                current_aligned_rigid = ants.apply_transforms(fixed=intermediate_img_fname, moving=current_img, transformlist=current_to_template_rigid['fwdtransforms'])
+                logging.warning(current_to_template_rigid['fwdtransforms'])
+                current_aligned_rigid = ants.apply_transforms(fixed=intermediate_img_fname, moving=current_img, transformlist=[current_to_template_rigid['fwdtransforms']])
                 logging.warning('final rig done')
                 #nonlin
                 current_to_template_nonlin = ants.registration(fixed=intermediate_img_fname,moving=current_aligned_rigid,type_of_transform='SyN')

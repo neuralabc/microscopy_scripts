@@ -21,7 +21,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
 ## Potential list of todo's
-# TODO: keep track of MI fits, only update template when MI indicates it is necessary? 
 # TODO: additional weight of registrations by MI to downweight slices that are much different (much more processing)
 # TODO: potentially incorporate mesh creation to either identify mask (limiting registration)
 #       potentially included as a distance map in some way to weight boundary?
@@ -254,7 +253,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                 logging.error(f"Registration failed with error: {e}")
 
 
-def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_mean = True):
+def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_mean = True, idx=None):
     """
     Computes an intermediate slice by averaging both rigid and non-linear transformations.
     Images must already fit within the same matrix (i.e., have the same dimensions).
@@ -328,8 +327,10 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, additional_coreg_me
 
         # Step 5: Compute the average of the deformed images
         intermediate_img_np = (pre_to_post_img.numpy() + post_to_pre_img.numpy()) / 2
-    
-    return intermediate_img_np
+    if idx is not None: #if we passed an index value, this is to keep track of parallel so we pass it back
+        return idx, intermediate_img_np
+    else: 
+        return intermediate_img_np
 
 
 
@@ -358,12 +359,33 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,method='inter
     
     # HERE we should parallelize this TODO: b/c this is v. slow on the HPC but there are many more cores avail.
     elif method == 'intermediate_nonlin_mean':
-        missing_slices_interpolated = []    
-        for idx,img_fname in enumerate(missing_fnames_pre):
+        futures = []
+        for idx, missing_fname in enumerate(missing_fnames_pre):
             img_fname_pre = missing_fnames_pre[idx]
             img_fname_post = missing_fnames_post[idx]
-            missing_slices_interpolated.append(compute_intermediate_non_linear_slice(img_fname_pre,img_fname_post))
-        missing_slices_interpolated= numpy.stack(missing_slices_interpolated, axis=-1)
+            futures.append(executor.submit(compute_intermediate_non_linear_slice,
+                                           img_fname_pre,
+                                           img_fname_post,
+                                           idx)
+            )
+        for future in as_completed(futures):
+            the_idxs = []
+            the_slices = []
+            try:
+                the_idx, the_slice = future.result()
+            except:
+                logging.warning('Parallel missing slice generation failed')
+            the_idxs.append(the_idx)
+            the_slices.append(the_slice)
+        idxs_order = numpy.argsort(the_idxs)
+        missing_slices_interpolated= numpy.stack(the_slices, axis=-1)[idxs_order,...] #reorder based on the indices that were passed
+
+        # missing_slices_interpolated = []    
+        # for idx,img_fname in enumerate(missing_fnames_pre):
+        #     img_fname_pre = missing_fnames_pre[idx]
+        #     img_fname_post = missing_fnames_post[idx]
+        #     missing_slices_interpolated.append(compute_intermediate_non_linear_slice(img_fname_pre,img_fname_post))
+        # missing_slices_interpolated= numpy.stack(missing_slices_interpolated, axis=-1)
     else:
         missing_slices_interpolated = None
     return missing_slices_interpolated

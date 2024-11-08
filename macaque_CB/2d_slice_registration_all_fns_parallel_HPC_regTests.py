@@ -1142,7 +1142,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
         
         futures.append(
             executor.submit(
-                 nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
+                 nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
                     target_images=targets,
                     run_rigid=False,
                     run_affine=False,
@@ -1155,7 +1155,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
                     mask_zero=False,
                     ignore_affine=False, ignore_orient=False, ignore_res=False,
                     save_data=True, overwrite=False,
-                    file_name=output)
+                    file_name=output
             )
         )
                                     

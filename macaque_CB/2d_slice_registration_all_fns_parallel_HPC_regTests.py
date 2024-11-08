@@ -472,7 +472,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             missing_idxs_post = numpy.array(missing_idxs_to_fill)+1
                         
             for idx,img_idx in enumerate(missing_idxs_pre):
-                logging.warning(f"Processing missing slice: {img_idx}")
+                logging.warning(f"Processing missing slice idx: {img_idx+1}") #add one, b/c we are looping over the pre slice 
                 if idx ==0:
                     missing_fnames_pre = []
                 
@@ -1213,10 +1213,12 @@ for iter in range(num_reg_iterations):
     logger.warning(f'\titeration {iter_tag}')
     logger.warning('****************************************************************************')
     
-    if (iter == 0):
+    if (iter == 0): #do not want to use per slice templates
         first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created), same for use_nonlin_slice_templates
+        first_run_nonlin_slice_template = False
     else:
         first_run_slice_template = per_slice_template
+        first_run_nonlin_slice_template = use_nonlin_slice_templates
 
     slice_offset_list_forward = [-1,-2,-3]
     slice_offset_list_reverse = [1,2,3]
@@ -1236,7 +1238,7 @@ for iter in range(num_reg_iterations):
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                         zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
                         reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,
-                        use_nonlin_slice_templates=first_run_slice_template,max_workers=max_workers)
+                        use_nonlin_slice_templates=first_run_nonlin_slice_template,max_workers=max_workers)
     if MI_df_struct is not None:
         pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
     

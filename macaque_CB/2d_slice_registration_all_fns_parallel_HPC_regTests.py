@@ -331,6 +331,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
         intermediate_img_np = (pre_to_post_img.numpy() + post_to_pre_img.numpy()) / 2
 
         if current_img is not None: #if we have a current image to push into this space, we should do this here
+            logging.warning(f'GOT HERE')
             # Step 6: Register the current slice to the interpolated slice
             with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
                 intermediate_img_fname = temp_file.name
@@ -395,6 +396,10 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                 else:
                     img_fname_current=None
                             # Submit each task to the executor with keyword arguments
+                logging.warning(f"Processing missing slice: {idx}")
+                logging.warning(f"Pre: {img_fname_pre}")
+                logging.warning(f"Post: {img_fname_post}")
+                logging.warning(img_fname_current)
                 futures.append(executor.submit(
                     compute_intermediate_non_linear_slice,
                     pre_img=img_fname_pre,

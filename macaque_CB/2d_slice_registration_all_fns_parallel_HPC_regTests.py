@@ -563,7 +563,10 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 # then use these images to generate the interpolations, skipping the first and last images (as anchors) 
                 missing_fnames_pre_1 = template_nonlin_list[:-2] #starting from 0, skip the last two (b/c last has no pair), treated as pre
                 missing_fnames_post_1 = template_nonlin_list[2:] #starting from 1 (skip the first one), treated as pre
-                interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,current_fnames=template_nonlin_list[1:-1],method='intermediate_nonlin_mean',nonlin_interp_max_workers=nonlin_interp_max_workers)
+                interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,
+                                                                 current_fnames=template_nonlin_list[1:-1],
+                                                                 method='intermediate_nonlin_mean',
+                                                                 nonlin_interp_max_workers=nonlin_interp_max_workers)
 
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
@@ -1039,7 +1042,7 @@ logger = setup_logging(script_name, output_dir)
 
 
 print(f"Output directory: {output_dir}")
-shutil.copyfile(__file__,os.path.join(output_dir,script_name)
+shutil.copyfile(__file__,os.path.join(output_dir,script_name))
 logger.info(f'Original script file copied to output directory.')
 
 # 0. Convert to nifti
@@ -1205,7 +1208,7 @@ for iter in range(num_reg_iterations):
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'],
-                                        max_workers=nonlin_interp_max_workers)
+                                        nonlin_interp_max_workers=nonlin_interp_max_workers)
     
     if use_nonlin_slice_templates:
         template = template_nonlin
@@ -1247,7 +1250,7 @@ for iter in range(num_reg_iterations):
     template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                         zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                         missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=['median','nonlin'],
-                                        max_workers=nonlin_interp_max_workers)
+                                        nonlin_interp_max_workers=nonlin_interp_max_workers)
     
     if use_nonlin_slice_templates:
         template = template_nonlin

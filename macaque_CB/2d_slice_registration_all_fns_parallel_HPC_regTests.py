@@ -43,9 +43,10 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
-rescale=5 #larger scale means that you have to change the scaling_factor
-scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
-# rescale=30
+# rescale=5 #larger scale means that you have to change the scaling_factor
+# scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
+rescale=40
+scaling_factor=8
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
@@ -58,19 +59,18 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_orig_fullRes/'
-# scaling_factor = 32 #32 or 64 for full?
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc/'
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [8]
 # missing_idxs_to_fill = [3]
-# missing_idxs_to_fill = None
+missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-#all_image_fnames = all_image_fnames[220:240] #for testing
+# all_image_fnames = all_image_fnames[0:10] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -266,19 +266,20 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, start_s
             if start_slice_idx < 0:
                 raise ValueError("No valid start slice index found in the stack.")
     
-    # the start slice is central, and will not change, so we need to name it based on if there was a previous_target_tag and then load and save it with the new output tag
-    img_basename = os.path.basename(all_image_fnames[start_slice_idx]).split('.')[0]
-
     # list of what our outputs will be 
     all_image_fnames_new = []
     for idx in numpy.arange(len(all_image_fnames)):
+        img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
         all_image_fnames_new.append(f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}_ants-def0.nii.gz")
 
     #list of what our .nii inputs should be
     all_image_fnames_nii = []
     for idx in numpy.arange(len(all_image_fnames)):
+        img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
         all_image_fnames_nii.append(f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{previous_tail}")
 
+    # logging.warning(all_image_fnames_nii)
+    # logging.warning(all_image_fnames_new)
 
     #load and then save the central slice with the new tag, no change since this is the space we want to align to
     save_volume(all_image_fnames_new[start_slice_idx],load_volume(all_image_fnames_nii[start_slice_idx]))
@@ -1254,7 +1255,10 @@ run_cascading_coregistrations(output_dir, subject,
                               all_image_fnames, start_slice_idx = None, 
                               missing_idxs_to_fill = missing_idxs_to_fill, 
                               zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                              reg_level_tag='coregcasc0nl', previous_target_tag=None)
+                              reg_level_tag='coreg0nlcascade', previous_target_tag=None)
+
+template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nlcascade',
+                                       missing_idxs_to_fill=None)
 
 if False:
     ## ****************************** Iteration 1

@@ -311,6 +311,13 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, start_s
     the `ants.registration` calls as necessary for optimal alignment.
 
     """
+    # params for regularization of nonlinear deformations w/ 'SyNOnly'
+        # from nighres, the last two numbers of the syn_param correspond to the flow and total sigmas (fluid and elastic deformations, respectively)
+        # if regularization == 'Low': syn_param = [0.2, 1.0, 0.0]
+        # elif regularization == 'Medium': syn_param = [0.2, 3.0, 0.0]
+        # elif regularization == 'High': syn_param = [0.2, 4.0, 3.0]
+    syn_flow_sigma = 3 #3 is the default w/ this ants.registration call
+    syn_total_sigma = 1 #0 is the default w/ this ants.registration call
 
     import ants
 
@@ -379,7 +386,10 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, start_s
 
         pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid') #run rigid
         pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
-        pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, type_of_transform='SyN') # run nonlin
+        pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
+                                               type_of_transform='SyNOnly',
+                                               flow_sigma=syn_flow_sigma,
+                                               total_sigma=syn_total_sigma) # run nonlin only
         warpedmovout = pre_to_post_nonlin['warpedmovout']
 
         ants.image_write(warpedmovout, output)
@@ -416,7 +426,8 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
     post_aligned = ants.apply_transforms(fixed=pre_ants, moving=post_ants, transformlist=post_to_pre_rigid['fwdtransforms'])
 
     # # Step 3: Perform non-linear registration on the rigidly aligned images
-    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN')
+    # we use full syn b/c we actually want the intermediate image to be the size in between the two (so include affine here)
+    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN') #here we do full SyN, effectively rigid + affine + nonlin 
     post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
 
     # Step 4: Load the non-linear deformation fields as images
@@ -452,6 +463,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
 
         # # Step 3: Perform non-linear registration on the rigidly aligned images
+        # we use full syn b/c we actually want the intermediate image to be the size in between the two (so include affine here)
         pre_to_post_nonlin = ants.registration(fixed=intermediate_img, moving=pre_aligned, type_of_transform='SyN')
         post_to_pre_nonlin = ants.registration(fixed=intermediate_img, moving=post_aligned, type_of_transform='SyN')
 
@@ -1314,7 +1326,7 @@ run_cascading_coregistrations(output_dir, subject,
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nlcascade',
                                        per_slice_template=True,
-                                       missing_idxs_to_fill=None)
+                                       missing_idxs_to_fill=missing_idxs_to_fill)
 
 ## ****************************** Iteration 1
 # in all cases, we go:
@@ -1355,7 +1367,7 @@ for iter in range(num_reg_iterations):
     
     if (iter == 0): #do not want to use per slice templates
         # first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created), same for use_nonlin_slice_templates
-        first_run_Slice_template = True
+        first_run_slice_template = True
         first_run_nonlin_slice_template = per_slice_template
     else:
         first_run_slice_template = per_slice_template

@@ -43,10 +43,10 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
-# rescale=5 #larger scale means that you have to change the scaling_factor
-# scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
-rescale=40
-scaling_factor=8
+rescale=5 #larger scale means that you have to change the scaling_factor
+scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
+# rescale=40
+# scaling_factor=8
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
@@ -1351,7 +1351,6 @@ run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 template_tag = 'coreg0nlcascade'
 MI_df_struct = {} #output for MI values, will be saved in a csv file
-
 # TODO: 1. Test between slice registrations as a way to refine stack
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
 
@@ -1373,6 +1372,8 @@ for iter in range(num_reg_iterations):
     else:
         first_run_slice_template = per_slice_template
         first_run_nonlin_slice_template = use_nonlin_slice_templates
+
+    missing_idxs_to_fill = None #XXX FOR TESTING!!! TODO: ONLY FILL IN MISSING SLICES prior to this.
 
     slice_offset_list_forward = [-1,-2,-3]
     slice_offset_list_reverse = [1,2,3]

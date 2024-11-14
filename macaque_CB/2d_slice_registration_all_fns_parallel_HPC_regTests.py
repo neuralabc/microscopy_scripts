@@ -43,10 +43,10 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
-rescale=5 #larger scale means that you have to change the scaling_factor
-scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
-# rescale=40
-# scaling_factor=8
+# rescale=5 #larger scale means that you have to change the scaling_factor
+# scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
+rescale=40
+scaling_factor=8
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
@@ -60,10 +60,10 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc/'
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [8]
 # missing_idxs_to_fill = [3]
@@ -1313,6 +1313,7 @@ run_cascading_coregistrations(output_dir, subject,
                               reg_level_tag='coreg0nlcascade', previous_target_tag=None)
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nlcascade',
+                                       per_slice_template=True,
                                        missing_idxs_to_fill=None)
 
 ## ****************************** Iteration 1
@@ -1331,7 +1332,7 @@ print('3. Begin STAGE1 registration iterations - Rigid + Syn')
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 6
+num_reg_iterations = 5
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
@@ -1353,8 +1354,9 @@ for iter in range(num_reg_iterations):
     logger.warning('****************************************************************************')
     
     if (iter == 0): #do not want to use per slice templates
-        first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created), same for use_nonlin_slice_templates
-        first_run_nonlin_slice_template = False
+        # first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created), same for use_nonlin_slice_templates
+        first_run_Slice_template = True
+        first_run_nonlin_slice_template = per_slice_template
     else:
         first_run_slice_template = per_slice_template
         first_run_nonlin_slice_template = use_nonlin_slice_templates

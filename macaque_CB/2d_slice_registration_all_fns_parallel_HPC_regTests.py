@@ -1361,7 +1361,7 @@ for iter in range(num_reg_iterations):
 
     slice_offset_list_forward = [-1,-2,-3]
     slice_offset_list_reverse = [1,2,3]
-    image_weights = generate_gaussian_weights([0,1,2,3]) #symmetric gaussian, so the same on both sides
+    image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                 target_slice_offset_list=slice_offset_list_forward, 
@@ -1420,10 +1420,11 @@ for iter in range(num_reg_iterations):
 
     #increasing the gaussian weigting also results in worse (3-> 5)
 
-    slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
-    slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
-    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward) #symmetric gaussian, so the same on both sides
-    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse)
+    # her we include neigbouring slices and increase the sharpness of the gaussian
+    slice_offset_list_forward = [-2,-1,1,] #weighted back, but also forward
+    slice_offset_list_reverse = [-1,1,2] #weighted forward, but also back
+    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=1) #symmetric gaussian, so the same on both sides
+    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=1)
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                 target_slice_offset_list=slice_offset_list_forward, 

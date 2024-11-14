@@ -515,7 +515,6 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
             post_slices.append(img_data)
         post_slices = numpy.stack(post_slices, axis=-1)
             
-    # HERE we should parallelize this TODO: b/c this is v. slow on the HPC but there are many more cores avail.
     elif method == 'intermediate_nonlin_mean':
         futures = []
         the_idxs = []
@@ -528,11 +527,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     img_fname_current = current_fnames[idx]
                 else:
                     img_fname_current=None
-                            # Submit each task to the executor with keyword arguments
-                # logging.warning(f"Processing missing slice: {idx}")
-                # logging.warning(f"Pre: {img_fname_pre}")
-                # logging.warning(f"Post: {img_fname_post}")
-                # logging.warning(img_fname_current)
+
                 futures.append(executor.submit(
                     compute_intermediate_non_linear_slice,
                     pre_img=img_fname_pre,
@@ -551,13 +546,6 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
         idxs_order = numpy.argsort(the_idxs)
         sorted_slices = [the_slices[i] for i in idxs_order]
         missing_slices_interpolated= numpy.stack(sorted_slices, axis=-1) #reorder based on the indices that were passed
-        # logging.warning(f'missing_slices_shape: {missing_slices_interpolated.shape}')
-        # missing_slices_interpolated = []    
-        # for idx,img_fname in enumerate(missing_fnames_pre):
-        #     img_fname_pre = missing_fnames_pre[idx]
-        #     img_fname_post = missing_fnames_post[idx]
-        #     missing_slices_interpolated.append(compute_intermediate_non_linear_slice(img_fname_pre,img_fname_post))
-        # missing_slices_interpolated= numpy.stack(missing_slices_interpolated, axis=-1)
     else:
         missing_slices_interpolated = None
     return missing_slices_interpolated
@@ -626,7 +614,10 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
                 missing_fnames_post.append(reg)
 
-            missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,missing_fnames_post)
+            missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
+                                                                  missing_fnames_post,
+                                                                  method='intermediate_nonlin_mean',
+                                                                  nonlin_interp_max_workers=nonlin_interp_max_workers)
 
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):
@@ -1313,7 +1304,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
 #                     file_name=output)
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
-                                       missing_idxs_to_fill=None)
+                                       missing_idxs_to_fill=missing_idxs_to_fill)
 
 run_cascading_coregistrations(output_dir, subject, 
                               all_image_fnames, start_slice_idx = None, 
@@ -1340,7 +1331,7 @@ print('3. Begin STAGE1 registration iterations - Rigid + Syn')
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 10
+num_reg_iterations = 6
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop

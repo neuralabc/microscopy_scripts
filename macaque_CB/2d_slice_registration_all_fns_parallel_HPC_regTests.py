@@ -406,6 +406,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
     current_img (str): Filename of the current slice image to be registered to the intermediate slice.
 
     additional_coreg_mean (bool): If True, the intermediate slice is then used as the target for pre/post reg, and the mean of this reg is taken as the final image
+    idx (int): for parallelized runs, this keeps track of our slice index
 
     Returns:
     intermediate_img_np (numpy.ndarray): Intermediate slice computed between pre_img and post_img as a NumPy array.
@@ -1368,7 +1369,7 @@ for iter in range(num_reg_iterations):
     if (iter == 0): #do not want to use per slice templates
         # first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created), same for use_nonlin_slice_templates
         first_run_slice_template = True
-        first_run_nonlin_slice_template = per_slice_template
+        first_run_nonlin_slice_template = use_nonlin_slice_templates
     else:
         first_run_slice_template = per_slice_template
         first_run_nonlin_slice_template = use_nonlin_slice_templates

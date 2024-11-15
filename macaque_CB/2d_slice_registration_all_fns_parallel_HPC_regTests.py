@@ -1319,15 +1319,27 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                        missing_idxs_to_fill=missing_idxs_to_fill)
 
-run_cascading_coregistrations(output_dir, subject, 
-                              all_image_fnames, anchor_slice_idx = None, 
-                              missing_idxs_to_fill = missing_idxs_to_fill, 
-                              zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                              reg_level_tag='coreg0nlcascade', previous_target_tag=None)
+## loop over cascades to see what this does for us
+iter_tag = ""
+num_cascade_iterations = 5
+anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
+anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
+for iter in range(num_cascade_iterations):
+    if iter == 0:
+        input_source_file_tag = 'coreg0nl'
 
-template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nlcascade',
-                                       per_slice_template=True,
-                                       missing_idxs_to_fill=missing_idxs_to_fill)
+    else:
+        input_source_file_tag = iter_tag #updates with the previous iteration
+    iter_tag = f'_cascade_{iter}'
+    run_cascading_coregistrations(output_dir, subject, 
+                                all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
+                                missing_idxs_to_fill = missing_idxs_to_fill, 
+                                zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                                reg_level_tag=iter_tag, previous_target_tag=None)
+
+    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
+                                        per_slice_template=True,
+                                        missing_idxs_to_fill=missing_idxs_to_fill)
 
 ## ****************************** Iteration 1
 # in all cases, we go:

@@ -387,9 +387,9 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid') #run rigid
         pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
         pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
-                                               type_of_transform='SyNOnly',
-                                               flow_sigma=syn_flow_sigma,
-                                               total_sigma=syn_total_sigma) # run nonlin only
+                                               type_of_transform='SyN') #),
+                                            #    flow_sigma=syn_flow_sigma,
+                                            #    total_sigma=syn_total_sigma) # run nonlin only
         warpedmovout = pre_to_post_nonlin['warpedmovout']
 
         ants.image_write(warpedmovout, output)

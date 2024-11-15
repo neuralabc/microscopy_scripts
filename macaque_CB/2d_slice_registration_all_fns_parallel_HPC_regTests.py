@@ -393,7 +393,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         warpedmovout = pre_to_post_nonlin['warpedmovout']
 
         ants.image_write(warpedmovout, output)
-        logging.warning(f"\t\tRegistration completed for slice {src_idxs[idx]}.")
+        logging.warning(f"\t\tCascade registration completed for slice {src_idxs[idx]}.")
 
 def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, additional_coreg_mean = True, idx=None):
     """

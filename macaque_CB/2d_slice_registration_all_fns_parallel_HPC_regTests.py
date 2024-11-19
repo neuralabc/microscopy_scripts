@@ -1352,7 +1352,7 @@ num_reg_iterations = 5
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
-template_tag = 'coreg0nlcascade'
+template_tag = 'coreg0nl_cascade'
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 1. Test between slice registrations as a way to refine stack
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision

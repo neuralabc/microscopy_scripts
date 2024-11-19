@@ -646,6 +646,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         nifti = nibabel.Nifti1Image(img,affine=None,header=header)
         save_volume(img_stack,nifti)
 
+        ## if requested, we output templates for each slice based on the median of the surrounding slices (-1,1)
+        # for slices within missing_idxs_to_fill we already interpolated them, so we leave these as is
         if per_slice_template:
             num_slices = img.shape[-1]
             if not (type(slice_template_type) == list):
@@ -659,6 +661,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.median(img[...,0:2],axis=-1)
                     elif idx == num_slices-1: #if at the end, take the last two only
                         slice_template = numpy.median(img[...,-2:],axis=-1)
+                    elif idx in missing_idxs_to_fill:
+                        logging.warning(f'========> NOT COMPUTING THE MEDIAN FOR MISSING SLICE at idx {idx}')
+                        slice_template = img[...,idx]
                     else: #take one on each side and the current slice
                         start = idx-1
                         stop = idx+2
@@ -1293,54 +1298,43 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
             )
         )
                                     
-# for idx,img in enumerate(all_image_fnames):
-#     img = os.path.basename(img).split('.')[0]
-#     nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
-
-#     sources = [nifti]
-#     targets = [template]
-        
-#     output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
-#     coreg1nl = nighres.registration.embedded_antspy_2d_multi(source_images=sources, 
-#                     target_images=targets,
-#                     run_rigid=False,
-#                     run_affine=False,
-#                     run_syn=False,
-#                     scaling_factor=64,
-#                     cost_function='MutualInformation',
-#                     interpolation='Linear',
-#                     regularization='High',
-#                     convergence=1e-6,
-#                     mask_zero=False,
-#                     ignore_affine=False, ignore_orient=False, ignore_res=False,
-#                     save_data=True, overwrite=False,
-#                     file_name=output)
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                        missing_idxs_to_fill=missing_idxs_to_fill)
 
 ## loop over cascades to see what this does for us
-iter_tag = ""
-num_cascade_iterations = 5
-anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
-anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
-for iter in range(num_cascade_iterations):
-    if iter == 0:
-        input_source_file_tag = 'coreg0nl'
+# iter_tag = ""
+# num_cascade_iterations = 5
+# anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
+# anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
+# for iter in range(num_cascade_iterations):
+#     if iter == 0:
+#         input_source_file_tag = 'coreg0nl'
 
-    else:
-        input_source_file_tag = iter_tag #updates with the previous iteration
-    iter_tag = f'_cascade_{iter}'
-    run_cascading_coregistrations(output_dir, subject, 
-                                all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
-                                missing_idxs_to_fill = missing_idxs_to_fill, 
-                                zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-                                reg_level_tag=iter_tag, previous_target_tag=None)
+#     else:
+#         input_source_file_tag = iter_tag #updates with the previous iteration
+#     iter_tag = f'_cascade_{iter}'
+#     run_cascading_coregistrations(output_dir, subject, 
+#                                 all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
+#                                 missing_idxs_to_fill = missing_idxs_to_fill, 
+#                                 zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+#                                 reg_level_tag=iter_tag, previous_target_tag=None)
 
-    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
-                                        per_slice_template=True,
-                                        missing_idxs_to_fill=missing_idxs_to_fill)
+#     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
+#                                         per_slice_template=True,
+#                                         missing_idxs_to_fill=missing_idxs_to_fill)
 
+input_source_file_tag = 'coreg0nl'
+reg_level_tag = input_source_file_tag + "_cascade"
+run_cascading_coregistrations(output_dir, subject, 
+                        all_image_fnames, anchor_slice_idx = None, 
+                        missing_idxs_to_fill = missing_idxs_to_fill, 
+                        zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                        reg_level_tag=reg_level_tag, previous_target_tag=None)
+
+template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
+                                per_slice_template=True,
+                                missing_idxs_to_fill=missing_idxs_to_fill)
 ## ****************************** Iteration 1
 # in all cases, we go:
 #   - forwards
@@ -1353,7 +1347,6 @@ for iter in range(num_cascade_iterations):
 #   - generate a template
 #   - delete unecessary files (in progress...)
 
-print('3. Begin STAGE1 registration iterations - Rigid + Syn')
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
@@ -1449,10 +1442,10 @@ for iter in range(num_reg_iterations):
     #increasing the gaussian weigting also results in worse (3-> 5)
 
     # her we include neigbouring slices and increase the sharpness of the gaussian
-    slice_offset_list_forward = [-2,-1,1,] #weighted back, but also forward
-    slice_offset_list_reverse = [-1,1,2] #weighted forward, but also back
-    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=1) #symmetric gaussian, so the same on both sides
-    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=1)
+    slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
+    slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
+    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=2) #symmetric gaussian, so the same on both sides
+    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=2)
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                 target_slice_offset_list=slice_offset_list_forward, 

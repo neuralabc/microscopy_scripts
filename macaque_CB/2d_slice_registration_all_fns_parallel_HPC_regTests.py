@@ -137,11 +137,13 @@ def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     # Normalize the weights to sum to 1
     return out_weights / out_weights.sum()
 
+# TODO add deformation_smoothing across the stack by introducing deformation_smoothing_kernel = None here
+# and keeping the forward transforms if not none. Smoothing would have to be tackled at the template stage  
 def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, template, 
                        target_slice_offset_list=[-1, -2, -3], zfill_num=4, 
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
-                       scaling_factor=64, image_weights=None, per_slice_template=False):
+                       scaling_factor=64, image_weights=None):
     """
     Register a single slice and its neighboring slices based on offsets.
     """
@@ -156,18 +158,12 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     nifti = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{previous_tail}"
     sources = [nifti]
     image_weights_ordered = [image_weights[0]]
-    # Assign the correct template for this slice
-    
-    ## TODO: remove per_slice_template from function call and just use the template directly
+
+    # Assign the correct template for this slice    
     if type(template) is list:
         targets = [template[idx]]
     else:
         targets = [template]
-
-    # if per_slice_template:
-    #     targets = [template[idx]]
-    # else:
-    #     targets = [template]
     
     # Determine the sources and targets based on `target_slice_offset_list`
     for idx2, slice_offset in enumerate(target_slice_offset_list):
@@ -236,7 +232,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
                                 input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
-                                scaling_factor=scaling_factor, image_weights=image_weights, per_slice_template=per_slice_template)
+                                scaling_factor=scaling_factor, image_weights=image_weights)
             )
         for future in as_completed(futures):
             try:

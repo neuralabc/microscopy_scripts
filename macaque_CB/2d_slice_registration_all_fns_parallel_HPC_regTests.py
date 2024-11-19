@@ -684,6 +684,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.mean(img[...,0:2],axis=-1)
                     elif idx == num_slices-1: #if at the end, take the last two only
                         slice_template = numpy.mean(img[...,-2:],axis=-1)
+                    elif idx in missing_idxs_to_fill:
+                        slice_template = img[...,idx]
                     else: #take one on each side and the current slice
                         start = idx-1
                         stop = idx+2

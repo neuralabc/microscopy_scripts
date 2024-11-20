@@ -264,7 +264,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         Index of the central slice to initiate registration. If None, defaults to the middle slice of the stack.
 
     missing_idxs_to_fill : list of int, optional
-        List of slice indices that are missing from the stack, to avoid during registration.
+        List of slice indices that are missing from the stack, to avoid using this as the anchor slice.
 
     zfill_num : int, default=4
         Number of zeroes for zero-padding slice indices in the output filenames (e.g., 0001, 0002).
@@ -630,10 +630,10 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):
-                print(idx)
-                print(missing_idx)
-                print(numpy.shape(missing_slices_interpolated))
-                print(numpy.shape(img))
+                # print(idx)
+                # print(missing_idx)
+                # print(numpy.shape(missing_slices_interpolated))
+                # print(numpy.shape(img))
                 img[...,missing_idx] = missing_slices_interpolated[...,idx]
 
         header = nibabel.Nifti1Header()
@@ -1323,12 +1323,12 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 #                                         missing_idxs_to_fill=missing_idxs_to_fill)
 
 input_source_file_tag = 'coreg0nl'
-reg_level_tag = input_source_file_tag + "_cascade"
+reg_level_tag = "_cascade"
 run_cascading_coregistrations(output_dir, subject, 
-                        all_image_fnames, anchor_slice_idx = None, 
-                        missing_idxs_to_fill = missing_idxs_to_fill, 
-                        zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-                        reg_level_tag=reg_level_tag, previous_target_tag=None)
+                              all_image_fnames, anchor_slice_idx = None, 
+                              missing_idxs_to_fill = missing_idxs_to_fill, 
+                              zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                              reg_level_tag=reg_level_tag, previous_target_tag=None)
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
                                 per_slice_template=True,

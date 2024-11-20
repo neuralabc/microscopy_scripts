@@ -43,10 +43,10 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
-rescale=5 #larger scale means that you have to change the scaling_factor
-scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
-# rescale=40
-# scaling_factor=8
+# rescale=5 #larger scale means that you have to change the scaling_factor
+# scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
+rescale=50
+scaling_factor=8
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
@@ -60,10 +60,10 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc/'
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [8]
 # missing_idxs_to_fill = [3]
@@ -378,7 +378,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 
         source_img = ants.image_read(source)
         target_img = ants.image_read(target)
-        logging.info(f'\n\tslice_idx: {src_idxs[idx]}\n\t\tsources: {source.split("/")[-1]}\n\t\ttarget: {target.split("/")[-1]}\n\t\toutput: {output.split("/")[-1]}') #source is always the same 
+        logging.warning(f'\n\tslice_idx: {src_idxs[idx]}\n\t\tsources: {source.split("/")[-1]}\n\t\ttarget: {target.split("/")[-1]}\n\t\toutput: {output.split("/")[-1]}') #source is always the same 
 
         pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid') #run rigid
         pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
@@ -623,18 +623,35 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
                 missing_fnames_post.append(reg)
 
+            for idx, img_idx in enumerate(missing_idxs_to_fill):
+                if idx == 0:
+                    missing_fnames_current = []
+                img_name = all_image_fnames[img_idx]
+                img_name = os.path.basename(img_name).split('.')[0]
+                reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
+                missing_fnames_current.append(reg)
+
             missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
                                                                   missing_fnames_post,
                                                                   method='intermediate_nonlin_mean',
                                                                   nonlin_interp_max_workers=nonlin_interp_max_workers)
 
+            
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):
+                #we overwrite the missing slices with the interpolated values and insert it into the img stack
+                missing_fname = missing_fnames_current[idx]
+                interp_slice = missing_slices_interpolated[...,idx]
+                header = nibabel.Nifti1Header()
+                header.set_data_shape(interp_slice.shape)
+                nifti = nibabel.Nifti1Image(interp_slice,affine=None,header=header)
+                nifti.update_header()
+                save_volume(missing_fname,nifti)
                 # print(idx)
                 # print(missing_idx)
                 # print(numpy.shape(missing_slices_interpolated))
                 # print(numpy.shape(img))
-                img[...,missing_idx] = missing_slices_interpolated[...,idx]
+                img[...,missing_idx] = interp_slice
 
         header = nibabel.Nifti1Header()
         header.set_data_shape(img.shape)

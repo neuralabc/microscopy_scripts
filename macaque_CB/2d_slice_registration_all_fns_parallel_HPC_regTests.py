@@ -43,10 +43,10 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
-# rescale=5 #larger scale means that you have to change the scaling_factor
-# scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
-rescale=50
-scaling_factor=8
+rescale=5 #larger scale means that you have to change the scaling_factor
+scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
+# rescale=50
+# scaling_factor=8
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x
 in_plane_res_y = rescale*in_plane_res_y
@@ -60,10 +60,10 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc/'
-# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [8]
 # missing_idxs_to_fill = [3]
@@ -378,12 +378,12 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 
         source_img = ants.image_read(source)
         target_img = ants.image_read(target)
-        logging.warning(f'\n\tslice_idx: {src_idxs[idx]}\n\t\tsources: {source.split("/")[-1]}\n\t\ttarget: {target.split("/")[-1]}\n\t\toutput: {output.split("/")[-1]}') #source is always the same 
+        logging.info(f'\n\tslice_idx: {src_idxs[idx]}\n\t\tsources: {source.split("/")[-1]}\n\t\ttarget: {target.split("/")[-1]}\n\t\toutput: {output.split("/")[-1]}') #source is always the same 
 
         pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid') #run rigid
         pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
         pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
-                                               type_of_transform='SyN') #),
+                                               type_of_transform='SyNOnly') #),
                                             #    flow_sigma=syn_flow_sigma,
                                             #    total_sigma=syn_total_sigma) # run nonlin only
         warpedmovout = pre_to_post_nonlin['warpedmovout']
@@ -424,8 +424,8 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
     # # Step 3: Perform non-linear registration on the rigidly aligned images
     # we use full syn b/c we actually want the intermediate image to be the size in between the two (so include affine here)
-    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyN') #here we do full SyN, effectively rigid + affine + nonlin 
-    post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyN')
+    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyNOnly') #here we do full SyN, effectively rigid + affine + nonlin 
+    post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyNOnly')
 
     # Step 4: Load the non-linear deformation fields as images
     # https://antspy.readthedocs.io/en/latest/registration.html #for reference
@@ -461,8 +461,8 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
         # # Step 3: Perform non-linear registration on the rigidly aligned images
         # we use full syn b/c we actually want the intermediate image to be the size in between the two (so include affine here)
-        pre_to_post_nonlin = ants.registration(fixed=intermediate_img, moving=pre_aligned, type_of_transform='SyN')
-        post_to_pre_nonlin = ants.registration(fixed=intermediate_img, moving=post_aligned, type_of_transform='SyN')
+        pre_to_post_nonlin = ants.registration(fixed=intermediate_img, moving=pre_aligned, type_of_transform='SyNOnly')
+        post_to_pre_nonlin = ants.registration(fixed=intermediate_img, moving=post_aligned, type_of_transform='SyNOnly')
 
         # Step 4: Load the deformed images
         pre_to_post_img = pre_to_post_nonlin['warpedmovout']
@@ -490,7 +490,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
             
             ## TODO: uncertain if this is necessary, as incorporating the nonlin step here may hurt more than help, since we are deforming to the intermediate img
             #nonlin
-            current_to_template_nonlin = ants.registration(fixed=new_image,moving=current_aligned_rigid,type_of_transform='SyN')
+            current_to_template_nonlin = ants.registration(fixed=new_image,moving=current_aligned_rigid,type_of_transform='SyNOnly')
             new_intermediate_img = current_to_template_nonlin['warpedmovout']
                 
             intermediate_img_np = new_intermediate_img.numpy()
@@ -674,7 +674,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.median(img[...,0:2],axis=-1)
                     elif idx == num_slices-1: #if at the end, take the last two only
                         slice_template = numpy.median(img[...,-2:],axis=-1)
-                    elif idx in missing_idxs_to_fill:
+                    elif missing_idxs_to_fill is not None and idx in missing_idxs_to_fill:
                         logging.warning(f'========> NOT COMPUTING THE MEDIAN FOR MISSING SLICE at idx {idx}')
                         slice_template = img[...,idx]
                     else: #take one on each side and the current slice
@@ -697,7 +697,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.mean(img[...,0:2],axis=-1)
                     elif idx == num_slices-1: #if at the end, take the last two only
                         slice_template = numpy.mean(img[...,-2:],axis=-1)
-                    elif idx in missing_idxs_to_fill:
+                    elif missing_idxs_to_fill is not None and idx in missing_idxs_to_fill:
                         slice_template = img[...,idx]
                     else: #take one on each side and the current slice
                         start = idx-1
@@ -1340,7 +1340,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 #                                         missing_idxs_to_fill=missing_idxs_to_fill)
 
 input_source_file_tag = 'coreg0nl'
-reg_level_tag = "_cascade"
+reg_level_tag = "coreg0nl_cascade"
 run_cascading_coregistrations(output_dir, subject, 
                               all_image_fnames, anchor_slice_idx = None, 
                               missing_idxs_to_fill = missing_idxs_to_fill, 
@@ -1401,11 +1401,11 @@ for iter in range(num_reg_iterations):
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                 target_slice_offset_list=slice_offset_list_forward, 
-                zfill_num=zfill_num, input_source_file_tag='coreg0nlcascade', reg_level_tag='coreg1nl'+iter_tag,
+                zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
                 image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                 target_slice_offset_list=slice_offset_list_reverse, 
-                        zfill_num=zfill_num, input_source_file_tag='coreg0nlcascade', reg_level_tag='coreg2nl'+iter_tag,
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
                         image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
 
     logging.warning('\t\tSelecting best registration by MI')
@@ -1464,13 +1464,13 @@ for iter in range(num_reg_iterations):
 
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                 target_slice_offset_list=slice_offset_list_forward, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nlcascade', 
+                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
                     image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                 target_slice_offset_list=slice_offset_list_reverse, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nlcascade', 
+                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
                     image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
     logging.warning('\t\tSelecting best registration by MI')                                     

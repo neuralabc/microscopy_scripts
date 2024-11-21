@@ -1199,20 +1199,24 @@ def downsample_image_ORIG(image, rescale, prop_pad=.2):
     - numpy.ndarray: Downsampled image with summed values in blocks.
     """
     from skimage.measure import block_reduce
-    size0 = image.shape[0]
-    size1 = image.shape[1]
-    pad0 = math.ceil(size0+size0*prop_pad)
-    pad1 = math.ceil(size1+size1*prop_pad)
-
-    # Ensure image dimensions are compatible with rescale factor
-    pad_width = ((rescale-pad0%rescale, rescale - pad0%rescale), 
-                 (rescale-pad1%rescale, rescale - pad1%rescale))
-    # logging.warning(pad_width)
-    padded_image = numpy.pad(image, pad_width=pad_width, mode='edge')
     
-    # Downsample by block summing
-    downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
-    return downsampled_image
+    if rescale <=1:
+        return image
+    else:
+        size0 = image.shape[0]
+        size1 = image.shape[1]
+        pad0 = math.ceil(size0+size0*prop_pad)
+        pad1 = math.ceil(size1+size1*prop_pad)
+
+        # Ensure image dimensions are compatible with rescale factor
+        pad_width = ((rescale-pad0%rescale, rescale - pad0%rescale), 
+                    (rescale-pad1%rescale, rescale - pad1%rescale))
+        # logging.warning(pad_width)
+        padded_image = numpy.pad(image, pad_width=pad_width, mode='edge')
+        
+        # Downsample by block summing
+        downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
+        return downsampled_image
 
 def downsample_image(image, rescale, prop_pad=0.2):
     """

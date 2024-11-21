@@ -1218,6 +1218,8 @@ def downsample_image_ORIG(image, rescale, prop_pad=.2):
         downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
         return downsampled_image
 
+#TODO: in the case when rescale <=1 (i.e., we don't intend to rescale) there is NO padding 
+# which may result in cutoffs to the registrations - #FIXME
 def downsample_image(image, rescale, prop_pad=0.2):
     """
     Downsamples a 2D image by summing over rescale x rescale blocks. Pad by prop_pad 
@@ -1273,6 +1275,7 @@ def downsample_image_parallel(image, rescale, n_jobs=-1):
     Returns:
     - numpy.ndarray: Downsampled image with summed values in blocks.
     """
+
     from skimage.util import view_as_blocks
     from joblib import Parallel, delayed
     np = numpy
@@ -1424,7 +1427,7 @@ for idx,img_orig in enumerate(all_image_fnames):
             # kernel = numpy.ones((rescale,rescale)) #2d convolution kernel, all 1s
             # slice_img = convolve2d(image,kernel,mode='full')[::rescale,::rescale] #can divide by rescale if we want the mean, otherwise sum is good (total cell count)
 
-            #exceptions that need fixing, since rigid reg does not seem to address big flips
+            # exceptions that need fixing, since rigid reg does not seem to address big flips
             if ('TP1' in img_orig) or ('/testProject/' in img_orig): #we have files named the same within the subdirs, so we must specify specifically the subdir (different on local vs server) 
                 if 'Image_11_-_20x_01_cellCount' in img_orig:
                     slice_img = numpy.flip(slice_img,axis=0) #flip x

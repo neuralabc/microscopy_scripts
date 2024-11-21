@@ -1556,7 +1556,17 @@ run_cascading_coregistrations(output_dir, subject,
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
                                 per_slice_template=True,
-                                missing_idxs_to_fill=missing_idxs_to_fill)
+                                missing_idxs_to_fill=missing_idxs_to_fill,slice_template_type='nochange')
+
+run_cascading_coregistrations(output_dir, subject, 
+                              all_image_fnames, anchor_slice_idx = None, 
+                              missing_idxs_to_fill = missing_idxs_to_fill, 
+                              zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                              reg_level_tag=reg_level_tag, previous_target_tag=None,run_syn=False)
+
+template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
+                                per_slice_template=True,
+                                missing_idxs_to_fill=missing_idxs_to_fill,slice_template_type='nochange')
 ## ****************************** Iteration 1
 # in all cases, we go:
 #   - forwards

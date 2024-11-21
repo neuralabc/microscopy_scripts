@@ -143,7 +143,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                        target_slice_offset_list=[-1, -2, -3], zfill_num=4, 
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
-                       scaling_factor=64, image_weights=None):
+                       scaling_factor=64, image_weights=None, retain_reg_mappings=False):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -163,6 +163,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
         previous_target_tag (str): Suffix of the previous iteration's output to use as input for this step. Defaults to the initial source.
         scaling_factor (int): Scaling factor for the image resolution during registration.
         image_weights (list): Weights assigned to images during registration to emphasize certain slices.
+        retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
     """
 
     img_basename = os.path.basename(img).split('.')[0]
@@ -225,17 +226,18 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     )
     
     # Clean up unnecessary files
-    def_files = glob.glob(f'{output}_ants-def*')
-    for f in def_files:
-        if 'def0' not in f:
-            os.remove(f)
-            time.sleep(0.5)
+    if not retain_reg_mappings:
+        def_files = glob.glob(f'{output}_ants-def*')
+        for f in def_files:
+            if 'def0' not in f:
+                os.remove(f)
+                time.sleep(0.5)
     logging.warning(f"\t\tRegistration completed for slice {idx}.")
 
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
-                                  scaling_factor=64, image_weights=None, per_slice_template=False):
+                                  scaling_factor=64, image_weights=None, retain_reg_mappings=False):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -257,7 +259,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         previous_target_tag (str): Suffix of the previous iteration's output to use as input for this step.
         scaling_factor (int): Scaling factor for the image resolution during registration.
         image_weights (list): Weights assigned to images during registration to emphasize certain slices.
-        per_slice_template (bool): Whether each slice has its own unique template.
+        retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
     """
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -268,7 +270,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
                                 input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
-                                scaling_factor=scaling_factor, image_weights=image_weights)
+                                scaling_factor=scaling_factor, image_weights=image_weights,
+                                retain_reg_mappings=retain_reg_mappings)
             )
         for future in as_completed(futures):
             try:

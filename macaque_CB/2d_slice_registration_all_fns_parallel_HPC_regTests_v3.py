@@ -17,6 +17,7 @@ from nighres.io import load_volume, save_volume
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
+#v2 still not as good as the original one!
 
 
 # code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
@@ -35,7 +36,7 @@ in_plane_res_y = 10 #10 microns per pixel
 in_plane_res_z = 50 #slice thickness of 50 microns
 
 zfill_num = 4
-per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
+per_slice_template = False #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 
 use_nonlin_slice_templates = False #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
                                     # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
@@ -59,7 +60,7 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v3/'
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -70,7 +71,7 @@ _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_coun
 missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[0:10] #for testing
+all_image_fnames = all_image_fnames[0:30] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -1578,7 +1579,8 @@ for iter in range(num_reg_iterations):
     slice_offset_list_forward = [-1,-2,-3]
     slice_offset_list_reverse = [1,2,3]
     image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
-
+    # XXX removed image weights
+    # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                 target_slice_offset_list=slice_offset_list_forward, 
                 zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
@@ -1641,7 +1643,9 @@ for iter in range(num_reg_iterations):
     slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
     image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=2) #symmetric gaussian, so the same on both sides
     image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=2)
-
+    # XXX removed image weights
+    # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
+    # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                 target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
@@ -1680,6 +1684,8 @@ for iter in range(num_reg_iterations):
     
 final_reg_level_tag = 'coreg12nl_win12'+iter_tag
 step1_iter_tag = iter_tag
+
+print(f"Output directory: {output_dir}")
 
 ## TODO: ADAPT AFTER ABOVE WORKING
 

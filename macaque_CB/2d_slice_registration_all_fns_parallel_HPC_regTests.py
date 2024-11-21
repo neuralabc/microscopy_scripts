@@ -145,7 +145,24 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None):
     """
-    Register a single slice and its neighboring slices based on offsets.
+    Register a single slice in a stack to its neighboring slices based on specified offsets.
+
+    Parameters:
+        idx (int): Index of the slice being registered.
+        output_dir (str): Directory to save the output files.
+        subject (str): Identifier for the dataset or subject being processed.
+        img (str): Path to the current slice image file.
+        all_image_names (list): List of all slice image filenames in the stack.
+        template (list or str): Template image(s) for registration. If a list, each slice uses its corresponding template.
+        target_slice_offset_list (list): List of slice offsets (e.g., `[-1, -2, -3]`) to define neighboring slices for registration.
+        zfill_num (int): Zero-padding length for slice indices in filenames.
+        input_source_file_tag (str): Suffix for identifying the input source files (e.g., `coreg0nl`).
+        reg_level_tag (str): Tag for the output registration level (e.g., `coreg1nl`).
+        run_syn (bool): Whether to run non-linear (SyN) registration. (does not include affine)
+        run_rigid (bool): Whether to run rigid registration.
+        previous_target_tag (str): Suffix of the previous iteration's output to use as input for this step. Defaults to the initial source.
+        scaling_factor (int): Scaling factor for the image resolution during registration.
+        image_weights (list): Weights assigned to images during registration to emphasize certain slices.
     """
 
     img_basename = os.path.basename(img).split('.')[0]
@@ -219,10 +236,29 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, per_slice_template=False):
-    # reverse direction uses the same function, but target_slice_offset list is negative to ensure proper lookup.
-    # the actual order of registrations is the same 0 -> n:
-    #   for the reverse direction, we register to slices after the current slice (named by how you would walk through the loop of the stack)
-    #   for the forward direction, we register to slices before the current slice
+    """
+    Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
+
+    The reverse direction uses the same function, but target_slice_offset list is negative to ensure proper lookup.
+     - the actual order of in which the registrations are submitted is the same 0 -> n:
+    
+    Parameters:
+        output_dir (str): Directory to save output files.
+        subject (str): Identifier for the dataset or subject being processed.
+        all_image_fnames (list): List of all slice image filenames in the stack.
+        template (list or str): Template image(s) for registration. Can be a single template or one per slice.
+        max_workers (int): Maximum number of workers for parallel execution.
+        target_slice_offset_list (list): List of slice offsets to define neighboring slices for registration.
+        zfill_num (int): Zero-padding length for slice indices in filenames.
+        input_source_file_tag (str): Suffix for identifying the input source files (e.g., `coreg0nl`).
+        reg_level_tag (str): Tag for the output registration level (e.g., `coreg1nl`).
+        run_syn (bool): Whether to run non-linear (SyN) registration.
+        run_rigid (bool): Whether to run rigid registration.
+        previous_target_tag (str): Suffix of the previous iteration's output to use as input for this step.
+        scaling_factor (int): Scaling factor for the image resolution during registration.
+        image_weights (list): Weights assigned to images during registration to emphasize certain slices.
+        per_slice_template (bool): Whether each slice has its own unique template.
+    """
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = []

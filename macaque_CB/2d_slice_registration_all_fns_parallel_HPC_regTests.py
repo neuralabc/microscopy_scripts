@@ -1233,30 +1233,33 @@ def downsample_image(image, rescale, prop_pad=0.2):
     """
     from skimage.measure import block_reduce
 
-    # Original dimensions
-    size0, size1 = image.shape
+    if rescale <=1:
+        return image
+    else:
+        # Original dimensions
+        size0, size1 = image.shape
 
-    # Calculate padding based on proportion
-    pad0 = math.ceil(size0 * prop_pad)
-    pad1 = math.ceil(size1 * prop_pad)
+        # Calculate padding based on proportion
+        pad0 = math.ceil(size0 * prop_pad)
+        pad1 = math.ceil(size1 * prop_pad)
 
-    # Pad each side equally
-    total_pad_width = ((pad0, pad0), (pad1, pad1))
-    padded_image = numpy.pad(image, pad_width=total_pad_width, mode='constant', constant_values=0)
+        # Pad each side equally
+        total_pad_width = ((pad0, pad0), (pad1, pad1))
+        padded_image = numpy.pad(image, pad_width=total_pad_width, mode='constant', constant_values=0)
 
-    # Adjust padding to ensure divisibility by rescale
-    padded_size0, padded_size1 = padded_image.shape
-    extra_pad_width = ((rescale - padded_size0 % rescale) % rescale,
-                       (rescale - padded_size1 % rescale) % rescale)
+        # Adjust padding to ensure divisibility by rescale
+        padded_size0, padded_size1 = padded_image.shape
+        extra_pad_width = ((rescale - padded_size0 % rescale) % rescale,
+                        (rescale - padded_size1 % rescale) % rescale)
 
-    padded_image = numpy.pad(padded_image, 
-                          ((0, extra_pad_width[0]), (0, extra_pad_width[1])),
-                          mode='constant', constant_values=0)
+        padded_image = numpy.pad(padded_image, 
+                            ((0, extra_pad_width[0]), (0, extra_pad_width[1])),
+                            mode='constant', constant_values=0)
 
-    # Downsample by block summing
-    downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
-    
-    return downsampled_image
+        # Downsample by block summing
+        downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
+        
+        return downsampled_image
 
 def downsample_image_parallel(image, rescale, n_jobs=-1):
     """
@@ -1274,25 +1277,28 @@ def downsample_image_parallel(image, rescale, n_jobs=-1):
     from joblib import Parallel, delayed
     np = numpy
 
-    # Pad image to match rescale size
-    pad_width = ((0, rescale - image.shape[0] % rescale), 
-                 (0, rescale - image.shape[1] % rescale))
-    padded_image = np.pad(image, pad_width=pad_width, mode='edge')
+    if rescale <=1:
+        return image
+    else:
+        # Pad image to match rescale size
+        pad_width = ((0, rescale - image.shape[0] % rescale), 
+                    (0, rescale - image.shape[1] % rescale))
+        padded_image = np.pad(image, pad_width=pad_width, mode='edge')
 
-    # View as blocks of shape (rescale, rescale)
-    blocks = view_as_blocks(padded_image, block_shape=(rescale, rescale))
-    # Flatten the blocks along the first two dimensions for parallel processing
-    flat_blocks = blocks.reshape(-1, rescale, rescale)
+        # View as blocks of shape (rescale, rescale)
+        blocks = view_as_blocks(padded_image, block_shape=(rescale, rescale))
+        # Flatten the blocks along the first two dimensions for parallel processing
+        flat_blocks = blocks.reshape(-1, rescale, rescale)
 
-    # Process each block in parallel, summing within each block
-    downsampled_values = Parallel(n_jobs=n_jobs)(
-        delayed(downsample_block)(block) for block in flat_blocks
-    )
+        # Process each block in parallel, summing within each block
+        downsampled_values = Parallel(n_jobs=n_jobs)(
+            delayed(downsample_block)(block) for block in flat_blocks
+        )
 
-    # Reshape results back into the downsampled image shape
-    downsampled_image = np.array(downsampled_values).reshape(blocks.shape[:2])
-    
-    return downsampled_image
+        # Reshape results back into the downsampled image shape
+        downsampled_image = np.array(downsampled_values).reshape(blocks.shape[:2])
+        
+        return downsampled_image
             
 def create_affine(shape):
     """

@@ -715,7 +715,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         reg_level_tag (str, optional): Tag indicating the registration level (default is 'coreg12nl').
         per_slice_template (bool, optional): If True, generate individual templates for each slice (default is False).
         missing_idxs_to_fill (list, optional): List of indices corresponding to missing slices to be filled by interpolation (default is None).
-        slice_template_type (str or list, optional): Specifies the method for generating the slice templates. Can be 'mean', 'median', 'nonlin', or a list of these methods (default is 'median').
+        slice_template_type (str or list, optional): Specifies the method for generating the slice templates. Can be 'nochange', 'mean', 'median' (only one of these) 'nonlin', or a list of these methods (default is 'median').
+                                                    'nochange' saves the deformed slice as the template
         nonlin_interp_max_workers (int, optional): Number of workers to use for parallelized non-linear interpolation (default is 1).
 
     Returns:
@@ -761,6 +762,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
     img_stack_nonlin = img_stack.replace('.nii.gz','_nonlin.nii.gz')
     template_tail = f'_{reg_level_tag}_template.nii.gz'
     template_nonlin_tail = f'_{reg_level_tag}_template_nonlin.nii.gz'
+    template_nochange_tail = f'_{reg_level_tag}_template_nochange.nii.gz'
+
     template = output_dir+subject+template_tail
 
     template_list = []
@@ -892,7 +895,19 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
-                    template_list.append(slice_template_fname)            
+                    template_list.append(slice_template_fname)      
+            
+            elif 'nochange' in slice_template_type:
+                logging.warning('Generating nochange slice templates')
+                for idx,img_name in enumerate(all_image_fnames):
+                    img_name = os.path.basename(img_name).split('.')[0]
+                    slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_nochange_tail
+                    slice_template = img[...,idx]
+                    header.set_data_shape(slice_template.shape)
+                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    nifti.update_header()
+                    save_volume(slice_template_fname,nifti)
+                    template_list.append(slice_template_fname)    
 
             if 'nonlin' in slice_template_type:
                 logging.warning('Generating non-linear slice templates')

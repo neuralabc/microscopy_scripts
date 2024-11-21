@@ -1218,8 +1218,6 @@ def downsample_image_ORIG(image, rescale, prop_pad=.2):
         downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
         return downsampled_image
 
-#TODO: in the case when rescale <=1 (i.e., we don't intend to rescale) there is NO padding 
-# which may result in cutoffs to the registrations - #FIXME
 def downsample_image(image, rescale, prop_pad=0.2):
     """
     Downsamples a 2D image by summing over rescale x rescale blocks. Pad by prop_pad 
@@ -1235,7 +1233,7 @@ def downsample_image(image, rescale, prop_pad=0.2):
     """
     from skimage.measure import block_reduce
 
-    if rescale <=1:
+    if rescale <=1 and prop_pad == 0:
         return image
     else:
         # Original dimensions

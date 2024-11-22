@@ -68,7 +68,7 @@ output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
-missing_idxs_to_fill = [4]
+missing_idxs_to_fill = [5]
 # missing_idxs_to_fill = [3]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
@@ -601,7 +601,6 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     """
-    logging.warning('Running registration')
     reg = nighres.registration.embedded_antspy_2d_multi(
         source_images=sources,
         target_images=targets,
@@ -666,8 +665,6 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
     # Create a temporary directory for intermediate files
     temp_dir = tempfile.mkdtemp() if delete_intermediate_files else output_dir
-    logging.warning(temp_dir)
-
 
     try:
         pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, scaling_factor=scaling_factor)

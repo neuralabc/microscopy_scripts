@@ -16,6 +16,8 @@ import math
 from nighres.io import load_volume, save_volume
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+import tempfile
+
 
 #v2 still not as good as the original one!
 
@@ -600,8 +602,134 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
         return intermediate_img_np
 
 
+# same, with temporary files
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64):
+    """
+    Helper function to perform registration between source and target images using ANTsPy w/ nighres
+    """
+    logging.warning('Running registration')
+    reg = nighres.registration.embedded_antspy_2d_multi(
+        source_images=sources,
+        target_images=targets,
+        run_rigid=run_rigid,
+        run_affine=False,
+        run_syn=run_syn,
+        scaling_factor=scaling_factor,
+        cost_function='MutualInformation',
+        interpolation='Linear',
+        regularization='High',
+        convergence=1e-6,
+        mask_zero=False,
+        ignore_affine=False, 
+        ignore_orient=False, 
+        ignore_res=False,
+        save_data=True, 
+        overwrite=True,
+        file_name=file_name, 
+        output_dir=output_dir
+    )
+    return reg
 
-def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',nonlin_interp_max_workers=1):
+def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
+                               reg_refinement_iterations=10, output_dir='./',scaling_factor=64):
+    """
+    Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
+    through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
+    average. Intermediate registration files can be saved or cleaned up based on user preference.
+
+    Parameters:
+    -----------
+    pre_img : str
+        File path to the image preceding the current slice.
+    post_img : str
+        File path to the image following the current slice.
+    current_img : str, optional
+        File path to the current slice image to be refined against the computed average. If None, no refinement is performed. Default is None.
+    idx : int, optional
+        Index of the current slice in the processing sequence. Returned with the result if provided. Default is None.
+    delete_intermediate_files : bool, optional
+        If True, temporary files generated during the registration process are deleted after execution. 
+        If False, files are retained in the specified output directory. Default is True.
+    reg_refinement_iterations : int, optional
+        Number of iterations to refine the computed average slice. Default is 10.
+    output_dir : str, optional
+        Directory where intermediate files are saved if delete_intermediate_files is False. Default is './'.
+    scaling_factor: int, optional
+        Scaling factor for the image resolution during registration. Default is 64 but this will fail with low resolution images
+
+    Returns:
+    --------
+    numpy.ndarray or tuple
+        If `idx` is None, returns the interpolated slice as a 3D NumPy array.
+        If `idx` is provided, returns a tuple `(idx, interpolated_slice)` where `interpolated_slice` is the 3D NumPy array.
+
+    Notes:
+    ------
+    - The function leverages `nighres.registration.embedded_antspy_2d_multi` for registration tasks.
+    - Intermediate slices are iteratively refined by registering the input slices to the computed average and updating it.
+    - Temporary files are managed to ensure efficient disk usage unless explicitly retained.
+    """
+
+    # Create a temporary directory for intermediate files
+    temp_dir = tempfile.mkdtemp() if delete_intermediate_files else output_dir
+    logging.warning(temp_dir)
+
+
+    try:
+        pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, scaling_factor=scaling_factor)
+        post_pre = do_reg([post_img], [pre_img], file_name='post_pre', output_dir=temp_dir, scaling_factor=scaling_factor)
+
+        reg_pre = pre_post['transformed_source']
+        reg_post = post_pre['transformed_source']
+
+        # Compute averages in slice space
+        img = load_volume(reg_pre)
+        avg_post = (img.get_fdata() + load_volume(post_img).get_fdata()) / 2
+
+        img = load_volume(reg_post)
+        avg_pre = (img.get_fdata() + load_volume(pre_img).get_fdata()) / 2
+
+        avg = (avg_pre + avg_post) / 2
+        avg = nibabel.Nifti1Image(avg, img.affine, img.header, dtype=img.get_data_dtype())
+
+        avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
+        save_volume(avg_fname, avg, overwrite_file=True)
+
+        # Refinement loop
+        for refinement_iter in range(reg_refinement_iterations):
+
+            pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, scaling_factor=scaling_factor)
+            post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, scaling_factor=scaling_factor)
+
+            img1 = load_volume(pre_avg['transformed_source'])
+            img2 = load_volume(post_avg['transformed_source'])
+
+            avg = (img1.get_fdata() + img2.get_fdata()) / 2
+            avg = nibabel.Nifti1Image(avg, img1.affine, img1.header, dtype=img1.get_data_dtype())
+            save_volume(avg_fname, avg, overwrite_file=True)
+
+        # If current_img is provided, refine it to match the final average
+        if current_img is not None:
+            current_avg = load_volume(do_reg([current_img], [avg_fname], file_name='current_avg', run_syn=True, output_dir=temp_dir)['transformed_source'])
+        else:
+            current_avg = avg
+
+        # Return the result
+        if idx is not None:
+            return idx, current_avg.get_fdata()
+        else:
+            return current_avg.get_fdata()
+
+    finally:
+        # Cleanup temporary files
+        if delete_intermediate_files:
+            shutil.rmtree(temp_dir)
+        else:
+            logging.warning(f"Temporary files for slice interpolation saved in: {temp_dir}")
+
+
+def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',
+                            nonlin_interp_max_workers=1,scaling_factor=64):
     """
     Parallelized generation of missing slices in a histology stack by interpolating between adjacent slices using specified methods. 
     This function supports simple averaging or advanced interpolation using non-linear transformations, making it 
@@ -684,12 +812,13 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                 else:
                     img_fname_current=None
 
+                    #previously, was compute_intermediate_non_linear_slice,
                 futures.append(executor.submit(
-                    compute_intermediate_non_linear_slice,
+                    compute_intermediate_slice,
                     pre_img=img_fname_pre,
                     post_img=img_fname_post,
                     current_img=img_fname_current,
-                    idx=idx
+                    idx=idx,scaling_factor=scaling_factor,
                 ))
             for future in as_completed(futures):
                 try:
@@ -699,6 +828,10 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     logging.warning(f'\t\tParallel slice generation completed for slice: {the_idx}')
                 except Exception as e:
                     logging.warning('Parallel slice generation failed: {e}')
+                    logging.warning(img_fname_pre)
+                    logging.warning(img_fname_post)
+                    logging.warning(img_fname_current)
+                    logging.warning("=============== CHECK THAT YOUR scaling_factor IS APPROPRIATE FOR YOUR IMAGE RESOLUTION ===============")
         idxs_order = numpy.argsort(the_idxs)
         sorted_slices = [the_slices[i] for i in idxs_order]
         missing_slices_interpolated= numpy.stack(sorted_slices, axis=-1) #reorder based on the indices that were passed
@@ -707,7 +840,8 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
     return missing_slices_interpolated
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
-                                per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median',nonlin_interp_max_workers=1):
+                                per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
+                                ,nonlin_interp_max_workers=1,scaling_factor=64):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -827,7 +961,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
                                                                   missing_fnames_post,
                                                                   method='intermediate_nonlin_mean',
-                                                                  nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                                                  nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                                  scaling_factor=scaling_factor))
 
             
             #now we can fill the slices with the interpolated value
@@ -1562,7 +1697,7 @@ run_cascading_coregistrations(output_dir, subject,
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
                                 per_slice_template=True,
-                                missing_idxs_to_fill=missing_idxs_to_fill,slice_template_type='nochange')
+                                missing_idxs_to_fill=missing_idxs_to_fill,slice_template_type='nochange',scaling_factor=scaling_factor)
 
 ## ****************************** Iteration 1
 # in all cases, we go:

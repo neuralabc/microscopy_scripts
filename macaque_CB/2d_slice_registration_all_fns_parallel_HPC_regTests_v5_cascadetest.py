@@ -377,12 +377,6 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         if closest_slice is None:
             raise ValueError("No valid start slice index found in the stack.")
         anchor_slice_idx = closest_slice
-
-    # if missing_idxs_to_fill is not None:
-    #     while anchor_slice_idx in missing_idxs_to_fill:
-    #         anchor_slice_idx -= 1
-    #         if anchor_slice_idx < 0:
-    #             raise ValueError("No valid start slice index found in the stack.")
     
     # list of what our outputs will be 
     all_image_fnames_new = []
@@ -831,6 +825,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     logging.warning(img_fname_pre)
                     logging.warning(img_fname_post)
                     logging.warning(img_fname_current)
+                    logging.warning(f'scaling_factor = {scaling_factor}')
                     logging.warning("=============== CHECK THAT YOUR scaling_factor IS APPROPRIATE FOR YOUR IMAGE RESOLUTION ===============")
         idxs_order = numpy.argsort(the_idxs)
         sorted_slices = [the_slices[i] for i in idxs_order]
@@ -962,7 +957,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                                                   missing_fnames_post,
                                                                   method='intermediate_nonlin_mean',
                                                                   nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                  scaling_factor=scaling_factor))
+                                                                  scaling_factor=scaling_factor)
 
             
             #now we can fill the slices with the interpolated value
@@ -1072,7 +1067,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 interp_template_slices = generate_missing_slices(missing_fnames_pre_1,missing_fnames_post_1,
                                                                  current_fnames=template_nonlin_list[1:-1],
                                                                  method='intermediate_nonlin_mean',
-                                                                 nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                                                 nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                                 scaling_factor=scaling_factor)
 
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
@@ -1663,7 +1659,8 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
                                     
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
-                                       missing_idxs_to_fill=missing_idxs_to_fill)
+                                       missing_idxs_to_fill=missing_idxs_to_fill,
+                                       scaling_factor=scaling_factor)
 
 ## loop over cascades to see what this does for us
 # iter_tag = ""
@@ -1685,7 +1682,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 
 #     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
 #                                         per_slice_template=True,
-#                                         missing_idxs_to_fill=missing_idxs_to_fill)
+#                                         missing_idxs_to_fill=missing_idxs_to_fill,scaling_factor=scaling_factor)
 
 input_source_file_tag = 'coreg0nl'
 reg_level_tag = "coreg0nl_cascade"

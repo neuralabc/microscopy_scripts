@@ -430,7 +430,8 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
         if run_syn:
             pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
-                                                   type_of_transform='SyNOnly') #),
+                                                   type_of_transform='SyNOnly',
+                                                   initial_transform='Identity') #),
                                                 #    flow_sigma=syn_flow_sigma,
                                                 #    total_sigma=syn_total_sigma) # run nonlin only
             warpedmovout = pre_to_post_nonlin['warpedmovout']
@@ -517,8 +518,10 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
     # # Step 3: Perform non-linear registration on the rigidly aligned images
     # we use full syn b/c we actually want the intermediate image to be the size in between the two (so include affine here)
-    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyNOnly') #here we do full SyN, effectively rigid + affine + nonlin 
-    post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyNOnly')
+    pre_to_post_nonlin = ants.registration(fixed=post_aligned, moving=pre_aligned, type_of_transform='SyNOnly',
+                                           initial_transform='Identity') #must select identity as initial transform since we already did rigid
+    post_to_pre_nonlin = ants.registration(fixed=pre_aligned, moving=post_aligned, type_of_transform='SyNOnly',
+                                           initial_transform='Identity')
 
     # Step 4: Load the non-linear deformation fields as images
     # https://antspy.readthedocs.io/en/latest/registration.html #for reference
@@ -554,8 +557,10 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
         # # Step 3: Perform non-linear registration on the rigidly aligned images
         # we use full syn b/c we actually want the intermediate image to be the size in between the two (so include affine here)
-        pre_to_post_nonlin = ants.registration(fixed=intermediate_img, moving=pre_aligned, type_of_transform='SyNOnly')
-        post_to_pre_nonlin = ants.registration(fixed=intermediate_img, moving=post_aligned, type_of_transform='SyNOnly')
+        pre_to_post_nonlin = ants.registration(fixed=intermediate_img, moving=pre_aligned, type_of_transform='SyNOnly',
+                                               initial_transform='Identity')
+        post_to_pre_nonlin = ants.registration(fixed=intermediate_img, moving=post_aligned, type_of_transform='SyNOnly',
+                                               initial_transform='Identity')
 
         # Step 4: Load the deformed images
         pre_to_post_img = pre_to_post_nonlin['warpedmovout']
@@ -583,7 +588,8 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
             
             ## TODO: uncertain if this is necessary, as incorporating the nonlin step here may hurt more than help, since we are deforming to the intermediate img
             #nonlin
-            current_to_template_nonlin = ants.registration(fixed=new_image,moving=current_aligned_rigid,type_of_transform='SyNOnly')
+            current_to_template_nonlin = ants.registration(fixed=new_image,moving=current_aligned_rigid,type_of_transform='SyNOnly',
+                                                           initial_transform='Identity')
             new_intermediate_img = current_to_template_nonlin['warpedmovout']
                 
             intermediate_img_np = new_intermediate_img.numpy()

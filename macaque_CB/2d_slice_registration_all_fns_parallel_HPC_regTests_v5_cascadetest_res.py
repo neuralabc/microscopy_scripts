@@ -687,7 +687,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         avg_pre = (img.get_fdata() + load_volume(pre_img).get_fdata()) / 2
 
         avg = (avg_pre + avg_post) / 2
-        avg = nibabel.Nifti1Image(avg, affine=None, header=img.header, dtype=img.get_data_dtype())
+        avg = nibabel.Nifti1Image(avg, affine=img.affine, header=img.header, dtype=img.get_data_dtype())
 
         avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
         save_volume(avg_fname, avg, overwrite_file=True)
@@ -702,7 +702,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             img2 = load_volume(post_avg['transformed_source'])
 
             avg = (img1.get_fdata() + img2.get_fdata()) / 2
-            avg = nibabel.Nifti1Image(avg, affine=None, header=img1.header, dtype=img1.get_data_dtype())
+            avg = nibabel.Nifti1Image(avg, affine=img1.affine, header=img1.header, dtype=img1.get_data_dtype())
             save_volume(avg_fname, avg, overwrite_file=True)
 
         # If current_img is provided, refine it to match the final average
@@ -970,7 +970,13 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 interp_slice = missing_slices_interpolated[...,idx]
                 header = nibabel.Nifti1Header()
                 header.set_data_shape(interp_slice.shape)
-                nifti = nibabel.Nifti1Image(interp_slice,affine=None,header=header)
+                
+                affine = create_affine(slice_img.shape)
+                affine[0,0] = in_plane_res_x/1000
+                affine[1,1] = in_plane_res_y/1000
+                affine[2,2] = in_plane_res_z/1000
+                
+                nifti = nibabel.Nifti1Image(interp_slice,affine=affine,header=header)
                 nifti.update_header()
                 save_volume(missing_fname,nifti)
                 # print(idx)
@@ -982,7 +988,12 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         header = nibabel.Nifti1Header()
         header.set_data_shape(img.shape)
         
-        nifti = nibabel.Nifti1Image(img,affine=None,header=header)
+        affine = create_affine(img.shape)
+        affine[0,0] = in_plane_res_x/1000
+        affine[1,1] = in_plane_res_y/1000
+        affine[2,2] = in_plane_res_z/1000
+        
+        nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(img_stack,nifti)
 
         ## if requested, we output templates for each slice based on the median of the surrounding slices (-1,1)
@@ -1009,7 +1020,11 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.median(img[...,start:stop],axis=-1)
             
                     header.set_data_shape(slice_template.shape)
-                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    affine = create_affine(slice_template.shape)
+                    affine[0,0] = in_plane_res_x/1000
+                    affine[1,1] = in_plane_res_y/1000
+                    affine[2,2] = in_plane_res_z/1000
+                    nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
                     template_list.append(slice_template_fname)            
@@ -1031,7 +1046,11 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.mean(img[...,start:stop],axis=-1)
             
                     header.set_data_shape(slice_template.shape)
-                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    affine = create_affine(slice_template.shape)
+                    affine[0,0] = in_plane_res_x/1000
+                    affine[1,1] = in_plane_res_y/1000
+                    affine[2,2] = in_plane_res_z/1000
+                    nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
                     template_list.append(slice_template_fname)      
@@ -1043,7 +1062,11 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_nochange_tail
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
-                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    affine = create_affine(slice_template.shape)
+                    affine[0,0] = in_plane_res_x/1000
+                    affine[1,1] = in_plane_res_y/1000
+                    affine[2,2] = in_plane_res_z/1000
+                    nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
                     template_list.append(slice_template_fname)    
@@ -1059,7 +1082,11 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template = img[...,idx]
 
                     header.set_data_shape(slice_template.shape)
-                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    affine = create_affine(slice_template.shape)
+                    affine[0,0] = in_plane_res_x/1000
+                    affine[1,1] = in_plane_res_y/1000
+                    affine[2,2] = in_plane_res_z/1000
+                    nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
                     template_nonlin_list.append(slice_template_fname)
@@ -1076,20 +1103,24 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
                 img[...,1:-1] = interp_template_slices
-                nifti = nibabel.Nifti1Image(img,affine=None,header=header)
+                nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
                 save_volume(img_stack_nonlin,nifti)
 
                 #save them as their own individual templates, saving over the original ones that were not yet interpolated
                 for idx,slice_template_fname_nonlin in enumerate(template_nonlin_list):
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
-                    nifti = nibabel.Nifti1Image(slice_template,affine=None,header=header)
+                    affine = create_affine(slice_template.shape)
+                    affine[0,0] = in_plane_res_x/1000
+                    affine[1,1] = in_plane_res_y/1000
+                    affine[2,2] = in_plane_res_z/1000
+                    nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname_nonlin,nifti)
             
         #now save the single template (as a median only)
         img = numpy.median(img,axis=2)
-        nifti = nibabel.Nifti1Image(img,affine=None,header=header)
+        nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(template,nifti)
         print('Stacking: done - {}'.format(template))
     

@@ -68,7 +68,7 @@ output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
-missing_idxs_to_fill = [32]
+missing_idxs_to_fill = [5,32]
 # missing_idxs_to_fill = [3]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
@@ -628,7 +628,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     return reg
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=10, output_dir='./',scaling_factor=64):
+                               reg_refinement_iterations=3, output_dir='./',scaling_factor=64):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 

@@ -46,6 +46,9 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
+mask_zero = True #mask zeros for nighres registrations
+# TODO: NOT PULLED INTO ALL FUNCTIONS YET
+
 # rescale=5 #larger scale means that you have to change the scaling_factor
 # scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
 rescale=40
@@ -65,7 +68,7 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v2/'
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -604,7 +607,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
 
 # same, with temporary files
-def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64):
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     """
@@ -619,7 +622,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         interpolation='Linear',
         regularization='High',
         convergence=1e-6,
-        mask_zero=False,
+        mask_zero=mask_zero,
         ignore_affine=False, 
         ignore_orient=False, 
         ignore_res=False,
@@ -631,7 +634,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     return reg
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=3, output_dir='./',scaling_factor=64):
+                               reg_refinement_iterations=3, output_dir='./',scaling_factor=64, mask_zero=False):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
@@ -676,8 +679,10 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     delete_intermediate_files = False
 
     try:
-        pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, scaling_factor=scaling_factor)
-        post_pre = do_reg([post_img], [pre_img], file_name='post_pre', output_dir=temp_dir, scaling_factor=scaling_factor)
+        pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, 
+                          scaling_factor=scaling_factor,mask_zero=mask_zero)
+        post_pre = do_reg([post_img], [pre_img], file_name='post_pre', output_dir=temp_dir, 
+                          scaling_factor=scaling_factor,mask_zero=mask_zero)
 
         reg_pre = pre_post['transformed_source']
         reg_post = post_pre['transformed_source']
@@ -698,8 +703,10 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         # Refinement loop
         for refinement_iter in range(reg_refinement_iterations):
 
-            pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, scaling_factor=scaling_factor)
-            post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, scaling_factor=scaling_factor)
+            pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
+                             scaling_factor=scaling_factor,mask_zero=mask_zero)
+            post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
+                              scaling_factor=scaling_factor,mask_zero=mask_zero)
 
             img1 = load_volume(pre_avg['transformed_source'])
             img2 = load_volume(post_avg['transformed_source'])
@@ -710,7 +717,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
         # If current_img is provided, refine it to match the final average
         if current_img is not None:
-            current_avg = nibabel.load(do_reg([current_img], [avg_fname], file_name='current_avg', run_syn=True, output_dir=temp_dir)['transformed_source'])
+            current_avg = nibabel.load(do_reg([current_img], [avg_fname], file_name='current_avg', run_syn=True, 
+                                              output_dir=temp_dir)['transformed_source'],mask_zero=mask_zero)
         else:
             current_avg = avg
 
@@ -729,7 +737,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
 
 def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',
-                            nonlin_interp_max_workers=1,scaling_factor=64):
+                            nonlin_interp_max_workers=1,scaling_factor=64,mask_zero=False):
     """
     Parallelized generation of missing slices in a histology stack by interpolating between adjacent slices using specified methods. 
     This function supports simple averaging or advanced interpolation using non-linear transformations, making it 
@@ -819,6 +827,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     post_img=img_fname_post,
                     current_img=img_fname_current,
                     idx=idx,scaling_factor=scaling_factor,
+                    mask_zero=mask_zero
                 ))
             for future in as_completed(futures):
                 try:
@@ -842,7 +851,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
-                                ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None):
+                                ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -970,7 +979,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                                                   missing_fnames_post,
                                                                   method='intermediate_nonlin_mean',
                                                                   nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                  scaling_factor=scaling_factor)
+                                                                  scaling_factor=scaling_factor,mask_zero=mask_zero)
 
             
             #now we can fill the slices with the interpolated value
@@ -1108,7 +1117,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                                                  current_fnames=template_nonlin_list[1:-1],
                                                                  method='intermediate_nonlin_mean',
                                                                  nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                 scaling_factor=scaling_factor)
+                                                                 scaling_factor=scaling_factor,mask_zero=mask_zero)
 
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
@@ -1701,7 +1710,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
                     interpolation='Linear',
                     regularization='High',
                     convergence=1e-6,
-                    mask_zero=False,
+                    mask_zero=mask_zero,
                     ignore_affine=False, ignore_orient=False, ignore_res=False,
                     save_data=True, overwrite=False,
                     file_name=output
@@ -1711,7 +1720,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                        missing_idxs_to_fill=missing_idxs_to_fill,
-                                       scaling_factor=scaling_factor,voxel_res=None)
+                                       scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
 
 ## loop over cascades to see what this does for us
 iter_tag = ""
@@ -1724,16 +1733,16 @@ for iter in range(num_cascade_iterations):
 
     else:
         input_source_file_tag = iter_tag #updates with the previous iteration
-    iter_tag = f'_cascade_{iter}'
+    iter_tag = f'cascade_{iter}'
     run_cascading_coregistrations(output_dir, subject, 
                                 all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
                                 missing_idxs_to_fill = missing_idxs_to_fill, 
                                 zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-                                reg_level_tag=iter_tag, previous_target_tag=None, run_syn=False)
+                                reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True)
 
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
-                                        per_slice_template=True,
-                                        missing_idxs_to_fill=missing_idxs_to_fill,scaling_factor=scaling_factor)
+                                        per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
+                                        scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
 
 # input_source_file_tag = 'coreg0nl'
 # reg_level_tag = "coreg0nl_cascade"

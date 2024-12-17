@@ -46,6 +46,8 @@ slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
     
+mask_zero = True #mask zero values in the images when using all nighres registrations
+
 # rescale=5 #larger scale means that you have to change the scaling_factor
 # scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
 rescale=40
@@ -601,7 +603,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
 
 # same, with temporary files
-def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64):
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     """
@@ -616,7 +618,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         interpolation='Linear',
         regularization='High',
         convergence=1e-6,
-        mask_zero=False,
+        mask_zero=mask_zero,
         ignore_affine=False, 
         ignore_orient=False, 
         ignore_res=False,
@@ -1659,7 +1661,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
                     interpolation='Linear',
                     regularization='High',
                     convergence=1e-6,
-                    mask_zero=False,
+                    mask_zero=mask_zero,
                     ignore_affine=False, ignore_orient=False, ignore_res=False,
                     save_data=True, overwrite=False,
                     file_name=output

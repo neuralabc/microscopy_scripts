@@ -51,8 +51,11 @@ if use_nonlin_slice_templates:
 rescale=40
 scaling_factor=16
 #based on the rescale value, we adjust our in-plane resolution
-in_plane_res_x = rescale*in_plane_res_x
-in_plane_res_y = rescale*in_plane_res_y
+in_plane_res_x = rescale*in_plane_res_x/1000
+in_plane_res_y = rescale*in_plane_res_y/1000
+in_plane_res_z = in_plane_res_z/1000
+
+voxel_res = [in_plane_res_x,in_plane_res_y,in_plane_res_z]
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
@@ -355,8 +358,8 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         # if regularization == 'Low': syn_param = [0.2, 1.0, 0.0]
         # elif regularization == 'Medium': syn_param = [0.2, 3.0, 0.0]
         # elif regularization == 'High': syn_param = [0.2, 4.0, 3.0]
-    syn_flow_sigma = 3 #3 is the default w/ this ants.registration call
-    syn_total_sigma = 1 #0 is the default w/ this ants.registration call
+    syn_flow_sigma = 4.0 #3 is the default w/ this ants.registration call
+    syn_total_sigma = 3.0 #0 is the default w/ this ants.registration call
 
     import ants
 
@@ -431,9 +434,9 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         if run_syn:
             pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
                                                    type_of_transform='SyNOnly',
-                                                   initial_transform='Identity') #),
-                                                #    flow_sigma=syn_flow_sigma,
-                                                #    total_sigma=syn_total_sigma) # run nonlin only
+                                                   initial_transform='Identity', #) #),
+                                                   flow_sigma=syn_flow_sigma,
+                                                   total_sigma=syn_total_sigma)
             warpedmovout = pre_to_post_nonlin['warpedmovout']
 
             ants.image_write(warpedmovout, output)
@@ -839,7 +842,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
-                                ,nonlin_interp_max_workers=1,scaling_factor=64):
+                                ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -856,6 +859,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         slice_template_type (str or list, optional): Specifies the method for generating the slice templates. Can be 'nochange', 'mean', 'median' (only one of these) 'nonlin', or a list of these methods (default is 'median').
                                                     'nochange' saves the deformed slice as the template
         nonlin_interp_max_workers (int, optional): Number of workers to use for parallelized non-linear interpolation (default is 1).
+        scaling_factor (int, optional): Scaling factor for registrations (default is 64)
+        voxel_res (tuple, optional): Voxel resolution of the images (default is None).
 
     Returns:
         str or list: The filename(s) of the generated template(s). If `per_slice_template` is True, a list of template filenames (both median and non-linear templates) is returned. Otherwise, the filename of the median template is returned.
@@ -895,6 +900,10 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
     """
     
     #we can also output a per_slice_template based on the median of the current and neighbouring slices
+    
+    if voxel_res is None:
+        voxel_res = [1.0,1.0,1.0]
+
     stack = []
     stack_tail = f'_{reg_level_tag}_stack.nii.gz'
     img_stack = output_dir+subject+stack_tail
@@ -973,9 +982,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 header.set_data_shape(interp_slice.shape)
                 
                 affine = create_affine(interp_slice.shape)
-                affine[0,0] = in_plane_res_x/1000
-                affine[1,1] = in_plane_res_y/1000
-                affine[2,2] = in_plane_res_z/1000
+                affine[0,0] = voxel_res[0]
+                affine[1,1] = voxel_res[1]
+                affine[2,2] = voxel_res[2]
                 
                 nifti = nibabel.Nifti1Image(interp_slice,affine=affine,header=header)
                 nifti.update_header()
@@ -990,9 +999,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         header.set_data_shape(img.shape)
         
         affine = create_affine(img.shape)
-        affine[0,0] = in_plane_res_x/1000
-        affine[1,1] = in_plane_res_y/1000
-        affine[2,2] = in_plane_res_z/1000
+        affine[0,0] = voxel_res[0]
+        affine[1,1] = voxel_res[1]
+        affine[2,2] = voxel_res[2]
         
         nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(img_stack,nifti)
@@ -1022,9 +1031,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = in_plane_res_x/1000
-                    affine[1,1] = in_plane_res_y/1000
-                    affine[2,2] = in_plane_res_z/1000
+                    affine[0,0] = voxel_res[0]
+                    affine[1,1] = voxel_res[1]
+                    affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1048,9 +1057,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = in_plane_res_x/1000
-                    affine[1,1] = in_plane_res_y/1000
-                    affine[2,2] = in_plane_res_z/1000
+                    affine[0,0] = voxel_res[0]
+                    affine[1,1] = voxel_res[1]
+                    affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1064,9 +1073,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = in_plane_res_x/1000
-                    affine[1,1] = in_plane_res_y/1000
-                    affine[2,2] = in_plane_res_z/1000
+                    affine[0,0] = voxel_res[0]
+                    affine[1,1] = voxel_res[1]
+                    affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1084,9 +1093,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = in_plane_res_x/1000
-                    affine[1,1] = in_plane_res_y/1000
-                    affine[2,2] = in_plane_res_z/1000
+                    affine[0,0] = voxel_res[0]
+                    affine[1,1] = voxel_res[1]
+                    affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1112,9 +1121,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = in_plane_res_x/1000
-                    affine[1,1] = in_plane_res_y/1000
-                    affine[2,2] = in_plane_res_z/1000
+                    affine[0,0] = voxel_res[0]
+                    affine[1,1] = voxel_res[1]
+                    affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname_nonlin,nifti)
@@ -1632,10 +1641,11 @@ for idx,img_orig in enumerate(all_image_fnames):
             header = nibabel.Nifti1Header()
             header.set_data_shape(slice_img.shape)
             
+            #do not set the res (zooms) the first time
             affine = create_affine(slice_img.shape)
-            affine[0,0] = in_plane_res_x/1000
-            affine[1,1] = in_plane_res_y/1000
-            affine[2,2] = in_plane_res_z/1000
+            affine[0,0] = 1
+            affine[1,1] = 1
+            affine[2,2] = 1
              
             nifti = nibabel.Nifti1Image(slice_img,affine=affine,header=header)
             nifti.update_header()
@@ -1701,7 +1711,7 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                        missing_idxs_to_fill=missing_idxs_to_fill,
-                                       scaling_factor=scaling_factor)
+                                       scaling_factor=scaling_factor,voxel_res=None)
 
 ## loop over cascades to see what this does for us
 iter_tag = ""

@@ -1719,7 +1719,7 @@ for iter in range(num_cascade_iterations):
                                 all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
                                 missing_idxs_to_fill = missing_idxs_to_fill, 
                                 zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-                                reg_level_tag=iter_tag, previous_target_tag=None)
+                                reg_level_tag=iter_tag, previous_target_tag=None, run_syn=False)
 
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                         per_slice_template=True,

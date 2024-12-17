@@ -64,16 +64,16 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test/'
 # _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
-missing_idxs_to_fill = [5,32]
+# missing_idxs_to_fill = [5,32]
 # missing_idxs_to_fill = [3]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[0:50] #for testing
+# all_image_fnames = all_image_fnames[0:50] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -885,6 +885,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 - `'mean'`: The mean of the current and neighboring slices.
                 - `'median'`: The median of the current and neighboring slices.
                 - `'nonlin'`: A non-linear version of the template using the 'intermediate_nonlin_mean' method.
+                - `'nochange'`: The deformed slice itself as the template
             
         5. **Saving Slice Templates**:
             - If `per_slice_template` is set to True, templates for each slice are saved individually, both for median and non-linear methods, as applicable.
@@ -971,7 +972,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 header = nibabel.Nifti1Header()
                 header.set_data_shape(interp_slice.shape)
                 
-                affine = create_affine(slice_img.shape)
+                affine = create_affine(interp_slice.shape)
                 affine[0,0] = in_plane_res_x/1000
                 affine[1,1] = in_plane_res_y/1000
                 affine[2,2] = in_plane_res_z/1000
@@ -1703,38 +1704,38 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
                                        scaling_factor=scaling_factor)
 
 ## loop over cascades to see what this does for us
-# iter_tag = ""
-# num_cascade_iterations = 5
-# anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
-# anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
-# for iter in range(num_cascade_iterations):
-#     if iter == 0:
-#         input_source_file_tag = 'coreg0nl'
+iter_tag = ""
+num_cascade_iterations = 5
+anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
+anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
+for iter in range(num_cascade_iterations):
+    if iter == 0:
+        input_source_file_tag = 'coreg0nl'
 
-#     else:
-#         input_source_file_tag = iter_tag #updates with the previous iteration
-#     iter_tag = f'_cascade_{iter}'
-#     run_cascading_coregistrations(output_dir, subject, 
-#                                 all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
-#                                 missing_idxs_to_fill = missing_idxs_to_fill, 
-#                                 zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-#                                 reg_level_tag=iter_tag, previous_target_tag=None)
+    else:
+        input_source_file_tag = iter_tag #updates with the previous iteration
+    iter_tag = f'_cascade_{iter}'
+    run_cascading_coregistrations(output_dir, subject, 
+                                all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
+                                missing_idxs_to_fill = missing_idxs_to_fill, 
+                                zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                                reg_level_tag=iter_tag, previous_target_tag=None)
 
-#     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
-#                                         per_slice_template=True,
-#                                         missing_idxs_to_fill=missing_idxs_to_fill,scaling_factor=scaling_factor)
+    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
+                                        per_slice_template=True,
+                                        missing_idxs_to_fill=missing_idxs_to_fill,scaling_factor=scaling_factor)
 
-input_source_file_tag = 'coreg0nl'
-reg_level_tag = "coreg0nl_cascade"
-run_cascading_coregistrations(output_dir, subject, 
-                              all_image_fnames, anchor_slice_idx = None, 
-                              missing_idxs_to_fill = missing_idxs_to_fill, 
-                              zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-                              reg_level_tag=reg_level_tag, previous_target_tag=None,run_syn=False)
+# input_source_file_tag = 'coreg0nl'
+# reg_level_tag = "coreg0nl_cascade"
+# run_cascading_coregistrations(output_dir, subject, 
+#                               all_image_fnames, anchor_slice_idx = None, 
+#                               missing_idxs_to_fill = missing_idxs_to_fill, 
+#                               zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+#                               reg_level_tag=reg_level_tag, previous_target_tag=None,run_syn=False)
 
-template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
-                                per_slice_template=True,
-                                missing_idxs_to_fill=missing_idxs_to_fill,slice_template_type='nochange',scaling_factor=scaling_factor)
+# template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
+#                                 per_slice_template=True,
+#                                 missing_idxs_to_fill=missing_idxs_to_fill,slice_template_type='nochange',scaling_factor=scaling_factor)
 
 ## ****************************** Iteration 1
 # in all cases, we go:

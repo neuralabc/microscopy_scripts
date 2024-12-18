@@ -51,8 +51,9 @@ mask_zero = True #mask zeros for nighres registrations
 
 # rescale=5 #larger scale means that you have to change the scaling_factor
 # scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
-rescale=20
-scaling_factor=16
+rescale=40
+scaling_factor=8
+
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
 in_plane_res_y = rescale*in_plane_res_y/1000
@@ -60,8 +61,7 @@ in_plane_res_z = in_plane_res_z/1000
 
 actual_voxel_res = [in_plane_res_x,in_plane_res_y,in_plane_res_z]
 #if we don't want to set the voxel resolution, we can set it to None and it will be 1x1x1
-# voxel_res = None # registration performs much better when we do not specify the res
-voxel_res = actual_voxel_res
+voxel_res = None # registration performs much better when we do not specify the res
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
@@ -78,11 +78,11 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [5,32]
-missing_idxs_to_fill = [5]
+# missing_idxs_to_fill = [5]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[155:165] #for testing
+# all_image_fnames = all_image_fnames[155:165] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -454,16 +454,6 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
                                   mask_zero=mask_zero):
-  
-    # params for regularization of nonlinear deformations w/ 'SyNOnly'
-        # from nighres, the last two numbers of the syn_param correspond to the flow and total sigmas (fluid and elastic deformations, respectively)
-        # if regularization == 'Low': syn_param = [0.2, 1.0, 0.0]
-        # elif regularization == 'Medium': syn_param = [0.2, 3.0, 0.0]
-        # elif regularization == 'High': syn_param = [0.2, 4.0, 3.0]
-    syn_flow_sigma = 4.0 #3 is the default w/ this ants.registration call
-    syn_total_sigma = 3.0 #0 is the default w/ this ants.registration call
-
-    import ants
 
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
@@ -794,9 +784,10 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
             avg = (img1.get_fdata() + img2.get_fdata()) / 2
             
-            #on the last iteration, we do not compute the average but rather the first image in the average space to reduce overlap errors
-            if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):
-                avg = img1.get_fdata()
+            # XXX if the coregs are not stable, can fix this by changing this here XXX
+            # #on the last iteration, we do not compute the average but rather the first image in the average space to reduce overlap errors
+            # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):
+            #     avg = img1.get_fdata()
 
             avg = nibabel.Nifti1Image(avg, affine=img1.affine, header=img1.header, dtype=img1.get_data_dtype())
             save_volume(avg_fname, avg, overwrite_file=True)

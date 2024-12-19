@@ -1823,7 +1823,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 
 ## loop over cascades to see what this does for us
 iter_tag = ""
-num_cascade_iterations = 5
+num_cascade_iterations = 1
 anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
 anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
 for iter in range(num_cascade_iterations):

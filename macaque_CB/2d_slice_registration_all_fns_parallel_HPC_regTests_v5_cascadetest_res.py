@@ -751,8 +751,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     if temp_dir[-1] is not os.sep:
         temp_dir += os.sep
     
-    # OVERRIDE SO THAT TEMP FILES GO INTO CURRENT DIR
-    temp_dir = "./"
+    # # OVERRIDE SO THAT TEMP FILES GO INTO CURRENT DIR
+    # temp_dir = "./"
     
     # output_dir = './'
     # delete_intermediate_files = False
@@ -814,11 +814,13 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             return current_avg.get_fdata()
 
     finally:
-        # Cleanup temporary files
-        if delete_intermediate_files:
-            shutil.rmtree(temp_dir)
-        else:
-            logging.warning(f"Temporary files for slice interpolation saved in: {temp_dir}")
+        logging.warning(f"Temporary files for slice interpolation saved in: {temp_dir}")
+    # finally:
+    #     # Cleanup temporary files
+    #     if delete_intermediate_files:
+    #         shutil.rmtree(temp_dir)
+    #     else:
+    #         logging.warning(f"Temporary files for slice interpolation saved in: {temp_dir}")
 
 
 def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',

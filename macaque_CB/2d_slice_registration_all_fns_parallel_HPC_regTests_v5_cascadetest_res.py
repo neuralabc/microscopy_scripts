@@ -1940,12 +1940,12 @@ for iter in range(num_reg_iterations):
         template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                             zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                            scaling_factor=scaling_factor, nonlin_interp_max_workers=1)
     else:
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                             zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=1)
     if use_nonlin_slice_templates:
         template = template_nonlin
     # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template

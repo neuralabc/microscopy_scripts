@@ -748,6 +748,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
     # Create a temporary directory for intermediate files
     temp_dir = tempfile.mkdtemp() if delete_intermediate_files else output_dir
+    if temp_dir[-1] is not os.sep:
+        temp_dir += os.sep
     # output_dir = './'
     # delete_intermediate_files = False
 

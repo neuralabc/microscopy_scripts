@@ -45,9 +45,9 @@ use_nonlin_slice_templates = False #use interpolated slices (from registrations 
 slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
-    
-mask_zero = True #mask zeros for nighres registrations
-# TODO: NOT PULLED INTO ALL FUNCTIONS YET?
+
+#this fails on server, for some reason?    
+mask_zero = False #mask zeros for nighres registrations
 
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 rescale=40

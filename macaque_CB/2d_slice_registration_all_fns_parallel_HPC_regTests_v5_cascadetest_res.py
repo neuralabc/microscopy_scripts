@@ -1840,8 +1840,8 @@ for iter in range(num_cascade_iterations):
         input_source_file_tag = iter_tag #updates with the previous iteration
     iter_tag = f'cascade_{iter}'
     expected_stack_fname = f'{subject}_{iter_tag}_stack.nii.gz'
-    logging.warning(f'\tIteration: {iter_tag}')
-    if os.path.isfile(expected_stack_fname):
+    logging.warning(f'\tIteration: {iter_tag} {expected_stack_fname})')
+    if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
         logging.warning('Stack exists, skipping the current cascade iteration')
     
     else:

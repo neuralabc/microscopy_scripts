@@ -748,8 +748,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
     # Create a temporary directory for intermediate files
     temp_dir = tempfile.mkdtemp() if delete_intermediate_files else output_dir
-    output_dir = './'
-    delete_intermediate_files = False
+    # output_dir = './'
+    # delete_intermediate_files = False
 
     try:
         pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, 

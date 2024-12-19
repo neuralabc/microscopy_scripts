@@ -81,7 +81,7 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-all_image_fnames = all_image_fnames[155:165] #for testing
+# all_image_fnames = all_image_fnames[155:165] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')

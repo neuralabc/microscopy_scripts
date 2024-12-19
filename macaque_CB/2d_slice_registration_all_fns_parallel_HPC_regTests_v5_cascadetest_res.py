@@ -1839,16 +1839,22 @@ for iter in range(num_cascade_iterations):
     else:
         input_source_file_tag = iter_tag #updates with the previous iteration
     iter_tag = f'cascade_{iter}'
-    run_cascading_coregistrations(output_dir, subject, 
-                                all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
-                                missing_idxs_to_fill = missing_idxs_to_fill, 
-                                zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-                                reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True,
-                                scaling_factor=scaling_factor) #,mask_zero=mask_zero)
+    expected_stack_fname = f'{subject}_{iter_tag}_stack.nii.gz'
+    logging.warning(f'\tIteration: {iter_tag}')
+    if os.path.isfile(expected_stack_fname):
+        logging.warning('Stack exists, skipping the current cascade iteration')
+    
+    else:
+        run_cascading_coregistrations(output_dir, subject, 
+                                    all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
+                                    missing_idxs_to_fill = missing_idxs_to_fill, 
+                                    zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                                    reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True,
+                                    scaling_factor=scaling_factor) #,mask_zero=mask_zero)
 
-    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
-                                        per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
-                                        scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
+        template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
+                                            per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
+                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
 
 # input_source_file_tag = 'coreg0nl'
 # reg_level_tag = "coreg0nl_cascade"

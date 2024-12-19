@@ -61,7 +61,7 @@ in_plane_res_z = in_plane_res_z/1000
 
 actual_voxel_res = [in_plane_res_x,in_plane_res_y,in_plane_res_z]
 #if we don't want to set the voxel resolution, we can set it to None and it will be 1x1x1
-voxel_res = None # registration performs much better when we do not specify the res
+voxel_res = actual_voxel_res # defines voxel resolution for output template # registration itself performs much better when we do not specify the res
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
@@ -72,10 +72,10 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v3_full/'
-# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [5,32]
 # missing_idxs_to_fill = [5]
@@ -1068,9 +1068,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 header.set_data_shape(interp_slice.shape)
                 
                 affine = create_affine(interp_slice.shape)
-                affine[0,0] = voxel_res[0]
-                affine[1,1] = voxel_res[1]
-                affine[2,2] = voxel_res[2]
+                # affine[0,0] = voxel_res[0]
+                # affine[1,1] = voxel_res[1]
+                # affine[2,2] = voxel_res[2]
                 
                 nifti = nibabel.Nifti1Image(interp_slice,affine=affine,header=header)
                 nifti.update_header()
@@ -1117,9 +1117,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = voxel_res[0]
-                    affine[1,1] = voxel_res[1]
-                    affine[2,2] = voxel_res[2]
+                    # affine[0,0] = voxel_res[0]
+                    # affine[1,1] = voxel_res[1]
+                    # affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1143,9 +1143,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = voxel_res[0]
-                    affine[1,1] = voxel_res[1]
-                    affine[2,2] = voxel_res[2]
+                    # affine[0,0] = voxel_res[0]
+                    # affine[1,1] = voxel_res[1]
+                    # affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1159,9 +1159,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = voxel_res[0]
-                    affine[1,1] = voxel_res[1]
-                    affine[2,2] = voxel_res[2]
+                    # affine[0,0] = voxel_res[0]
+                    # affine[1,1] = voxel_res[1]
+                    # affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1179,9 +1179,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
 
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = voxel_res[0]
-                    affine[1,1] = voxel_res[1]
-                    affine[2,2] = voxel_res[2]
+                    # affine[0,0] = voxel_res[0]
+                    # affine[1,1] = voxel_res[1]
+                    # affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1207,9 +1207,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
                     affine = create_affine(slice_template.shape)
-                    affine[0,0] = voxel_res[0]
-                    affine[1,1] = voxel_res[1]
-                    affine[2,2] = voxel_res[2]
+                    # affine[0,0] = voxel_res[0]
+                    # affine[1,1] = voxel_res[1]
+                    # affine[2,2] = voxel_res[2]
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname_nonlin,nifti)

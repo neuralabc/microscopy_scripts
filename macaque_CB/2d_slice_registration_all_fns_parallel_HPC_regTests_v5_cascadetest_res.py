@@ -52,7 +52,7 @@ mask_zero = True #mask zeros for nighres registrations
 # rescale=5 #larger scale means that you have to change the scaling_factor
 # scaling_factor = 64 #32 or 64 for full scaling of resolutions on the registrations
 rescale=20
-scaling_factor=32
+
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
@@ -72,17 +72,17 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v3_full/'
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [5,32]
-# missing_idxs_to_fill = [5]
+missing_idxs_to_fill = [5]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-# all_image_fnames = all_image_fnames[155:165] #for testing
+all_image_fnames = all_image_fnames[155:165] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -1759,6 +1759,23 @@ for idx,img in enumerate(all_image_fnames):
 template = output_dir+subject+'_'+str(largest).zfill(zfill_num)+'_'+os.path.basename(all_image_fnames[largest]).split('.')[0]+'.nii.gz'    
 
 print(f"\tUsing the following image as the template for size: {template}")
+
+#adapt the scaling factor base on the largest image
+#we work in voxel space, assuming 1x1 sizes for the slices
+#we back-compute this from nighres approach, use a factor of 10 to relate resolution to shrinks (nd at least 10 datapoints per dimension)
+shape = nighres.io.load_volume(template).header.get_data_shape()
+shape_min = min(shape)
+initial_scaling_factor = 128
+n_scales = math.ceil(math.log(initial_scaling_factor)/math.log(2.0)) #initially set this v. large, then we choose the ones that will fit
+smooth=[]
+shrink=[]
+for n in range(n_scales):
+    smooth.append(initial_scaling_factor/math.pow(2.0,n+1))
+    shrink.append(math.ceil(initial_scaling_factor/math.pow(2.0,n+1)))
+num_valid_steps = numpy.where(numpy.array(shrink)*10<=shape_min)[0].shape[0]
+scaling_factor = 2**num_valid_steps
+logger.warning(f'\tScaling factor set to: {scaling_factor}')
+
 
 print('2. Bring all image slices into same place as our 2d template with an initial translation registration')
 logger.warning('2. Bring all image slices into same place as our 2d template with an initial translation registration')

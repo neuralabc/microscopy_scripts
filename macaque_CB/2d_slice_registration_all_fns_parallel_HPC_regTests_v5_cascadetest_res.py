@@ -1085,9 +1085,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         header.set_data_shape(img.shape)
         
         affine = create_affine(img.shape)
-        affine[0,0] = voxel_res[0]
-        affine[1,1] = voxel_res[1]
-        affine[2,2] = voxel_res[2]
+        # affine[0,0] = voxel_res[0]
+        # affine[1,1] = voxel_res[1]
+        # affine[2,2] = voxel_res[2]
         
         nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(img_stack,nifti)

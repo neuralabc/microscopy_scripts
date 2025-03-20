@@ -706,8 +706,9 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     )
     return reg
 
-# XXX THIS CANNOT BE PARALLELIZED B/C the .mat files that are generated do not seem to properly go into the temp_dir (or output_dir)
-# XXX TODO: FIX THIS 
+## TODO: you have to have unique file names for all of the ants calls, otherwise they will be overwriting on parallel calls
+# so you can make this parallel but will have to change the names
+## TODO: DO THIS FOR ALL OF THE do_reg calls so that your parallelization is correct
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
                                reg_refinement_iterations=3, output_dir='./',scaling_factor=64, mask_zero=False):
     """

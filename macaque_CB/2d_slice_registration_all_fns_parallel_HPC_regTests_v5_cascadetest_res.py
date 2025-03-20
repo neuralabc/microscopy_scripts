@@ -734,6 +734,31 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         )
     return reg
 
+def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor=64, mask_zero=False):
+    """
+    Helper function to perform registration between source and target images using ANTsPy w/ nighres
+    Doing only the initial translation step
+    """
+    with tempfile.TemporaryDirectory(prefix=f"slice_{idx}_") as tmp_output_dir:
+        reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=file_name, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
+                
+                ## this is what we were doing previously
+                #  nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
+                #     target_images=targets,
+                #     run_rigid=False,
+                #     run_affine=False,
+                #     run_syn=False,
+                #     scaling_factor=64,
+                #     cost_function='MutualInformation',
+                #     interpolation='Linear',
+                #     regularization='High',
+                #     convergence=1e-6,
+                #     mask_zero=mask_zero,
+                #     ignore_affine=False, ignore_orient=False, ignore_res=False,
+                #     save_data=True, overwrite=False,
+                #     file_name=output
+    return reg
+
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
                                reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
     """
@@ -1838,22 +1863,26 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
         output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
         
         futures.append(
+            # do_initial_translation_reg(sources, targets, run_rigid=False, run_syn=False, file_name=output, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
             executor.submit(
-                 nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
-                    target_images=targets,
-                    run_rigid=False,
-                    run_affine=False,
-                    run_syn=False,
-                    scaling_factor=64,
-                    cost_function='MutualInformation',
-                    interpolation='Linear',
-                    regularization='High',
-                    convergence=1e-6,
-                    mask_zero=mask_zero,
-                    ignore_affine=False, ignore_orient=False, ignore_res=False,
-                    save_data=True, overwrite=False,
-                    file_name=output
-            )
+                do_initial_translation_reg(sources, targets, file_name=output, scaling_factor=scaling_factor, mask_zero=mask_zero)
+            )    
+            # executor.submit(
+            #      nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
+            #         target_images=targets,
+            #         run_rigid=False,
+            #         run_affine=False,
+            #         run_syn=False,
+            #         scaling_factor=64,
+            #         cost_function='MutualInformation',
+            #         interpolation='Linear',
+            #         regularization='High',
+            #         convergence=1e-6,
+            #         mask_zero=mask_zero,
+            #         ignore_affine=False, ignore_orient=False, ignore_res=False,
+            #         save_data=True, overwrite=False,
+            #         file_name=output
+            # )
         )
                                     
 

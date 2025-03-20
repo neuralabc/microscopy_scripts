@@ -211,30 +211,36 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     logging.info(f'\n\tslice_idx: {idx}\n\t\tsources: {sources[0].split("/")[-1]}\n\t\ttargets: {[t.split("/")[-1] for t in targets]}\n\t\tweights: {image_weights_ordered}') #source is always the same 
 
     output = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}"
-    coreg_output = nighres.registration.embedded_antspy_2d_multi(
-        source_images=sources,
-        target_images=targets,
-        image_weights=image_weights_ordered,
-        run_rigid=run_rigid,
-        rigid_iterations=1000,
-        run_affine=False,
-        run_syn=run_syn,
-        coarse_iterations=2000,
-        medium_iterations=1000, 
-        fine_iterations=200,
-        scaling_factor=scaling_factor,
-        cost_function='MutualInformation',
-        interpolation='Linear',
-        regularization='High',
-        convergence=1e-6,
-        mask_zero=mask_zero,
-        ignore_affine=True, 
-        ignore_orient=True, 
-        ignore_res=True,
-        save_data=True, 
-        overwrite=False,
-        file_name=output
-    )
+
+    # we generate a unique temporary directory since ANTs may overwrite existing files
+    # unique filenames *should* work, but we play it safe here
+
+    with tempfile.TemporaryDirectory(prefix=f"slice_{idx}_") as tmp_output_dir:
+        with working_directory(tmp_output_dir):
+            coreg_output = nighres.registration.embedded_antspy_2d_multi(
+                source_images=sources,
+                target_images=targets,
+                image_weights=image_weights_ordered,
+                run_rigid=run_rigid,
+                rigid_iterations=1000,
+                run_affine=False,
+                run_syn=run_syn,
+                coarse_iterations=2000,
+                medium_iterations=1000, 
+                fine_iterations=200,
+                scaling_factor=scaling_factor,
+                cost_function='MutualInformation',
+                interpolation='Linear',
+                regularization='High',
+                convergence=1e-6,
+                mask_zero=mask_zero,
+                ignore_affine=True, 
+                ignore_orient=True, 
+                ignore_res=True,
+                save_data=True, 
+                overwrite=False,
+                file_name=output
+            )
     
     # Clean up unnecessary files
     if not retain_reg_mappings:
@@ -774,6 +780,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         temp_dir = tempfile.mkdtemp()
     else:
         temp_dir = output_dir
+    
+    print(temp_dir)
+    
 
     if temp_dir[-1] is not os.sep:
         temp_dir += os.sep
@@ -827,6 +836,10 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
                                               output_dir=temp_dir)['transformed_source'],mask_zero=mask_zero)
         else:
             current_avg = avg
+
+        # Cleanup temporary files
+        if delete_intermediate_files or output_dir is None:
+            shutil.rmtree(temp_dir)
 
         # Return the result
         if idx is not None:

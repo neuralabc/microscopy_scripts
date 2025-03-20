@@ -71,17 +71,17 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v3_full/'
-_df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+# _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
-# _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
+_df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [5,32]
-# missing_idxs_to_fill = [5]
+missing_idxs_to_fill = [5]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-# all_image_fnames = all_image_fnames[155:165] #for testing
+all_image_fnames = all_image_fnames[155:165] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -706,6 +706,8 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     )
     return reg
 
+# XXX THIS CANNOT BE PARALLELIZED B/C the .mat files that are generated do not seem to properly go into the temp_dir (or output_dir)
+# XXX TODO: FIX THIS 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
                                reg_refinement_iterations=3, output_dir='./',scaling_factor=64, mask_zero=False):
     """
@@ -1840,7 +1842,7 @@ for iter in range(num_cascade_iterations):
         input_source_file_tag = iter_tag #updates with the previous iteration
     iter_tag = f'cascade_{iter}'
     expected_stack_fname = f'{subject}_{iter_tag}_stack.nii.gz'
-    logging.warning(f'\tIteration: {iter_tag} {expected_stack_fname})')
+    logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
     if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
         logging.warning('Stack exists, skipping the current cascade iteration')
     

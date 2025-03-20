@@ -728,9 +728,6 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         )
     return reg
 
-## TODO: you have to have unique file names for all of the ants calls, otherwise they will be overwriting on parallel calls
-# so you can make this parallel but will have to change the names
-## TODO: DO THIS FOR ALL OF THE do_reg calls so that your parallelization is correct
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
                                reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
     """
@@ -754,7 +751,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     reg_refinement_iterations : int, optional
         Number of iterations to refine the computed average slice. Default is 10.
     output_dir : str, optional
-        Directory where intermediate files are saved if delete_intermediate_files is False. Default is './'.
+        Directory where intermediate files are saved if delete_intermediate_files is False. Default is None.
+        **Leave as None** unless you are testing, in some cases ANTs creates files in the cwd and they can be overwritten during parallelized calls.
     scaling_factor: int, optional
         Scaling factor for the image resolution during registration. Default is 64 but this will fail with low resolution images
 
@@ -779,12 +777,6 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
     if temp_dir[-1] is not os.sep:
         temp_dir += os.sep
-    
-    # # OVERRIDE SO THAT TEMP FILES GO INTO CURRENT DIR
-    # temp_dir = "./"
-    
-    # output_dir = './'
-    # delete_intermediate_files = False
 
     try:
         pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, 

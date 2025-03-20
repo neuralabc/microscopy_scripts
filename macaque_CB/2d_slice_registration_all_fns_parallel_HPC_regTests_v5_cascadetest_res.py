@@ -436,6 +436,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
         
         # reg_aligned = do_reg([source], [target], file_name=output, output_dir=output_dir, run_syn=run_syn, scaling_factor=scaling_factor)
         # save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
+        
         if run_syn:
             pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
                                                    type_of_transform='SyNOnly',
@@ -676,6 +677,25 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
         return intermediate_img_np
 
 
+from contextlib import contextmanager
+
+@contextmanager
+def working_directory(path):
+    """ 
+        Helper function to change our current working directory to 
+        ensure that temporary files created by ANTs are saved in the 
+        correct directory, as specified. 
+
+        ANTs will save temporary files in the current working directory under some conditions :(
+    """
+    prev_cwd = os.getcwd()
+    os.makedirs(path, exist_ok=True)
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(prev_cwd)
+
 # same, with temporary files
 def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False):
     """
@@ -684,33 +704,35 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         medium_iterations=100,
         fine_iterations=50,
     """
-    reg = nighres.registration.embedded_antspy_2d_multi(
-        source_images=sources,
-        target_images=targets,
-        run_rigid=run_rigid,
-        run_affine=False,
-        run_syn=run_syn,
-        scaling_factor=scaling_factor,
-        cost_function='MutualInformation',
-        interpolation='Linear',
-        regularization='High',
-        convergence=1e-6,
-        mask_zero=mask_zero,
-        ignore_affine=False, 
-        ignore_orient=False, 
-        ignore_res=False,
-        save_data=True, 
-        overwrite=True,
-        file_name=file_name, 
-        output_dir=output_dir
-    )
+
+    with working_directory(output_dir):
+        reg = nighres.registration.embedded_antspy_2d_multi(
+            source_images=sources,
+            target_images=targets,
+            run_rigid=run_rigid,
+            run_affine=False,
+            run_syn=run_syn,
+            scaling_factor=scaling_factor,
+            cost_function='MutualInformation',
+            interpolation='Linear',
+            regularization='High',
+            convergence=1e-6,
+            mask_zero=mask_zero,
+            ignore_affine=False, 
+            ignore_orient=False, 
+            ignore_res=False,
+            save_data=True, 
+            overwrite=True,
+            file_name=file_name, 
+            output_dir=output_dir
+        )
     return reg
 
 ## TODO: you have to have unique file names for all of the ants calls, otherwise they will be overwriting on parallel calls
 # so you can make this parallel but will have to change the names
 ## TODO: DO THIS FOR ALL OF THE do_reg calls so that your parallelization is correct
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=3, output_dir='./',scaling_factor=64, mask_zero=False):
+                               reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
@@ -750,7 +772,11 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     """
 
     # Create a temporary directory for intermediate files
-    temp_dir = tempfile.mkdtemp() if delete_intermediate_files else output_dir
+    if delete_intermediate_files or output_dir is None:
+        temp_dir = tempfile.mkdtemp()
+    else:
+        temp_dir = output_dir
+
     if temp_dir[-1] is not os.sep:
         temp_dir += os.sep
     

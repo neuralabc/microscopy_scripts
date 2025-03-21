@@ -12,6 +12,7 @@ import glob
 from PIL import Image
 import pandas as pd
 from scipy.signal import convolve2d
+from scipy.ndimage import gaussian_filter
 import math
 from nighres.io import load_volume, save_volume
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -929,15 +930,21 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         img = load_volume(reg_post)
         avg_pre = (img.get_fdata() + load_volume(pre_img).get_fdata()) / 2
 
+
         avg = (avg_pre + avg_post) / 2
+        blur_scale = 1.0
+        avg = gaussian_filter(avg,sigma=blur_scale)
         avg = nibabel.Nifti1Image(avg, affine=img.affine, header=img.header, dtype=img.get_data_dtype())
 
         avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
         save_volume(avg_fname, avg, overwrite_file=True)
 
         # Refinement loop
+        blur_scales = numpy.linspace(0,1,reg_refinement_iterations-1)[::-1]
+        blur_scales[blur_scales==0] = None #no blur on last iter
+        blur_scales = blur_scales + [None] #do not blur final average
         for refinement_iter in range(reg_refinement_iterations):
-
+            
             pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
                              scaling_factor=scaling_factor,mask_zero=mask_zero)
             post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
@@ -949,7 +956,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             img2 = load_volume(post_avg['transformed_source'])
 
             avg = (img1.get_fdata() + img2.get_fdata()) / 2
-            
+            blur_scale = blur_scales[refinement_iter]
+            avg = gaussian_filter(avg,sigma=blur_scale)
             # XXX if the coregs are not stable, can fix this by changing this here XXX
             # #on the last iteration, we do not compute the average but rather the first image in the average space to reduce overlap errors
             # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):

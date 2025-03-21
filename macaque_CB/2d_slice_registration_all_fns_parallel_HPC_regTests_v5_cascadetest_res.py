@@ -421,40 +421,42 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
     src_idxs = numpy.concatenate((rw_src_idxs,lw_src_idxs))
     trg_idxs = numpy.concatenate((rw_trg_idxs,lw_trg_idxs))
 
-
     #run the registrations
     for idx, _  in enumerate(src_idxs):
-        # img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
-        target_idx = trg_idxs[idx]
-        moving_idx = src_idxs[idx]
+        # first, we setup a temporary directory that cleans itself on completion
+        with tempfile.TemporaryDirectory(prefix=f"cascade_reg_{idx}") as tmp_output_dir:
+            with working_directory(tmp_output_dir): #make any files that would go to cwd are put in temp
+                # img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
+                target_idx = trg_idxs[idx]
+                moving_idx = src_idxs[idx]
 
-        # in each case, only one source and one target, but we use the same code as above
-        source = all_image_fnames_nii[moving_idx]
-        target = all_image_fnames_new[target_idx] #targets always come from the new list, since this is where the registrered sources will be (and we pre-filled the start_slice_idx image)
-        output = all_image_fnames_new[moving_idx]
+                # in each case, only one source and one target, but we use the same code as above
+                source = all_image_fnames_nii[moving_idx]
+                target = all_image_fnames_new[target_idx] #targets always come from the new list, since this is where the registrered sources will be (and we pre-filled the start_slice_idx image)
+                output = all_image_fnames_new[moving_idx]
 
 
-        source_img = ants.image_read(source)
-        target_img = ants.image_read(target)
-        logging.info(f'\n\tslice_idx: {src_idxs[idx]}\n\t\tsources: {source.split("/")[-1]}\n\t\ttarget: {target.split("/")[-1]}\n\t\toutput: {output.split("/")[-1]}') #source is always the same 
+                source_img = ants.image_read(source)
+                target_img = ants.image_read(target)
+                logging.info(f'\n\tslice_idx: {src_idxs[idx]}\n\t\tsources: {source.split("/")[-1]}\n\t\ttarget: {target.split("/")[-1]}\n\t\toutput: {output.split("/")[-1]}') #source is always the same 
 
-        pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid') #run rigid
-        pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
-        
-        # reg_aligned = do_reg([source], [target], file_name=output, output_dir=output_dir, run_syn=run_syn, scaling_factor=scaling_factor)
-        # save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
-        
-        if run_syn:
-            pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
-                                                   type_of_transform='SyNOnly',
-                                                   initial_transform='Identity', #) #),
-                                                   flow_sigma=syn_flow_sigma,
-                                                   total_sigma=syn_total_sigma)
-            warpedmovout = pre_to_post_nonlin['warpedmovout']
+                pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid') #run rigid
+                pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
+                
+                # reg_aligned = do_reg([source], [target], file_name=output, output_dir=output_dir, run_syn=run_syn, scaling_factor=scaling_factor)
+                # save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
+                
+                if run_syn:
+                    pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
+                                                        type_of_transform='SyNOnly',
+                                                        initial_transform='Identity', #) #),
+                                                        flow_sigma=syn_flow_sigma,
+                                                        total_sigma=syn_total_sigma)
+                    warpedmovout = pre_to_post_nonlin['warpedmovout']
 
-            ants.image_write(warpedmovout, output)
-        else:
-            ants.image_write(pre_aligned, output) #if we are not running the nonlin, just write the rigidly aligned image
+                    ants.image_write(warpedmovout, output)
+                else:
+                    ants.image_write(pre_aligned, output) #if we are not running the nonlin, just write the rigidly aligned image
         logging.warning(f"\t\tCascade registration completed for slice {src_idxs[idx]}.")
 
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,

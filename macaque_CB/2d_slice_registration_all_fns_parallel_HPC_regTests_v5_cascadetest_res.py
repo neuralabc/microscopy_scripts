@@ -933,7 +933,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
         avg = (avg_pre + avg_post) / 2
         blur_scale = 1.0
-        avg = gaussian_filter(avg,sigma=blur_scale)
+        # avg = gaussian_filter(avg,sigma=blur_scale)
         avg = nibabel.Nifti1Image(avg, affine=img.affine, header=img.header, dtype=img.get_data_dtype())
 
         avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
@@ -957,7 +957,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
             avg = (img1.get_fdata() + img2.get_fdata()) / 2
             blur_scale = blur_scales[refinement_iter]
-            avg = gaussian_filter(avg,sigma=blur_scale)
+            # avg = gaussian_filter(avg,sigma=blur_scale)
             # XXX if the coregs are not stable, can fix this by changing this here XXX
             # #on the last iteration, we do not compute the average but rather the first image in the average space to reduce overlap errors
             # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):

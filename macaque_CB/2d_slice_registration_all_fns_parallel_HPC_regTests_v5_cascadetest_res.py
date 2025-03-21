@@ -440,7 +440,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
                 target_img = ants.image_read(target)
                 logging.info(f'\n\tslice_idx: {src_idxs[idx]}\n\t\tsources: {source.split("/")[-1]}\n\t\ttarget: {target.split("/")[-1]}\n\t\toutput: {output.split("/")[-1]}') #source is always the same 
 
-                pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid', outprefix=tmp_output_dir) #run rigid
+                pre_to_post_rigid = ants.registration(fixed=target_img, moving=source_img, type_of_transform='Rigid', outprefix=tmp_output_dir+"/") #run rigid
                 pre_aligned = ants.apply_transforms(fixed=target_img, moving=source_img, transformlist=pre_to_post_rigid['fwdtransforms']) #apply rigid
                 
                 # reg_aligned = do_reg([source], [target], file_name=output, output_dir=output_dir, run_syn=run_syn, scaling_factor=scaling_factor)
@@ -452,7 +452,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
                                                         initial_transform='Identity', #) #),
                                                         flow_sigma=syn_flow_sigma,
                                                         total_sigma=syn_total_sigma,
-                                                        outprefix=tmp_output_dir)
+                                                        outprefix=tmp_output_dir+"/")
                     warpedmovout = pre_to_post_nonlin['warpedmovout']
 
                     ants.image_write(warpedmovout, output)

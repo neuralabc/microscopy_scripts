@@ -903,14 +903,15 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     if temp_dir[-1] is not os.sep:
         temp_dir += os.sep
 
-    # img_pre = load_volume(pre_img)
-    # img_post = load_volume(post_img)
+    img_pre = load_volume(pre_img)
+    img_post = load_volume(post_img)
 
-    # avg_orig = (img_pre.get_fdata() + img_post.get_fdata())/2
-    # avg_data = nibabel.Nifti1Image(avg_data, affine=img_pre.affine, header=img_pre.header, dtype=img_pre.get_data_dtype())
+    avg_orig = (img_pre.get_fdata() + img_post.get_fdata())/2
+    avg_data = nibabel.Nifti1Image(avg_data, affine=img_pre.affine, header=img_pre.header, dtype=img_pre.get_data_dtype())
 
-    # avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
-    # save_volume(avg_fname, avg, overwrite_file=True)
+    avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
+    save_volume(avg_fname, avg, overwrite_file=True)
+    
     try:
         
         pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, 

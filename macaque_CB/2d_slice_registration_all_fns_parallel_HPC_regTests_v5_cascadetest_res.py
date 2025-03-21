@@ -526,7 +526,7 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             target = all_image_fnames_new[target_idx] #targets always come from the new list, since this is where the registrered sources will be (and we pre-filled the start_slice_idx image)
             output = all_image_fnames_new[moving_idx]
 
-            reg_aligned = do_reg([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
+            reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
                                 scaling_factor=scaling_factor,mask_zero=mask_zero)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
             logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
@@ -741,6 +741,91 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         )
     return reg
 
+
+def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
+                file_name='reg', output_dir='./', scaling_factor=64,
+                mask_zero=False, syn_flow_sigma=3, syn_total_sigma=0):
+
+    """
+    Perform registration between source and target images using ANTsPy,
+    mimicking the manual pipeline: rigid first, then SyN (optional).
+    
+    Parameters:
+        sources, targets: list of image file paths (length 1 each expected)
+        run_rigid: if True, perform rigid registration
+        run_syn: if True, perform SyN registration after rigid
+        file_name: base name for output files
+        output_dir: where to write files
+        scaling_factor, mask_zero: for compatibility (currently not used directly here)
+        syn_flow_sigma, syn_total_sigma: optional SyN smoothing parameters
+
+    Returns:
+        dict with keys: 'transformed_source', 'rigid_transform', 'syn_transform'
+    """
+    import ants
+
+    assert len(sources) == 1 and len(targets) == 1, "Only single source/target expected."
+
+    source = sources[0]
+    target = targets[0]
+    os.makedirs(output_dir, exist_ok=True)
+
+    with working_directory(output_dir):
+        logging.info(f"Starting ANTs registration for: {os.path.basename(source)} → {os.path.basename(target)}")
+
+        source_img = ants.image_read(source)
+        target_img = ants.image_read(target)
+
+        transformed_source = source_img  # default to identity if no registration
+
+        rigid_transform = None
+        syn_transform = None
+
+        # Step 1: Rigid Registration
+        if run_rigid:
+            rigid_reg = ants.registration(
+                fixed=target_img,
+                moving=source_img,
+                type_of_transform='Rigid',
+                outprefix=file_name + '_rigid_'
+            )
+            rigid_transform = rigid_reg['fwdtransforms']
+            transformed_source = ants.apply_transforms(
+                fixed=target_img,
+                moving=source_img,
+                transformlist=rigid_transform
+            )
+        else:
+            logging.info("Skipping rigid registration.")
+
+        # Step 2: SyN Registration (optional)
+        if run_syn:
+            syn_reg = ants.registration(
+                fixed=target_img,
+                moving=transformed_source,
+                type_of_transform='SyNOnly',
+                initial_transform='Identity',
+                flow_sigma=syn_flow_sigma,
+                total_sigma=syn_total_sigma,
+                outprefix=file_name + '_syn_'
+            )
+            syn_transform = syn_reg['fwdtransforms']
+            transformed_source = syn_reg['warpedmovout']
+        else:
+            logging.info("Skipping SyN registration.")
+
+        # Save final transformed image
+        final_output_path = os.path.join(output_dir, file_name + '_transformed.nii.gz')
+        ants.image_write(transformed_source, final_output_path)
+
+        logging.info(f"Registration complete. Output saved to: {final_output_path}")
+
+        return {
+            'transformed_source': final_output_path,
+            'rigid_transform': rigid_transform,
+            'syn_transform': syn_transform
+        }
+    
 def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor=64, mask_zero=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres

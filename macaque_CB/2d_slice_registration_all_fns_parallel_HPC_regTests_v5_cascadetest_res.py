@@ -617,7 +617,7 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
     avg_field = ants.from_numpy(avg_field_data, spacing=pre_to_post_field.spacing+(1.0,)) #need a 3rd dimension for spacing
     
     #we need to have the transform as a file, so we create a temp version here
-    with tempfile.NamedTemporaryFile(suffix='.nii.gz') as temp_file:
+    with tempfile.NamedTemporaryFile(prefix='XXX',suffix='.nii.gz') as temp_file:
         avg_field_path = temp_file.name
         ants.image_write(avg_field, avg_field_path)
 

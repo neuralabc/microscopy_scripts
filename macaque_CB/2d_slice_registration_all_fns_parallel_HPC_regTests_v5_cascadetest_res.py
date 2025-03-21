@@ -216,6 +216,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     # unique filenames *should* work, but we play it safe here
 
     with tempfile.TemporaryDirectory(prefix=f"slice_{idx}_") as tmp_output_dir:
+        logging.warning(f'Creating temporary slice directory {tmp_output_dir}')
         with working_directory(tmp_output_dir):
             coreg_output = nighres.registration.embedded_antspy_2d_multi(
                 source_images=sources,

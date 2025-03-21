@@ -215,7 +215,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     # we generate a unique temporary directory since ANTs may overwrite existing files
     # unique filenames *should* work, but we play it safe here
 
-    with tempfile.TemporaryDirectory(prefix=f"slice_{idx}_") as tmp_output_dir:
+    with tempfile.TemporaryDirectory(prefix=f"coreg_slice_{idx}_") as tmp_output_dir:
         logging.warning(f'Creating temporary slice directory {tmp_output_dir}')
         with working_directory(tmp_output_dir):
             coreg_output = nighres.registration.embedded_antspy_2d_multi(
@@ -740,7 +740,7 @@ def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     Doing only the initial translation step
     """
-    with tempfile.TemporaryDirectory(prefix=f"slice_{idx}_") as tmp_output_dir:
+    with tempfile.TemporaryDirectory(prefix=f"init_translation_slice_{idx}_") as tmp_output_dir:
         reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=file_name, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
                 
                 ## this is what we were doing previously
@@ -805,7 +805,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
     # Create a temporary directory for intermediate files
     if delete_intermediate_files or output_dir is None:
-        temp_dir = tempfile.mkdtemp()
+        temp_dir = tempfile.mkdtemp(prefix='intermediate_slice_')
     else:
         temp_dir = output_dir
     

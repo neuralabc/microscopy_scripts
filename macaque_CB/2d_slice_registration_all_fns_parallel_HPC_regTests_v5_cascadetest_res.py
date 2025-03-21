@@ -806,9 +806,6 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     else:
         temp_dir = output_dir
     
-    print(temp_dir)
-    
-
     if temp_dir[-1] is not os.sep:
         temp_dir += os.sep
 

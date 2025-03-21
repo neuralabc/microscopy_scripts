@@ -2021,7 +2021,7 @@ for iter in range(num_cascade_iterations):
         logging.warning('Stack exists, skipping the current cascade iteration')
     
     else:
-        run_cascading_coregistrations_v2(output_dir, subject, 
+        run_cascading_coregistrations(output_dir, subject, 
                                     all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
                                     missing_idxs_to_fill = missing_idxs_to_fill, 
                                     zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 

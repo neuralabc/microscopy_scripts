@@ -364,6 +364,8 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
     and cascading outwards can help mitigate blocky artifacts. Adjust the transformation types and parameters within 
     the `ants.registration` calls as necessary for optimal alignment.
 
+    We also take care of all intermediate files by keeping them in a directory in /tmp/cascade_* that is cleaned
+    on completion of the registration
     """
     # params for regularization of nonlinear deformations w/ 'SyNOnly'
         # from nighres, the last two numbers of the syn_param correspond to the flow and total sigmas (fluid and elastic deformations, respectively)
@@ -514,19 +516,20 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
 
     #run the registrations
     for idx, _  in enumerate(src_idxs):
-        # img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
-        target_idx = trg_idxs[idx]
-        moving_idx = src_idxs[idx]
+        with tempfile.TemporaryDirectory(prefix=f'cascade_reg_v2_{idx}') as temp_out_dir:
+            # img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
+            target_idx = trg_idxs[idx]
+            moving_idx = src_idxs[idx]
 
-        # in each case, only one source and one target, but we use the same code as above
-        source = all_image_fnames_nii[moving_idx]
-        target = all_image_fnames_new[target_idx] #targets always come from the new list, since this is where the registrered sources will be (and we pre-filled the start_slice_idx image)
-        output = all_image_fnames_new[moving_idx]
+            # in each case, only one source and one target, but we use the same code as above
+            source = all_image_fnames_nii[moving_idx]
+            target = all_image_fnames_new[target_idx] #targets always come from the new list, since this is where the registrered sources will be (and we pre-filled the start_slice_idx image)
+            output = all_image_fnames_new[moving_idx]
 
-        reg_aligned = do_reg([source], [target], file_name=output, output_dir=output_dir, run_syn=run_syn, 
-                             scaling_factor=scaling_factor,mask_zero=mask_zero)
-        save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
-        logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
+            reg_aligned = do_reg([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
+                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+            save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
+            logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
 
 def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, additional_coreg_mean = True, 
                                           idx=None):

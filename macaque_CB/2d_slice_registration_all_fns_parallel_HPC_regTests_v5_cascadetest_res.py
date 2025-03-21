@@ -939,18 +939,16 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
         save_volume(avg_fname, avg, overwrite_file=True)
 
-        # Refinement loop
         blur_scales = numpy.linspace(0,1,reg_refinement_iterations-1)[::-1]
         blur_scales = numpy.append(blur_scales,0)
         
+        # Refinement loop        
         for refinement_iter in range(reg_refinement_iterations):
             
             pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
                              scaling_factor=scaling_factor,mask_zero=mask_zero)
             post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
                               scaling_factor=scaling_factor,mask_zero=mask_zero)
-            logging.warning(pre_avg['transformed_source'])
-            logging.warning(post_avg['transformed_source'])
             
             img1 = load_volume(pre_avg['transformed_source'])
             img2 = load_volume(post_avg['transformed_source'])

@@ -853,7 +853,7 @@ def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor
     return reg
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
+                               reg_refinement_iterations=5, output_dir=None ,scaling_factor=64, mask_zero=False):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
@@ -891,6 +891,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     - The function leverages `nighres.registration.embedded_antspy_2d_multi` for registration tasks.
     - Intermediate slices are iteratively refined by registering the input slices to the computed average and updating it.
     - Temporary files are managed to ensure efficient disk usage unless explicitly retained.
+    - Now runs multiple blurring steps to progressively sharpen to address potential alignment issues
     """
 
     deleted_flag = False
@@ -930,7 +931,6 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         img = load_volume(reg_post)
         avg_pre = (img.get_fdata() + load_volume(pre_img).get_fdata()) / 2
 
-
         avg = (avg_pre + avg_post) / 2
         blur_scale = 1.0
         avg = gaussian_filter(avg,sigma=blur_scale)
@@ -939,7 +939,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
         save_volume(avg_fname, avg, overwrite_file=True)
 
-        blur_scales = numpy.linspace(0,1,reg_refinement_iterations-1)[::-1]
+        blur_scales = numpy.linspace(0,scaling_factor,reg_refinement_iterations-1)[::-1]
         blur_scales = numpy.append(blur_scales,0)
         
         # Refinement loop        
@@ -1867,6 +1867,16 @@ print(f"Output directory: {output_dir}")
 shutil.copyfile(__file__,os.path.join(output_dir,script_name))
 logger.info(f'Original script file copied to output directory.')
 
+"""_summary_
+
+After testing at lower resolution with a subset of slices, it appears that 
+1. the _v2 of cascading registration works well, but should not be done more than appx 3 times b/c of blurring
+  - v2 uses do_reg_ants, which should be a drop in replacement for do_reg but is in this case MUCH better
+2. interpolating missing slices is improved, but still seems to be not perfect. This can have a large impact on
+the rest of the registrations
+
+"""
+
 # 0. Convert to nifti
 print('0. Converting images to .nii.gz')
 logger.warning('0. Converting images to .nii.gz') #use warnings so that we can see progress on command line as well as in the log file
@@ -2021,7 +2031,7 @@ for iter in range(num_cascade_iterations):
         logging.warning('Stack exists, skipping the current cascade iteration')
     
     else:
-        run_cascading_coregistrations(output_dir, subject, 
+        run_cascading_coregistrations_v2(output_dir, subject, 
                                     all_image_fnames, anchor_slice_idx = anchor_slice_idxs[iter], 
                                     missing_idxs_to_fill = missing_idxs_to_fill, 
                                     zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 

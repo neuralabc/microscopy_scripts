@@ -941,8 +941,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
         # Refinement loop
         blur_scales = numpy.linspace(0,1,reg_refinement_iterations-1)[::-1]
-        blur_scales[blur_scales==0] = None #no blur on last iter
-        blur_scales = blur_scales + [None] #do not blur final average
+        blur_scales = numpy.append(blur_scales,0)
+        
         for refinement_iter in range(reg_refinement_iterations):
             
             pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 

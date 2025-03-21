@@ -800,6 +800,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     - Temporary files are managed to ensure efficient disk usage unless explicitly retained.
     """
 
+    deleted_flag = False
+    
     # Create a temporary directory for intermediate files
     if delete_intermediate_files or output_dir is None:
         temp_dir = tempfile.mkdtemp()
@@ -861,6 +863,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
         # Cleanup temporary files
         if delete_intermediate_files or output_dir is None:
+            deleted_flag = True
             shutil.rmtree(temp_dir)
 
         # Return the result
@@ -870,7 +873,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             return current_avg.get_fdata()
 
     finally:
-        logging.warning(f"Temporary files for slice interpolation saved in: {temp_dir}")
+        logging.warning(f"Temporary files for slice interpolation were saved in: {temp_dir}")
+        if deleted_flag:
+            logging.warning("[temporary files deleted]")
     # finally:
     #     # Cleanup temporary files
     #     if delete_intermediate_files:

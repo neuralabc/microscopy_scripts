@@ -853,7 +853,7 @@ def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor
     return reg
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=7, output_dir=None ,scaling_factor=64, mask_zero=False):
+                               reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
@@ -2007,7 +2007,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 
 ## loop over cascades to see what this does for us
 iter_tag = ""
-num_cascade_iterations = 1
+num_cascade_iterations = 3
 anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
 anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
 for iter in range(num_cascade_iterations):

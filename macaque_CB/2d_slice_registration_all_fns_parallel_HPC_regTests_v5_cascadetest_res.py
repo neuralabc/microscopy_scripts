@@ -927,10 +927,11 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
         # Refinement loop
         for refinement_iter in range(reg_refinement_iterations):
-
-            pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
+            output_dir_pre = tempfile.mkdtemp(temp_dir+"/pre/") #ensure that any temp files go to separate dirs
+            output_dir_post = tempfile.mkdtemp(temp_dir+"/post/")
+            pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=output_dir_pre, 
                              scaling_factor=scaling_factor,mask_zero=mask_zero)
-            post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
+            post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=output_dir_post, 
                               scaling_factor=scaling_factor,mask_zero=mask_zero)
             logging.warning(pre_avg['transformed_source'])
             logging.warning(post_avg['transformed_source'])

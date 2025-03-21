@@ -853,7 +853,7 @@ def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor
     return reg
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=5, output_dir=None ,scaling_factor=64, mask_zero=False):
+                               reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
@@ -939,7 +939,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
         save_volume(avg_fname, avg, overwrite_file=True)
 
-        blur_scales = numpy.linspace(0,scaling_factor,reg_refinement_iterations-1)[::-1]
+        blur_scales = numpy.linspace(0,1,reg_refinement_iterations-1)[::-1]
         blur_scales = numpy.append(blur_scales,0)
         
         # Refinement loop        

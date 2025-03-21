@@ -525,7 +525,7 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             source = all_image_fnames_nii[moving_idx]
             target = all_image_fnames_new[target_idx] #targets always come from the new list, since this is where the registrered sources will be (and we pre-filled the start_slice_idx image)
             output = all_image_fnames_new[moving_idx]
-
+            # previously was just do_reg()
             reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
                                 scaling_factor=scaling_factor,mask_zero=mask_zero)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
@@ -852,7 +852,7 @@ def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor
     return reg
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
+                               reg_refinement_iterations=5, output_dir=None ,scaling_factor=64, mask_zero=False):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 

@@ -70,18 +70,18 @@ nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice in
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v3_full/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v3_part/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 ## _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
 # missing_idxs_to_fill = [5,32]
-##missing_idxs_to_fill = [5]
+missing_idxs_to_fill = [5]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-##all_image_fnames = all_image_fnames[155:165] #for testing
+all_image_fnames = all_image_fnames[155:165] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -801,7 +801,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     """
 
     deleted_flag = False
-    
+
     # Create a temporary directory for intermediate files
     if delete_intermediate_files or output_dir is None:
         temp_dir = tempfile.mkdtemp()

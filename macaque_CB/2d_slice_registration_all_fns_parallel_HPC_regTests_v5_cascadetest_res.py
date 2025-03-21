@@ -903,46 +903,40 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     if temp_dir[-1] is not os.sep:
         temp_dir += os.sep
 
-    img_pre = load_volume(pre_img)
-    img_post = load_volume(post_img)
+    # img_pre = load_volume(pre_img)
+    # img_post = load_volume(post_img)
 
-    avg_orig = (img_pre.get_fdata() + img_post.get_fdata())/2
-    avg_orig = nibabel.Nifti1Image(avg_orig, affine=img_pre.affine, header=img_pre.header, dtype=img_pre.get_data_dtype())
+    # avg_orig = (img_pre.get_fdata() + img_post.get_fdata())/2
+    # avg_data = nibabel.Nifti1Image(avg_data, affine=img_pre.affine, header=img_pre.header, dtype=img_pre.get_data_dtype())
 
-    avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
-    save_volume(avg_fname, avg, overwrite_file=True)
-
+    # avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
+    # save_volume(avg_fname, avg, overwrite_file=True)
     try:
-        #trying to stabilize w/ rigid average here, checking
-        logging.warning("1")
-        pre_post = do_reg([pre_img], [avg_fname], file_name='pre_post', output_dir=temp_dir, 
+        
+        pre_post = do_reg([pre_img], [post_img], file_name='pre_post', output_dir=temp_dir, 
                           scaling_factor=scaling_factor,mask_zero=mask_zero)
-        logging.warning("2")
-        post_pre = do_reg([post_img], [avg_fname], file_name='post_pre', output_dir=temp_dir, 
+        post_pre = do_reg([post_img], [pre_img], file_name='post_pre', output_dir=temp_dir, 
                           scaling_factor=scaling_factor,mask_zero=mask_zero)
-        logging.warning("3")
+
         reg_pre = pre_post['transformed_source']
         reg_post = post_pre['transformed_source']
-        logging.warning("4")
+
         # Compute averages in slice space
         img = load_volume(reg_pre)
         avg_post = (img.get_fdata() + load_volume(post_img).get_fdata()) / 2
-        logging.warning("5")    
+
         img = load_volume(reg_post)
         avg_pre = (img.get_fdata() + load_volume(pre_img).get_fdata()) / 2
-        logging.warning("6")    
+
         avg = (avg_pre + avg_post) / 2
         avg = nibabel.Nifti1Image(avg, affine=img.affine, header=img.header, dtype=img.get_data_dtype())
-        logging.warning("7")    
-        
+
         avg_fname = os.path.join(temp_dir, 'avg.nii.gz')
         save_volume(avg_fname, avg, overwrite_file=True)
-        logging.warning("8")    
-        
+
         # Refinement loop
         for refinement_iter in range(reg_refinement_iterations):
-            logging.warning("9")    
-        
+
             pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
                              scaling_factor=scaling_factor,mask_zero=mask_zero)
             post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 

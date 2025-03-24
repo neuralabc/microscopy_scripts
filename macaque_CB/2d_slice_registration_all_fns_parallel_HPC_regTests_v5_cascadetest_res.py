@@ -216,6 +216,12 @@ def compute_sigma_strength_from_neighbors(
     return sigma, strength
 
 
+def unsharp_mask(image, sigma=1.0, strength=1.5):
+    blurred = gaussian_filter(image, sigma)
+    sharpened = image + strength * (image - blurred)
+    return sharpened
+
+
 def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     """
     Generates Gaussian weights for the given slice indices, ensuring the weights sum to 1.
@@ -969,7 +975,8 @@ def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor
     return reg
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
-                               reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False):
+                               reg_refinement_iterations=3, output_dir=None ,scaling_factor=64, mask_zero=False,
+                               sigma_multiplier=None,strength_multiplier=None):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
@@ -1078,9 +1085,19 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):
             #     avg = img1.get_fdata()
 
+            #if we are on the last refinement_iter, we can do some sharpening and histogram matching
+            if refinement_iter == reg_refinement_iterations - 1:
+                # optionally resharpen data
+                if (sigma_multiplier is not None) and (strength_multiplier is not None):
+                    sigma, strength = compute_sigma_strength_from_neighbors(img1.get_fdata(),img2.get_fdata(),
+                                                                sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
+                    avg = unsharp_mask(avg, sigma=sigma, strength=strength)
+                #histogram match to nonzero data
+                avg = compute_histogram_matched_slice(avg, img1.get_fdata(),img2.get_fdata())
+
             avg = nibabel.Nifti1Image(avg, affine=img1.affine, header=img1.header, dtype=img1.get_data_dtype())
             save_volume(avg_fname, avg, overwrite_file=True)
-
+             
         # If current_img is provided, refine it to match the final average
         if current_img is not None:
             current_avg = nibabel.load(do_reg([current_img], [avg_fname], file_name='current_avg', run_syn=True, 
@@ -1112,7 +1129,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
 
 def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',
-                            nonlin_interp_max_workers=1,scaling_factor=64,mask_zero=False):
+                            nonlin_interp_max_workers=1,scaling_factor=64,mask_zero=False,
+                            sigma_multiplier=None, strength_multiplier=None):
     """
     Parallelized generation of missing slices in a histology stack by interpolating between adjacent slices using specified methods. 
     This function supports simple averaging or advanced interpolation using non-linear transformations, making it 
@@ -1202,7 +1220,9 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     post_img=img_fname_post,
                     current_img=img_fname_current,
                     idx=idx,scaling_factor=scaling_factor,
-                    mask_zero=mask_zero
+                    mask_zero=mask_zero,
+                    sigma_multiplier=sigma_multiplier,
+                    strength_multiplier=strength_multiplier
                 ))
             for future in as_completed(futures):
                 try:
@@ -1226,7 +1246,8 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
-                                ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False):
+                                ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,
+                                sigma_multiplier=None, strength_multiplier=None):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -1354,7 +1375,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                                                   missing_fnames_post,
                                                                   method='intermediate_nonlin_mean',
                                                                   nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                  scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                                                  scaling_factor=scaling_factor,mask_zero=mask_zero,
+                                                                  sigma_multiplier=sigma_multiplier, 
+                                                                  strength_multiplier=strength_multiplier)
 
             
             #now we can fill the slices with the interpolated value
@@ -2124,11 +2147,22 @@ with ProcessPoolExecutor(max_workers=max_workers) as executor:
             #         file_name=output
             # )
         )
-                                    
+
+#generate a list of the current images that are now in the same space
+image_list = []
+for idx,img_name in enumerate(all_image_fnames):
+    img_name = os.path.basename(img_name).split('.')[0]
+    image_list.append(output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+'coreg0nl')
+
+#compute the scaling factors for sharpening from the entire dataset
+sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_dataset(image_list)
+
+
 
 template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                        missing_idxs_to_fill=missing_idxs_to_fill,
-                                       scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
+                                       scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
+                                       sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
 
 ## loop over cascades to see what this does for us
 iter_tag = ""

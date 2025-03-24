@@ -955,7 +955,8 @@ def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor
     Doing only the initial translation step
     """
     with tempfile.TemporaryDirectory(prefix=f"init_translation_slice_{idx}_") as tmp_output_dir:
-        reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=file_name, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
+        reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=file_name, 
+                     output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
                 
                 ## this is what we were doing previously
                 #  nighres.registration.embedded_antspy_2d_multi,source_images=sources, 

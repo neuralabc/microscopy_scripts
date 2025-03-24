@@ -1378,8 +1378,13 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):
+                if not os.path.exists(output_dir + "missing_slices/"):
+                    os.makedirs(output_dir + "missing_slices/")
+                
                 #we overwrite the missing slices with the interpolated values and insert it into the img stack
                 missing_fname = missing_fnames_current[idx]
+                #but first we copy to our missing slices directory
+                shutil.copy(missing_fname,output_dir + "missing_slices/")
                 interp_slice = missing_slices_interpolated[...,idx]
                 header = nibabel.Nifti1Header()
                 header.set_data_shape(interp_slice.shape)

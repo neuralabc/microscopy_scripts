@@ -1080,6 +1080,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             blur_scale = blur_scales[refinement_iter]
             if not(blur_scale==0):
                 avg = gaussian_filter(avg,sigma=blur_scale)
+            
             # XXX if the coregs are not stable, can fix this by changing this here XXX
             # #on the last iteration, we do not compute the average but rather the first image in the average space to reduce overlap errors
             # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):
@@ -1116,17 +1117,11 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             return idx, current_avg.get_fdata()
         else:
             return current_avg.get_fdata()
-
+        
     finally:
         logging.warning(f"Temporary files for slice interpolation were saved in: {temp_dir}")
         if deleted_flag:
             logging.warning("[temporary files deleted]")
-    # finally:
-    #     # Cleanup temporary files
-    #     if delete_intermediate_files:
-    #         shutil.rmtree(temp_dir)
-    #     else:
-    #         logging.warning(f"Temporary files for slice interpolation saved in: {temp_dir}")
 
 
 def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',

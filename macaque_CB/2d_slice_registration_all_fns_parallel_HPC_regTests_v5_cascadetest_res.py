@@ -108,6 +108,11 @@ def compute_histogram_matched_slice(current_slice, pre_img_slice, post_img_slice
     Compute a histogram-matched slice for the current slice from one or both of its neighboring slices.
     All inputs should be numpy arrays in the same space since we mask based on the current slice
       - this approach intrinsically misses some data in the neighbours, but has little effect
+
+    Parameters:
+        current_slice (ndarray): Current slice to be matched to its neigbours
+        pre_img_slice (ndarray): Image before current slice.
+        post_img_slice (ndarray): Image after current slice.
     """
     
     current_matched = np.zeros_like(current_slice)
@@ -125,6 +130,40 @@ def compute_histogram_matched_slice(current_slice, pre_img_slice, post_img_slice
         matched = match_histograms(current_slice_vec, pre_vec)
         current_matched[m] = matched
     return current_matched
+
+def compute_sigma_strength_from_neighbors(pre_img, post_img, sigma_bounds=(0.5, 2.0), strength_bounds=(0.5, 2.0)):
+    """
+    Estimate adaptive sharpening parameters (sigma, strength) based on neighboring slices.
+
+    Parameters:
+        pre_img (ndarray): Image before current slice.
+        post_img (ndarray): Image after current slice.
+        sigma_bounds (tuple): Min and max allowable sigma.
+        strength_bounds (tuple): Min and max allowable strength.
+        
+    Returns:
+        sigma (float): Gaussian sigma for unsharp masking.
+        strength (float): Sharpening strength.
+    """
+
+    def local_detail_energy(img):
+        # High-pass content estimate (Laplacian energy)
+        return np.mean(np.abs(laplace(img)))
+
+    def local_contrast(img):
+        # Estimate contrast via local standard deviation
+        return np.std(img)
+
+    # Compute for both neighbors
+    detail_energy = np.mean([local_detail_energy(pre_img), local_detail_energy(post_img)])
+    contrast = np.mean([local_contrast(pre_img), local_contrast(post_img)])
+
+    # Normalize to a reasonable scale (empirically tuned based on MRI range)
+    # You can refine this mapping for your dataset
+    sigma = np.clip(2.0 - detail_energy * 2.0, *sigma_bounds)   # sharper neighbor → smaller sigma
+    strength = np.clip(contrast * 1.5, *strength_bounds)        # higher contrast → stronger sharpening
+
+    return sigma, strength
 
 def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     """

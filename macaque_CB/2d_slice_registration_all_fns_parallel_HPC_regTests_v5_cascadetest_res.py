@@ -67,8 +67,8 @@ actual_voxel_res = [in_plane_res_x,in_plane_res_y,in_plane_res_z]
 voxel_res = actual_voxel_res # defines voxel resolution for output template # registration itself performs much better when we do not specify the res
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
-max_workers = 100 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
-nonlin_interp_max_workers = 100 #number of workers to use for nonlinear slice interpolation when use_nonlin_slice_templates = True
+max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
+nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice interpolation when use_nonlin_slice_templates = True
 
 # max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 

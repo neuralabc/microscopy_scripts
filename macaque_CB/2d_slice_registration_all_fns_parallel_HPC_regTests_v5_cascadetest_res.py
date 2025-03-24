@@ -1397,6 +1397,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 nifti = nibabel.Nifti1Image(interp_slice,affine=affine,header=header)
                 nifti.update_header()
                 save_volume(missing_fname,nifti)
+                shutil.copy(missing_fname, output_dir + f"missing_slices/{idx}_generated_missing_slice.nii.gz")
                 # print(idx)
                 # print(missing_idx)
                 # print(numpy.shape(missing_slices_interpolated))

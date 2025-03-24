@@ -1039,9 +1039,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
     try:
         
-        pre_post = do_reg([pre_img], [avg_fname], file_name='pre_post', output_dir=temp_dir, 
+        pre_post = do_reg_ants([pre_img], [avg_fname], file_name='pre_post', output_dir=temp_dir, 
                           scaling_factor=scaling_factor,mask_zero=mask_zero)
-        post_pre = do_reg([post_img], [avg_fname], file_name='post_pre', output_dir=temp_dir, 
+        post_pre = do_reg_ants([post_img], [avg_fname], file_name='post_pre', output_dir=temp_dir, 
                           scaling_factor=scaling_factor,mask_zero=mask_zero)
 
         reg_pre = pre_post['transformed_source']
@@ -1068,9 +1068,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         # Refinement loop        
         for refinement_iter in range(reg_refinement_iterations):
             
-            pre_avg = do_reg([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
+            pre_avg = do_reg_ants([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
                              scaling_factor=scaling_factor,mask_zero=mask_zero)
-            post_avg = do_reg([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
+            post_avg = do_reg_ants([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
                               scaling_factor=scaling_factor,mask_zero=mask_zero)
             
             img1 = load_volume(pre_avg['transformed_source'])
@@ -1102,7 +1102,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
              
         # If current_img is provided, refine it to match the final average
         if current_img is not None:
-            current_avg = nibabel.load(do_reg([current_img], [avg_fname], file_name='current_avg', run_syn=True, 
+            current_avg = nibabel.load(do_reg_ants([current_img], [avg_fname], file_name='current_avg', run_syn=True, 
                                               output_dir=temp_dir)['transformed_source'],mask_zero=mask_zero)
         else:
             current_avg = avg

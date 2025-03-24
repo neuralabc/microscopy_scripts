@@ -7,12 +7,14 @@ import sys
 from datetime import datetime
 import nighres
 import numpy
+np = numpy #for shorthand
 import nibabel
 import glob
 from PIL import Image
 import pandas as pd
-from scipy.signal import convolve2d
-from scipy.ndimage import gaussian_filter
+# from scipy.signal import convolve2d
+from scipy.ndimage import gaussian_filter, laplace
+from skimage.exposure import match_histograms
 import math
 from nighres.io import load_volume, save_volume
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -99,6 +101,30 @@ all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_
 
 if not os.path.exists(output_dir):
      os.makedirs(output_dir)
+
+
+def compute_histogram_matched_slice(current_slice, pre_img_slice, post_img_slice = None):
+    """
+    Compute a histogram-matched slice for the current slice from one or both of its neighboring slices.
+    All inputs should be numpy arrays in the same space since we mask based on the current slice
+      - this approach intrinsically misses some data in the neighbours, but has little effect
+    """
+    
+    current_matched = np.zeros_like(current_slice)
+    m = current_slice>0
+    current_slice_vec = current_slice[m]
+    pre_vec = pre_img_slice[m]
+    post_vec = post_img_slice[m]
+
+    if post_img_slice is not None:
+        # Match current slice to the average of its neighbors
+        matched = match_histograms(current_slice_vec, (pre_vec + post_vec) / 2)
+        current_matched[m] = matched
+    else:
+        #match to the one that was provided
+        matched = match_histograms(current_slice_vec, pre_vec)
+        current_matched[m] = matched
+    return current_matched
 
 def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     """

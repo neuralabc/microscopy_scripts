@@ -14,6 +14,7 @@ from PIL import Image
 import pandas as pd
 # from scipy.signal import convolve2d
 from scipy.ndimage import gaussian_filter, laplace
+from scipy.stats import trim_mean
 from skimage.exposure import match_histograms
 import math
 from nighres.io import load_volume, save_volume
@@ -102,7 +103,6 @@ all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_
 if not os.path.exists(output_dir):
      os.makedirs(output_dir)
 
-
 def compute_histogram_matched_slice(current_slice, pre_img_slice, post_img_slice = None):
     """
     Compute a histogram-matched slice for the current slice from one or both of its neighboring slices.
@@ -119,10 +119,10 @@ def compute_histogram_matched_slice(current_slice, pre_img_slice, post_img_slice
     m = current_slice>0
     current_slice_vec = current_slice[m]
     pre_vec = pre_img_slice[m]
-    post_vec = post_img_slice[m]
 
     if post_img_slice is not None:
         # Match current slice to the average of its neighbors
+        post_vec = post_img_slice[m]
         matched = match_histograms(current_slice_vec, (pre_vec + post_vec) / 2)
         current_matched[m] = matched
     else:
@@ -131,39 +131,90 @@ def compute_histogram_matched_slice(current_slice, pre_img_slice, post_img_slice
         current_matched[m] = matched
     return current_matched
 
-def compute_sigma_strength_from_neighbors(pre_img, post_img, sigma_bounds=(0.5, 2.0), strength_bounds=(0.5, 2.0)):
+def compute_scaling_multipliers_from_dataset(image_list, mask_zero=True, trim_proportion=0.05):
     """
-    Estimate adaptive sharpening parameters (sigma, strength) based on neighboring slices.
+    Computes global scaling multipliers from a dataset to normalize sharpening parameters.
 
     Parameters:
-        pre_img (ndarray): Image before current slice.
-        post_img (ndarray): Image after current slice.
-        sigma_bounds (tuple): Min and max allowable sigma.
-        strength_bounds (tuple): Min and max allowable strength.
-        
+        image_list (list of nibabel images): List of images to compute statistics from
+        mask_zero (bool): Whether to exclude zero values from the computation.
+        trim_proportion (float): Proportion of values to trim from the high and low ends of the distribution.
+
     Returns:
-        sigma (float): Gaussian sigma for unsharp masking.
+        sigma_multiplier (float): Multiplier to convert detail energy into sigma.
+        strength_multiplier (float): Multiplier to convert contrast into sharpening strength.
+        stats (dict): Dictionary of global statistics.
+    """
+    detail_energies = []
+    contrasts = []
+
+    for img in image_list:
+        img = load_volume(img).get_fdata()
+        if mask_zero:
+            img = img[img != 0]
+        if img.size == 0:
+            continue
+        detail_energy = np.mean(np.abs(laplace(img)))
+        contrast = np.std(img)
+
+        detail_energies.append(detail_energy)
+        contrasts.append(contrast)
+
+    # trim to remove 5% of the highest and lowest values
+    detail_energy_mean = trim_mean(detail_energies,trim_proportion)
+    contrast_mean = trim_mean(contrasts,trim_proportion)
+
+    # Normalize so typical energy/contrast → multiplier * energy ≈ 1.0
+    sigma_multiplier = 1.0 / detail_energy_mean if detail_energy_mean > 0 else 1.0
+    strength_multiplier = 1.0 / contrast_mean if contrast_mean > 0 else 1.0
+
+    stats = {
+        'detail_energy_mean': detail_energy_mean,
+        'detail_energy_max': np.max(detail_energies) if detail_energies else 0,
+        'contrast_mean': contrast_mean,
+        'contrast_max': np.max(contrasts) if contrasts else 0,
+        'sigma_multiplier': sigma_multiplier,
+        'strength_multiplier': strength_multiplier
+    }
+
+    return sigma_multiplier, strength_multiplier, stats
+
+
+def compute_sigma_strength_from_neighbors(
+    pre_img, post_img, sigma_bounds=(0.5, 2.0), strength_bounds=(0.5, 2.0),
+    sigma_multiplier=1.0, strength_multiplier=1.0
+):
+    """
+    Computes adaptive sigma and strength from neighboring slices using global scaling multipliers.
+
+    Parameters:
+        pre_img (ndarray): Previous slice image.
+        post_img (ndarray): Next slice image.
+        sigma_bounds (tuple): Min/max bounds for sigma.
+        strength_bounds (tuple): Min/max bounds for strength.
+        sigma_multiplier (float): Multiplier from dataset for sigma.
+        strength_multiplier (float): Multiplier from dataset for sharpening strength.
+
+    Returns:
+        sigma (float): Gaussian blur sigma.
         strength (float): Sharpening strength.
     """
-
     def local_detail_energy(img):
-        # High-pass content estimate (Laplacian energy)
         return np.mean(np.abs(laplace(img)))
 
     def local_contrast(img):
-        # Estimate contrast via local standard deviation
         return np.std(img)
 
-    # Compute for both neighbors
+    # Average detail and contrast from neighbors
     detail_energy = np.mean([local_detail_energy(pre_img), local_detail_energy(post_img)])
     contrast = np.mean([local_contrast(pre_img), local_contrast(post_img)])
 
-    # Normalize to a reasonable scale (empirically tuned based on MRI range)
-    # You can refine this mapping for your dataset
-    sigma = np.clip(2.0 - detail_energy * 2.0, *sigma_bounds)   # sharper neighbor → smaller sigma
-    strength = np.clip(contrast * 1.5, *strength_bounds)        # higher contrast → stronger sharpening
+    # Apply scaling multipliers
+    sigma = np.clip(sigma_multiplier * detail_energy, *sigma_bounds)
+    strength = np.clip(strength_multiplier * contrast, *strength_bounds)
 
     return sigma, strength
+
 
 def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
     """

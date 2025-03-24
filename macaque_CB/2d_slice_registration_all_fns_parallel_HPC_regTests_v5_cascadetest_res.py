@@ -1085,7 +1085,8 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):
             #     avg = img1.get_fdata()
 
-            #if we are on the last refinement_iter, we can do some sharpening and histogram matching
+            #if we are on the last refinement_iter, we can do some sharpening and histogram matching for the synthetic slice that 
+            # we just created
             if refinement_iter == reg_refinement_iterations - 1:
                 # optionally resharpen data
                 if (sigma_multiplier is not None) and (strength_multiplier is not None):

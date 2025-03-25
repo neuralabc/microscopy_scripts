@@ -2109,7 +2109,7 @@ for n in range(n_scales):
     smooth.append(initial_scaling_factor/math.pow(2.0,n+1))
     shrink.append(math.ceil(initial_scaling_factor/math.pow(2.0,n+1)))
 num_valid_steps = numpy.where(numpy.array(shrink)*vox_2_factor_multiplier<=shape_min)[0].shape[0]
-scaling_factor = (2**num_valid_steps)/2
+scaling_factor = int(2**num_valid_steps)/2
 # scaling_factor = num_valid_steps #scaling factor was doubling?
 
 logger.warning(f'\tScaling factor set to: {scaling_factor}')

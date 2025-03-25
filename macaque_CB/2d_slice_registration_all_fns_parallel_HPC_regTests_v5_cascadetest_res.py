@@ -648,7 +648,7 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             output = all_image_fnames_new[moving_idx]
             # previously was just do_reg()
             reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero,sampling_percentage=.75,sampling_strategy='Regular')
+                                scaling_factor=scaling_factor,mask_zero=mask_zero)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
             logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
 

@@ -2199,7 +2199,7 @@ for iter in range(num_cascade_iterations):
                                     missing_idxs_to_fill = missing_idxs_to_fill, 
                                     zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
                                     reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True,
-                                    scaling_factor=scaling_factor) #,mask_zero=mask_zero)
+                                    scaling_factor=scaling_factor, run_syn=False) #,mask_zero=mask_zero)
 
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                             per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,

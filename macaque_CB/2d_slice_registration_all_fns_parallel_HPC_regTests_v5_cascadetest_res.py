@@ -2110,6 +2110,8 @@ for n in range(n_scales):
     shrink.append(math.ceil(initial_scaling_factor/math.pow(2.0,n+1)))
 num_valid_steps = numpy.where(numpy.array(shrink)*vox_2_factor_multiplier<=shape_min)[0].shape[0]
 scaling_factor = 2**num_valid_steps
+scaling_factor = num_valid_steps #scaling factor was doubling?
+
 logger.warning(f'\tScaling factor set to: {scaling_factor}')
 
 

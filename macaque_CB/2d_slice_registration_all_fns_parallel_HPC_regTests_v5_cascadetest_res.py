@@ -1064,43 +1064,44 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         blur_scales = numpy.linspace(0,1,reg_refinement_iterations-1)[::-1]
         blur_scales = numpy.append(blur_scales,0)
         
-        # Refinement loop        
-        for refinement_iter in range(reg_refinement_iterations):
-            
-            pre_avg = do_reg_ants([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
-                             scaling_factor=scaling_factor,mask_zero=mask_zero)
-            post_avg = do_reg_ants([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
-                              scaling_factor=scaling_factor,mask_zero=mask_zero)
-            
-            img1 = load_volume(pre_avg['transformed_source'])
-            img2 = load_volume(post_avg['transformed_source'])
+        if reg_refinement_iterations is not None:
+            # Refinement loop       
+            for refinement_iter in range(reg_refinement_iterations):
+                
+                pre_avg = do_reg_ants([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
+                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                post_avg = do_reg_ants([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
+                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                
+                img1 = load_volume(pre_avg['transformed_source'])
+                img2 = load_volume(post_avg['transformed_source'])
 
-            avg = (img1.get_fdata() + img2.get_fdata()) / 2
-            blur_scale = blur_scales[refinement_iter]
-            if not(blur_scale==0):
-                avg = gaussian_filter(avg,sigma=blur_scale)
-            
-            # XXX if the coregs are not stable, can fix this by changing this here XXX
-            # #on the last iteration, we do not compute the average but rather the first image in the average space to reduce overlap errors
-            # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):
-            #     avg = img1.get_fdata()
+                avg = (img1.get_fdata() + img2.get_fdata()) / 2
+                blur_scale = blur_scales[refinement_iter]
+                if not(blur_scale==0):
+                    avg = gaussian_filter(avg,sigma=blur_scale)
+                
+                # XXX if the coregs are not stable, can fix this by changing this here XXX
+                # #on the last iteration, we do not compute the average but rather the first image in the average space to reduce overlap errors
+                # if (current_img is None) and (refinement_iter == reg_refinement_iterations - 1):
+                #     avg = img1.get_fdata()
 
-            #if we are on the last refinement_iter, we can do some sharpening and histogram matching for the synthetic slice that 
-            # we just created
-            if refinement_iter == reg_refinement_iterations - 1:
-                # histogram matching
-                avg = compute_histogram_matched_slice(avg, img1.get_fdata(),img2.get_fdata())
+                #if we are on the last refinement_iter, we can do some sharpening and histogram matching for the synthetic slice that 
+                # we just created
+                if refinement_iter == reg_refinement_iterations - 1:
+                    # histogram matching
+                    avg = compute_histogram_matched_slice(avg, img1.get_fdata(),img2.get_fdata())
 
-                # optionally resharpen data
-                if (sigma_multiplier is not None) and (strength_multiplier is not None):
-                    sigma, strength = compute_sigma_strength_from_neighbors(img1.get_fdata(),img2.get_fdata(),
-                                                                sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
-                    avg = unsharp_mask(avg, sigma=sigma, strength=strength)
-                #histogram match to nonzero data
-            
-            avg = nibabel.Nifti1Image(avg, affine=img1.affine, header=img1.header, dtype=img1.get_data_dtype())
-            save_volume(avg_fname, avg, overwrite_file=True)
-             
+                    # optionally resharpen data
+                    if (sigma_multiplier is not None) and (strength_multiplier is not None):
+                        sigma, strength = compute_sigma_strength_from_neighbors(img1.get_fdata(),img2.get_fdata(),
+                                                                    sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
+                        avg = unsharp_mask(avg, sigma=sigma, strength=strength)
+                    #histogram match to nonzero data
+                
+                avg = nibabel.Nifti1Image(avg, affine=img1.affine, header=img1.header, dtype=img1.get_data_dtype())
+                save_volume(avg_fname, avg, overwrite_file=True)
+                
         # If current_img is provided, refine it to match the final average
         if current_img is not None:
             current_avg = nibabel.load(do_reg_ants([current_img], [avg_fname], file_name='current_avg', run_syn=True, 

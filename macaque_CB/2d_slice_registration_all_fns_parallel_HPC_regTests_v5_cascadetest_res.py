@@ -941,11 +941,17 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
 
         logging.info(f"Registration complete. Output saved to: {final_output_path}")
 
-        return {
-            'transformed_source': final_output_path,
-            'rigid_transform': rigid_transform,
-            'syn_transform': syn_transform
-        }
+        if run_syn:
+            return {
+                'transformed_source': final_output_path,
+                'rigid_transform': rigid_transform,
+                'syn_transform': syn_transform
+            }
+        else:
+            return {
+                'transformed_source': final_output_path,
+            }
+
     
 def do_initial_translation_reg(sources, targets, file_name='XXX', scaling_factor=64, mask_zero=False):
     """

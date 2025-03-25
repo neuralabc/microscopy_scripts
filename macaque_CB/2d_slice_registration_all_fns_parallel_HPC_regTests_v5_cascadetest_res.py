@@ -2196,7 +2196,8 @@ for iter in range(num_cascade_iterations):
 
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                             per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
-                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
+                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
+                                            slice_template_type=slice_template_type)
 
 # input_source_file_tag = 'coreg0nl'
 # reg_level_tag = "coreg0nl_cascade"
@@ -2233,6 +2234,7 @@ template_tag = f'cascade_{iter}' #'coreg0nl_cascade'
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
 
+## TODO: nonlin slice templates not working from cascade as of yet?
 
 for iter in range(num_reg_iterations): 
     
@@ -2244,6 +2246,8 @@ for iter in range(num_reg_iterations):
     logger.warning(f'\titeration {iter_tag}')
     logger.warning('****************************************************************************')
     
+    # this is currently not doing anything except computing the per-slice templates
+    # logic kept for the moment.
     if (iter == 0): #do not want to use per slice templates
         # first_run_slice_template = False #skip using the per slice template on the first 2 reg steps below (up until the next template is created), same for use_nonlin_slice_templates
         first_run_slice_template = True

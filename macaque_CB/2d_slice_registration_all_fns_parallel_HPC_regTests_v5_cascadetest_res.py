@@ -22,15 +22,12 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import tempfile
 
-
-#v2 still not as good as the original one!
-
-
 # code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
 ## Potential list of todo's
 # TODO: additional weight of registrations by MI to downweight slices that are much different (much more processing)
 # TODO: potentially incorporate mesh creation to either identify mask (limiting registration)
 #       potentially included as a distance map in some way to weight boundary?
+# TODO: fix nonlinear slice interpolation option for template creation
 
 # file parameters
 subject = 'zefir'
@@ -44,8 +41,9 @@ in_plane_res_z = 50 #slice thickness of 50 microns
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 
-use_nonlin_slice_templates = True #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
+use_nonlin_slice_templates = False #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
                                     # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
+                                    # currently BROKEN
 slice_template_type = 'median'
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
@@ -2196,8 +2194,7 @@ for iter in range(num_cascade_iterations):
 
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                             per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
-                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
-                                            slice_template_type=slice_template_type)
+                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
 
 # input_source_file_tag = 'coreg0nl'
 # reg_level_tag = "coreg0nl_cascade"
@@ -2256,7 +2253,7 @@ for iter in range(num_reg_iterations):
         first_run_slice_template = per_slice_template
         first_run_nonlin_slice_template = use_nonlin_slice_templates
 
-    # missing_idxs_to_fill = None #XXX FOR TESTING!!! TODO: ONLY FILL IN MISSING SLICES prior to this.
+    # missing_idxs_to_fill = None #XXX FOR TESTING!!! TOTEST: ONLY FILL IN MISSING SLICES prior to this.
 
     slice_offset_list_forward = [-1,-2,-3]
     slice_offset_list_reverse = [1,2,3]

@@ -49,11 +49,11 @@ if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
 
 #this fails on server, for some reason?    
-mask_zero = False #mask zeros for nighres registrations
+mask_zero = True #mask zeros for nighres registrations
 
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=40
-rescale=10
+rescale=40
+# rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
@@ -569,7 +569,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
                 if run_syn:
                     pre_to_post_nonlin = ants.registration(fixed=target_img, moving=pre_aligned, 
                                                         type_of_transform='SyNOnly',
-                                                        initial_transform='Identity', #) #),
+                                                        initial_transform='Identity',
                                                         flow_sigma=syn_flow_sigma,
                                                         total_sigma=syn_total_sigma,
                                                         outprefix=tmp_output_dir+"/")
@@ -2292,12 +2292,14 @@ for iter in range(num_reg_iterations):
         template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                             zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                            scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                            mask_zero=mask_zero)
     else:
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                             zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                            mask_zero=mask_zero)
     if use_nonlin_slice_templates:
         template = template_nonlin
     # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template
@@ -2338,13 +2340,15 @@ for iter in range(num_reg_iterations):
                                 target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
-                    image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+                    image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,
+                    scaling_factor=scaling_factor,mask_zero=mask_zero)
     
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                 target_slice_offset_list=slice_offset_list_reverse, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                     previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
-                    image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+                    image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,
+                    scaling_factor=scaling_factor,mask_zero=mask_zero)
     logging.warning('\t\tSelecting best registration by MI')                                     
 
     select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,

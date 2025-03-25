@@ -44,7 +44,7 @@ in_plane_res_z = 50 #slice thickness of 50 microns
 zfill_num = 4
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
 
-use_nonlin_slice_templates = False #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
+use_nonlin_slice_templates = True #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
                                     # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
 slice_template_type = 'median'
 if use_nonlin_slice_templates:

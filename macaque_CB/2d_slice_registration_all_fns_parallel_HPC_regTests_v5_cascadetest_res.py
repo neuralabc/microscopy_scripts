@@ -1090,14 +1090,16 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             #if we are on the last refinement_iter, we can do some sharpening and histogram matching for the synthetic slice that 
             # we just created
             if refinement_iter == reg_refinement_iterations - 1:
+                # histogram matching
+                avg = compute_histogram_matched_slice(avg, img1.get_fdata(),img2.get_fdata())
+
                 # optionally resharpen data
                 if (sigma_multiplier is not None) and (strength_multiplier is not None):
                     sigma, strength = compute_sigma_strength_from_neighbors(img1.get_fdata(),img2.get_fdata(),
                                                                 sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
                     avg = unsharp_mask(avg, sigma=sigma, strength=strength)
                 #histogram match to nonzero data
-                avg = compute_histogram_matched_slice(avg, img1.get_fdata(),img2.get_fdata())
-
+            
             avg = nibabel.Nifti1Image(avg, affine=img1.affine, header=img1.header, dtype=img1.get_data_dtype())
             save_volume(avg_fname, avg, overwrite_file=True)
              

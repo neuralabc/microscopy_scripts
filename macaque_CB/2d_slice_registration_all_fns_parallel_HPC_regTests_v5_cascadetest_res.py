@@ -74,18 +74,18 @@ nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice int
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_part/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+# missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 ## _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
-# missing_idxs_to_fill = [5,32]
+missing_idxs_to_fill = [32]
 # missing_idxs_to_fill = [5]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-# all_image_fnames = all_image_fnames[155:165] #for testing
+all_image_fnames = all_image_fnames[0:35] #for testing
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -2171,7 +2171,7 @@ template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill
 
 ## loop over cascades to see what this does for us
 iter_tag = ""
-num_cascade_iterations = 3
+num_cascade_iterations = 1
 anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
 anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
 for iter in range(num_cascade_iterations):

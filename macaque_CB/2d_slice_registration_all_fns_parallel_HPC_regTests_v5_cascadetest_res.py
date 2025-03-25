@@ -2259,7 +2259,7 @@ for iter in range(num_reg_iterations):
     slice_offset_list_reverse = [1,2,3]
     image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
     # # XXX removed image weights
-    # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
+    image_weights = numpy.ones(len(slice_offset_list_forward)+1)
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                 target_slice_offset_list=slice_offset_list_forward, 
                 zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
@@ -2323,8 +2323,8 @@ for iter in range(num_reg_iterations):
     image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=2) #symmetric gaussian, so the same on both sides
     image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=2)
     # # XXX removed image weights
-    # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
-    # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
+    image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
+    image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
     run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                 target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', 

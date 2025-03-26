@@ -2226,30 +2226,7 @@ for iter in range(num_cascade_iterations):
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                             per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
                                             scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
-
-# input_source_file_tag = 'coreg0nl'
-# reg_level_tag = "coreg0nl_cascade"
-# run_cascading_coregistrations(output_dir, subject, 
-#                               all_image_fnames, anchor_slice_idx = None, 
-#                               missing_idxs_to_fill = missing_idxs_to_fill, 
-#                               zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
-#                               reg_level_tag=reg_level_tag, previous_target_tag=None,run_syn=False)
-
-# template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=reg_level_tag,
-#                                 per_slice_template=True,
-#                                 missing_idxs_to_fill=missing_idxs_to_fill,slice_template_type='nochange',scaling_factor=scaling_factor)
-
-## ****************************** Iteration 1
-# in all cases, we go:
-#   - forwards
-#   - backwards
-#   - select the best registration
-#   - generate a template, using a per-slice template helps quite a bit
-#   - window in front and behind, forwards
-#   - window in front and behind, backwards
-#   - select the best registration with MI
-#   - generate a template
-#   - delete unecessary files (in progress...)
+        
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
@@ -2402,6 +2379,7 @@ step1_iter_tag = iter_tag
 logging.warning(f"Output directory: {output_dir}")
 
 ## TODO: ADAPT AFTER ABOVE WORKING
+#        - iteratively refine registrations by using output of previous as input to current
 
 # # # # STEP 2: Syn only
 # print('4. Begin STAGE2 registration iterations - Syn')

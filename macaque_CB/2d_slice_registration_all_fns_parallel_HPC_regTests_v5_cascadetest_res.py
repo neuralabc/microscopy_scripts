@@ -595,6 +595,8 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
                                   mask_zero=mask_zero):
 
+    #TODO: some filenames are messed up due to ants automatic filenaming of outputs
+    
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
     else:

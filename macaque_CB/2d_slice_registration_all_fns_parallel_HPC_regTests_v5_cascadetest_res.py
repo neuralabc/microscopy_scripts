@@ -52,8 +52,8 @@ if use_nonlin_slice_templates:
 mask_zero = False #mask zeros for nighres registrations
 
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=40
-rescale=10
+rescale=40
+# rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
@@ -276,7 +276,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
-                       mask_zero=False, include_stack_template=False):
+                       mask_zero=False, include_stack_template=True):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 

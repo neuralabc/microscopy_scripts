@@ -354,16 +354,16 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                 target_images=targets,
                 image_weights=image_weights_ordered,
                 run_rigid=run_rigid,
-                rigid_iterations=1000,
+                rigid_iterations=5000,
                 run_affine=False,
                 run_syn=run_syn,
                 coarse_iterations=2000,
                 medium_iterations=1000, 
-                fine_iterations=200,
+                fine_iterations=500,
                 scaling_factor=scaling_factor,
                 cost_function='MutualInformation',
                 interpolation='Linear',
-                regularization=regularization, #TODO: CHANGE BACK TO HIGH AFTER TESTING
+                regularization=regularization,
                 convergence=1e-6,
                 mask_zero=mask_zero,
                 ignore_affine=True, 
@@ -381,7 +381,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             if 'def0' not in f:
                 os.remove(f)
                 time.sleep(0.5)
-    logging.warning(f"\t\tRegistration completed for slice {idx}.")
+        logging.warning(f"\t\tRegistration completed for slice {idx}. Intermediate files deleted.")
+    else:
+        logging.warning(f"\t\tRegistration completed for slice {idx}. Intermediate files retained.")
 
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 

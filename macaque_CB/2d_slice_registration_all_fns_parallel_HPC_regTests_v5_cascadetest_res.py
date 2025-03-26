@@ -275,7 +275,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                        target_slice_offset_list=[-1, -2, -3], zfill_num=4, 
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
-                       scaling_factor=64, image_weights=None, retain_reg_mappings=False,mask_zero=False):
+                       scaling_factor=64, image_weights=None, retain_reg_mappings=False,
+                       mask_zero=False, include_stack_template=False):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -296,6 +297,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
         scaling_factor (int): Scaling factor for the image resolution during registration.
         image_weights (list): Weights assigned to images during registration to emphasize certain slices.
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
+        include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
+            - no effect when only a single template is used
     """
 
     img_basename = os.path.basename(img).split('.')[0]
@@ -311,7 +314,14 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
 
     # Assign the correct template for this slice    
     if type(template) is list:
+        #generate the name of the template from the entire stack
         targets = [template[idx]]
+        if include_stack_template: #we want to incldue the stack template to help reduce drift 
+            stack_template = os.path.dirname(template[idx]) + os.path.sep + os.path.basename(template[idx]).split('_')[0] + template[idx].split('pix')[1]
+            #now we append the stack appropriately
+            sources.append(nifti)
+            targets.append(stack_template)
+            image_weights_ordered.append(image_weights[0])
     else:
         targets = [template]
     

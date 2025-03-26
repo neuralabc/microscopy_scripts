@@ -78,7 +78,7 @@ _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idx
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 ## _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
-# missing_idxs_to_fill = [32]
+missing_idxs_to_fill = [32]
 # missing_idxs_to_fill = [5]
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)

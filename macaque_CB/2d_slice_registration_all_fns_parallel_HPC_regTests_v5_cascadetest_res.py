@@ -2020,7 +2020,7 @@ def setup_logging(dataset_name, out_dir):
 
 
 # start our logger, which will capture all the print statements
-script_name = os.path.basename(__file__)
+script_name = os.path.basename(__file__).split('.py')[0]
 script_dir = os.path.dirname(os.path.abspath(__file__))
 logger = setup_logging(script_name, output_dir)
 
@@ -2028,7 +2028,7 @@ logger = setup_logging(script_name, output_dir)
 
 print(f"Output directory: {output_dir}")
 shutil.copyfile(__file__,os.path.join(output_dir,script_name))
-logger.info(f'Original script file copied to output directory.')
+logger.info(f'Original .py script file copied to output directory.')
 
 """_summary_
 
@@ -2038,7 +2038,7 @@ After testing at lower resolution with a subset of slices, it appears that
 2. interpolating missing slices is improved, but still seems to be not perfect. This can have a large impact on
 the rest of the registrations
   - this still needs to be worked on. It seems to work for the cascade but now fails for the other registrations
-
+  - fixed
 """
 
 # 0. Convert to nifti

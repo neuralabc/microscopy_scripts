@@ -348,6 +348,12 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
 
     with tempfile.TemporaryDirectory(prefix=f"coreg_slice_{idx}_") as tmp_output_dir:
         # logging.warning(f'Creating temporary slice directory {tmp_output_dir}')
+        #original iterations:
+        #                rigid_iterations=1000,
+        #                coarse_iterations=2000,
+        #                medium_iterations=1000, 
+        #                fine_iterations=200,
+    
         with working_directory(tmp_output_dir):
             coreg_output = nighres.registration.embedded_antspy_2d_multi(
                 source_images=sources,
@@ -359,9 +365,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                 run_syn=run_syn,
                 coarse_iterations=2000,
                 medium_iterations=1000, 
-                fine_iterations=500,
+                fine_iterations=200,  #500 was a bit too aagro
                 scaling_factor=scaling_factor,
-                cost_function='MutualInformation',
+                cost_function='Mattes', #MutualInformation
                 interpolation='Linear',
                 regularization=regularization,
                 convergence=1e-6,
@@ -381,9 +387,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
             if 'def0' not in f:
                 os.remove(f)
                 time.sleep(0.5)
-        logging.warning(f"\t\tRegistration completed for slice {idx}. Intermediate files deleted.")
+        logging.warning(f"\t\tRegistration completed for slice {idx}. \t\t(intermediate files deleted)")
     else:
-        logging.warning(f"\t\tRegistration completed for slice {idx}. Intermediate files retained.")
+        logging.warning(f"\t\tRegistration completed for slice {idx}. \t\t(intermediate files retained)")
 
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 

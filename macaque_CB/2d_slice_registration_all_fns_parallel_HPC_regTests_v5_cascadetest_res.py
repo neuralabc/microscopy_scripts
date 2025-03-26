@@ -72,7 +72,7 @@ nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice int
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_part/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_part_med/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 # missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -363,7 +363,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                 scaling_factor=scaling_factor,
                 cost_function='MutualInformation',
                 interpolation='Linear',
-                regularization='High',
+                regularization='Medium', #TODO: CHANGE BACK TO HIGH AFTER TESTING
                 convergence=1e-6,
                 mask_zero=mask_zero,
                 ignore_affine=True, 
@@ -596,7 +596,7 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
                                   mask_zero=mask_zero):
 
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
-    
+
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
     else:

@@ -276,7 +276,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
-                       mask_zero=False, include_stack_template=True):
+                       mask_zero=False, include_stack_template=True,regularization='Medium'):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -363,7 +363,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                 scaling_factor=scaling_factor,
                 cost_function='MutualInformation',
                 interpolation='Linear',
-                regularization='Medium', #TODO: CHANGE BACK TO HIGH AFTER TESTING
+                regularization=regularization, #TODO: CHANGE BACK TO HIGH AFTER TESTING
                 convergence=1e-6,
                 mask_zero=mask_zero,
                 ignore_affine=True, 
@@ -386,7 +386,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
-                                  scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False):
+                                  scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
+                                  regularization='Medium'):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -420,7 +421,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
                                 scaling_factor=scaling_factor, image_weights=image_weights,
-                                retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero)
+                                retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero, 
+                                regularization=regularization)
             )
         for future in as_completed(futures):
             try:

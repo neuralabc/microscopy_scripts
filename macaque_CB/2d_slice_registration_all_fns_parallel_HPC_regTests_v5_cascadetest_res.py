@@ -2231,7 +2231,7 @@ for iter in range(num_cascade_iterations):
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 20
+num_reg_iterations = 40
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop

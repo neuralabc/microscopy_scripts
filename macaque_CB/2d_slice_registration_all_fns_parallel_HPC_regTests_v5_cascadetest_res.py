@@ -2231,7 +2231,7 @@ for iter in range(num_cascade_iterations):
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 5
+num_reg_iterations = 20
 run_rigid = True
 run_syn = True
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
@@ -2261,117 +2261,122 @@ for iter in range(num_reg_iterations):
         first_run_slice_template = per_slice_template
         first_run_nonlin_slice_template = use_nonlin_slice_templates
 
-    # missing_idxs_to_fill = None #XXX FOR TESTING!!! TOTEST: ONLY FILL IN MISSING SLICES prior to this.
-
-    slice_offset_list_forward = [-1,-2,-3]
-    slice_offset_list_reverse = [1,2,3]
-    image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
-    # # XXX removed image weights
-    # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
-                                target_slice_offset_list=slice_offset_list_forward, 
-                zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
-                image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
-                                target_slice_offset_list=slice_offset_list_reverse, 
-                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
-                        image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
-
-    logging.warning('\t\tSelecting best registration by MI')
-
-    select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
-                        zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
-                        reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,
-                        use_nonlin_slice_templates=first_run_nonlin_slice_template,max_workers=max_workers)
-    if MI_df_struct is not None:
-        pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
-    
-    logging.warning('\t\tGenerating new template')
-    if 'nonlin' in slice_template_type:
-        template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                            zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
-                                            missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                            mask_zero=mask_zero)
+    expected_stack_fname = f'{subject}_coreg12nl_win12{iter_tag}_stack.nii.gz'
+    logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
+    if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
+        logging.warning('Stack exists, skipping the current cascade iteration')
     else:
-        template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                            zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
-                                            missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                            mask_zero=mask_zero)
-    if use_nonlin_slice_templates:
-        template = template_nonlin
-    # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template
-    
-    ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
-    # if iter > 0: #we do not do this on the first iteration
-        # MRI_reg_output = register_stack_to_mri(slice_stack_template, mri_template)
+        # missing_idxs_to_fill = None #XXX FOR TESTING!!! TOTEST: ONLY FILL IN MISSING SLICES prior to this.
+
+        slice_offset_list_forward = [-1,-2,-3]
+        slice_offset_list_reverse = [1,2,3]
+        image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
+        # # XXX removed image weights
+        # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
+                                    target_slice_offset_list=slice_offset_list_forward, 
+                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
+                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
+                                    target_slice_offset_list=slice_offset_list_reverse, 
+                            zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
+                            image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+
+        logging.warning('\t\tSelecting best registration by MI')
+
+        select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
+                            zfill_num=zfill_num,reg_level_tag1='coreg1nl'+iter_tag, reg_level_tag2='coreg2nl'+iter_tag,
+                            reg_output_tag='coreg12nl'+iter_tag,per_slice_template=first_run_slice_template,df_struct=MI_df_struct,
+                            use_nonlin_slice_templates=first_run_nonlin_slice_template,max_workers=max_workers)
+        if MI_df_struct is not None:
+            pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
+        
+        logging.warning('\t\tGenerating new template')
+        if 'nonlin' in slice_template_type:
+            template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                                zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
+                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                                scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                mask_zero=mask_zero)
+        else:
+            template = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                                zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
+                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                mask_zero=mask_zero)
+        if use_nonlin_slice_templates:
+            template = template_nonlin
+        # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template
+        
+        ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary
+        # if iter > 0: #we do not do this on the first iteration
+            # MRI_reg_output = register_stack_to_mri(slice_stack_template, mri_template)
 
 
-    template_tag = 'coreg12nl'+iter_tag
-    
+        template_tag = 'coreg12nl'+iter_tag
+        
 
-    ## No diff between these two approaches
-    # slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
-    # slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
-    # same as above
-    # slice_offset_list_forward = [-3,-2,-1,1] #weighted back, but also forward
-    # slice_offset_list_reverse = [-1,1,2,3] #weighted forward, but also back
-    # below is worse
-    #slice_offset_list_forward = [-1,-2,-3,-4,-5] 
-    #slice_offset_list_reverse = [1,2,3,4,5] 
+        ## No diff between these two approaches
+        # slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
+        # slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
+        # same as above
+        # slice_offset_list_forward = [-3,-2,-1,1] #weighted back, but also forward
+        # slice_offset_list_reverse = [-1,1,2,3] #weighted forward, but also back
+        # below is worse
+        #slice_offset_list_forward = [-1,-2,-3,-4,-5] 
+        #slice_offset_list_reverse = [1,2,3,4,5] 
 
-    #not much change, likely worse    
-    # slice_offset_list_forward = [-1] 
-    # slice_offset_list_reverse = [1] 
+        #not much change, likely worse    
+        # slice_offset_list_forward = [-1] 
+        # slice_offset_list_reverse = [1] 
 
-    #increasing the gaussian weigting also results in worse (3-> 5)
+        #increasing the gaussian weigting also results in worse (3-> 5)
 
-    # her we include neigbouring slices and increase the sharpness of the gaussian
-    slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
-    slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
-    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=2) #symmetric gaussian, so the same on both sides
-    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=2)
-    # # XXX removed image weights
-    # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
-    # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
-                                target_slice_offset_list=slice_offset_list_forward, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
-                    image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,
-                    scaling_factor=scaling_factor,mask_zero=mask_zero)
-    
-    run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
-                                target_slice_offset_list=slice_offset_list_reverse, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                    previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
-                    image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,
-                    scaling_factor=scaling_factor,mask_zero=mask_zero)
-    logging.warning('\t\tSelecting best registration by MI')                                     
+        # her we include neigbouring slices and increase the sharpness of the gaussian
+        slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
+        slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
+        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=2) #symmetric gaussian, so the same on both sides
+        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=2)
+        # # XXX removed image weights
+        # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
+        # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
+                                    target_slice_offset_list=slice_offset_list_forward, 
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
+                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
+                        image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,
+                        scaling_factor=scaling_factor,mask_zero=mask_zero)
+        
+        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
+                                    target_slice_offset_list=slice_offset_list_reverse, 
+                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
+                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
+                        image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,
+                        scaling_factor=scaling_factor,mask_zero=mask_zero)
+        logging.warning('\t\tSelecting best registration by MI')                                     
 
-    select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
-                        zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
-                        reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct,
-                        use_nonlin_slice_templates=use_nonlin_slice_templates,max_workers=max_workers)
-    if MI_df_struct is not None:
-        pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
-    
-    logging.warning('\t\tGenerating new template')
-    if 'nonlin' in slice_template_type:
-        template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                            zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
-                                            missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
-    else:
-        template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                            zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
-                                            missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
-    
-    if use_nonlin_slice_templates:
-        template = template_nonlin
-    template_tag = 'coreg12nl_win12'+iter_tag
+        select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
+                            zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
+                            reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct,
+                            use_nonlin_slice_templates=use_nonlin_slice_templates,max_workers=max_workers)
+        if MI_df_struct is not None:
+            pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
+        
+        logging.warning('\t\tGenerating new template')
+        if 'nonlin' in slice_template_type:
+            template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                                zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
+                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+        else:
+            template = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                                zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
+                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+        
+        if use_nonlin_slice_templates:
+            template = template_nonlin
+        template_tag = 'coreg12nl_win12'+iter_tag
     
 final_reg_level_tag = 'coreg12nl_win12'+iter_tag
 step1_iter_tag = iter_tag

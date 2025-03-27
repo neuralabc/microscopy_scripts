@@ -28,6 +28,13 @@ import tempfile
 # TODO: potentially incorporate mesh creation to either identify mask (limiting registration)
 #       potentially included as a distance map in some way to weight boundary?
 # TODO: fix nonlinear slice interpolation option for template creation
+# TODO: test for existing files and do not overwrite by default
+# TODO: add steps to change regularization along the way
+# TODO: potentially scale regularization
+# TODO: potentially filter in slice dir
+# nb.Nifti1Image(scipy.signal.savgol_filter(image.get_fdata(), window_length=5, polyorder=2, axis=2),image.affine,image.header).to_fil
+#     ...: ename(template_f.split('.')[0]+"_savgol_filt.nii.gz")
+
 
 # file parameters
 subject = 'zefir'
@@ -2058,6 +2065,8 @@ for idx,img_orig in enumerate(all_image_fnames):
     
     if (os.path.isfile(output)):
         print('\t - already done, using existing image')
+        if idx ==0:
+            logging.warning('Looks like the first image has already been converted. All will be checked and created if missing, but there will be no further notifications here.')
         nifti = output
     else:
         print('\t - image '+str(img_orig))
@@ -2109,6 +2118,7 @@ for idx,img_orig in enumerate(all_image_fnames):
 # 1. Find largeest image as baseline
 print('1. Identifying the largest image to set image size')
 logger.warning('1. Identifying the largest image to set image size')
+
 largest = -1
 size= 0
 for idx,img in enumerate(all_image_fnames):
@@ -2126,7 +2136,7 @@ print(f"\tUsing the following image as the template for size: {template}")
 
 #adapt the scaling factor base on the largest image
 #we work in voxel space, assuming 1x1 sizes for the slices
-#we back-compute this from nighres approach, use a factor of 10 (vox_2_factor_multiplier) to relate resolution to shrinks (nd at least 10 datapoints per dimension)
+#we back-compute this from nighres approach, use a factor of 5 (vox_2_factor_multiplier) to relate resolution to shrinks (nd at least 5 datapoints per dimension)
 vox_2_factor_multiplier = 5
 initial_scaling_factor = 128
 shape = nighres.io.load_volume(template).header.get_data_shape()
@@ -2148,39 +2158,44 @@ print('2. Bring all image slices into same place as our 2d template with an init
 logger.warning('2. Bring all image slices into same place as our 2d template with an initial translation registration')
 # initial step to bring all images into the same space of our 2d template
 
-with ProcessPoolExecutor(max_workers=max_workers) as executor:
-    futures = []
-    for idx, img in enumerate(all_image_fnames):
-        img = os.path.basename(img).split('.')[0]
-        nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
+#check for expected output name (HARD-CODED here, will need to be changed later here and below if changed)
+expected_stack_fname = f'{subject}_coreg0nl_stack.nii.gz'
+if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
+    logging.warning('Stack exists, skipping the current alignment step')
+else:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for idx, img in enumerate(all_image_fnames):
+            img = os.path.basename(img).split('.')[0]
+            nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
 
-        sources = [nifti]
-        targets = [template]
+            sources = [nifti]
+            targets = [template]
+                
+            output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
             
-        output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
-        
-        futures.append(
-            # do_initial_translation_reg(sources, targets, run_rigid=False, run_syn=False, file_name=output, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
-            executor.submit(
-                do_initial_translation_reg(sources, targets, file_name=output, scaling_factor=scaling_factor, mask_zero=mask_zero)
-            )    
-            # executor.submit(
-            #      nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
-            #         target_images=targets,
-            #         run_rigid=False,
-            #         run_affine=False,
-            #         run_syn=False,
-            #         scaling_factor=64,
-            #         cost_function='MutualInformation',
-            #         interpolation='Linear',
-            #         regularization='High',
-            #         convergence=1e-6,
-            #         mask_zero=mask_zero,
-            #         ignore_affine=False, ignore_orient=False, ignore_res=False,
-            #         save_data=True, overwrite=False,
-            #         file_name=output
-            # )
-        )
+            futures.append(
+                # do_initial_translation_reg(sources, targets, run_rigid=False, run_syn=False, file_name=output, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
+                executor.submit(
+                    do_initial_translation_reg(sources, targets, file_name=output, scaling_factor=scaling_factor, mask_zero=mask_zero)
+                )    
+                # executor.submit(
+                #      nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
+                #         target_images=targets,
+                #         run_rigid=False,
+                #         run_affine=False,
+                #         run_syn=False,
+                #         scaling_factor=64,
+                #         cost_function='MutualInformation',
+                #         interpolation='Linear',
+                #         regularization='High',
+                #         convergence=1e-6,
+                #         mask_zero=mask_zero,
+                #         ignore_affine=False, ignore_orient=False, ignore_res=False,
+                #         save_data=True, overwrite=False,
+                #         file_name=output
+                # )
+            )
 
 #generate a list of the current images that are now in the same space
 image_list = []
@@ -2192,11 +2207,14 @@ for idx,img_name in enumerate(all_image_fnames):
 sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_dataset(image_list)
 
 
-
-template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
-                                       missing_idxs_to_fill=missing_idxs_to_fill,
-                                       scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
-                                       sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
+expected_stack_name = f'{subject}_coreg0nl_stack.nii.gz'
+if os.path.isfile(os.path.join(output_dir,expected_stack_name)):
+    logging.warning('Initial stack exists, skipping the first generate_stack_and_template \n{expected_stack_name}')
+else:
+    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
+                                           missing_idxs_to_fill=missing_idxs_to_fill,
+                                           scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
+                                           sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
 
 ## loop over cascades to see what this does for us
 iter_tag = ""
@@ -2231,9 +2249,10 @@ for iter in range(num_cascade_iterations):
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 40
+num_reg_iterations = 20
 run_rigid = True
 run_syn = True
+regularization ='Medium'
 template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 template_tag = f'cascade_{iter}' #'coreg0nl_cascade'
 MI_df_struct = {} #output for MI values, will be saved in a csv file
@@ -2243,7 +2262,7 @@ MI_df_struct = {} #output for MI values, will be saved in a csv file
 
 for iter in range(num_reg_iterations): 
     
-    #here we always go back to the original coreg0 images, we are basically just refning our target template(s)
+    #here we always go back to the original coreg0 images, we are basically just refning our target template(s) and trying not to induce too much deformation
     
     iter_tag = f"_rigsyn_{iter}"
     print(f'\t iteration tag: {iter_tag}')
@@ -2276,11 +2295,13 @@ for iter in range(num_reg_iterations):
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_forward, 
                     zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor,
+                    regularization=regularization)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                             zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
-                            image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor)
+                            image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor,
+                            regularization=regularization)
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -2345,14 +2366,14 @@ for iter in range(num_reg_iterations):
                         zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                         previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
                         image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,
-                        scaling_factor=scaling_factor,mask_zero=mask_zero)
+                        scaling_factor=scaling_factor,mask_zero=mask_zero,regularization=regularization)
         
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
                         zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
                         previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
                         image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,
-                        scaling_factor=scaling_factor,mask_zero=mask_zero)
+                        scaling_factor=scaling_factor,mask_zero=mask_zero,regularization=regularization)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,

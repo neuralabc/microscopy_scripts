@@ -60,8 +60,8 @@ if use_nonlin_slice_templates:
 mask_zero = False #mask zeros for nighres registrations
 
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=40
-rescale=10
+rescale=40
+# rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
@@ -2273,7 +2273,9 @@ MI_df_struct = {} #output for MI values, will be saved in a csv file
 
 ## TODO: nonlin slice templates not working from cascade as of yet?
 
-for iter in range(num_reg_iterations): 
+for iter in range(num_reg_iterations):
+    if iter == num_reg_iterations-1:
+        across_slice_smoothing_sigma = None # we do not smooth the final output stack and templates
     
     #here we always go back to the original coreg0 images, we are basically just refning our target template(s) and trying not to induce too much deformation
     
@@ -2305,16 +2307,29 @@ for iter in range(num_reg_iterations):
         image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
         # # XXX removed image weights
         # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
+        ## TODO: YOU NEED TO REMOVE previous_target_tag from everything <---------------------------------------
+        ## IT IS COMPLETELY REDUNDANT and confusing... factor it out.
+
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_forward, 
-                    zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl'+iter_tag,
-                    image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor,
-                    regularization=regularization)
+                                    zfill_num=zfill_num, 
+                                    input_source_file_tag='coreg0nl', 
+                                    reg_level_tag='coreg1nl'+iter_tag,
+                                    image_weights=image_weights,
+                                    run_syn=run_syn,
+                                    run_rigid=run_rigid,
+                                    scaling_factor=scaling_factor,
+                                    regularization=regularization)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
-                            zfill_num=zfill_num, input_source_file_tag='coreg0nl', reg_level_tag='coreg2nl'+iter_tag,
-                            image_weights=image_weights,run_syn=run_syn,run_rigid=run_rigid,scaling_factor=scaling_factor,
-                            regularization=regularization)
+                                    zfill_num=zfill_num, 
+                                    input_source_file_tag='coreg0nl', 
+                                    reg_level_tag='coreg2nl'+iter_tag,
+                                    image_weights=image_weights,
+                                    run_syn=run_syn,
+                                    run_rigid=run_rigid,
+                                    scaling_factor=scaling_factor,
+                                    regularization=regularization)
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -2376,17 +2391,29 @@ for iter in range(num_reg_iterations):
         # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_forward, 
-                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win1'+iter_tag,
-                        image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,
-                        scaling_factor=scaling_factor,mask_zero=mask_zero,regularization=regularization)
+                                    zfill_num=zfill_num, 
+                                    input_source_file_tag='coreg0nl', 
+                                    previous_target_tag = 'coreg12nl'+iter_tag,
+                                    reg_level_tag='coreg12nl_win1'+iter_tag,
+                                    image_weights=image_weights_win1,
+                                    run_syn=run_syn,
+                                    run_rigid=run_rigid,
+                                    scaling_factor=scaling_factor,
+                                    mask_zero=mask_zero,
+                                    regularization=regularization)
         
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
-                        zfill_num=zfill_num, input_source_file_tag='coreg0nl', 
-                        previous_target_tag = 'coreg12nl'+iter_tag,reg_level_tag='coreg12nl_win2'+iter_tag,
-                        image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,
-                        scaling_factor=scaling_factor,mask_zero=mask_zero,regularization=regularization)
+                                    zfill_num=zfill_num, 
+                                    input_source_file_tag='coreg0nl',
+                                    previous_target_tag = 'coreg12nl'+iter_tag,
+                                    reg_level_tag='coreg12nl_win2'+iter_tag,
+                                    image_weights=image_weights_win2,
+                                    run_syn=run_syn,
+                                    run_rigid=run_rigid,
+                                    scaling_factor=scaling_factor,
+                                    mask_zero=mask_zero,
+                                    regularization=regularization)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
@@ -2401,12 +2428,14 @@ for iter in range(num_reg_iterations):
             template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                                 zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                across_slice_smoothing_sigma=across_slice_smoothing_sigma)
         else:
             template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                                 zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                across_slice_smoothing_sigma=across_slice_smoothing_sigma)
         
         if use_nonlin_slice_templates:
             template = template_nonlin

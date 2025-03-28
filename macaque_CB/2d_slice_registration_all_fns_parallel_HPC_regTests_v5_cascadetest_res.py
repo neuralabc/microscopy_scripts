@@ -1455,11 +1455,14 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         # affine[2,2] = voxel_res[2]
         
         if (across_slice_smoothing_sigma is not None) and (across_slice_smoothing_sigma > 0):
+            # save the original stack first
+            nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
+            save_volume(img_stack.split('_stack.nii.gz')[0]+'_orig_stack.nii.gz',nifti)
             img = gaussian_filter(img,sigma=(0,0,across_slice_smoothing_sigma)) #apply 1d smoothing
 
         nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(img_stack,nifti)
-
+        
         ## if requested, we output templates for each slice based on the median of the surrounding slices (-1,1)
         # for slices within missing_idxs_to_fill we already interpolated them, so we leave these as is
         if per_slice_template:
@@ -2227,7 +2230,7 @@ else:
 
 ## loop over cascades to see what this does for us
 iter_tag = ""
-num_cascade_iterations = 3
+num_cascade_iterations = 1
 anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
 anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
 for iter in range(num_cascade_iterations):
@@ -2409,17 +2412,16 @@ for iter in range(num_reg_iterations):
             template = template_nonlin
         template_tag = 'coreg12nl_win12'+iter_tag
     
-final_reg_level_tag = template_tag
-step1_iter_tag = iter_tag
+final_rigsyn_reg_level_tag = template_tag
 
 logging.warning(f"Output directory: {output_dir}")
 
 ## TODO: ADAPT AFTER ABOVE WORKING
 #        - iteratively refine registrations by using output of previous as input to current
 
-"""
+
 ## TODO: check that reg level tags are correct
---------------------------> THEY ARE NOT ; (') <------------------------------------------
+# --------------------------> NOT TESTED; (') <------------------------------------------
 # # # # STEP 2: Syn only
 print('4. Begin STAGE2 registration iterations - Syn only')
 logger.warning('4. Begin STAGE2 registration iterations - Syn only')
@@ -2435,7 +2437,11 @@ for iter in range(num_syn_reg_iterations):
     print(f'\t iteration tag: {iter_tag}')
     logger.warning(f'\titeration {iter_tag}')
 
-    expected_stack_fname = f'{subject}_{final_reg_level_tag}_stack.nii.gz'
+    if iter == 0: #we use the previous step's last output as the input source
+        input_source_file_tag = final_rigsyn_reg_level_tag
+    else: #we use the previous iteration as the input source
+        input_source_file_tag = final_rigsyn_reg_level_tag + '_win12' + iter_tag
+    expected_stack_fname = f'{subject}_{input_source_file_tag}_stack.nii.gz'
     logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
     if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
         logging.warning('Stack exists, skipping the current cascade iteration')
@@ -2451,23 +2457,23 @@ for iter in range(num_syn_reg_iterations):
         # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_forward, 
-                        zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, 
-                        previous_target_tag = None,reg_level_tag=final_reg_level_tag+'win1'+iter_tag,
+                        zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                        previous_target_tag = None,reg_level_tag=final_rigsyn_reg_level_tag+'_win1'+iter_tag,
                         image_weights=image_weights_win1,run_syn=run_syn,run_rigid=run_rigid,
                         scaling_factor=scaling_factor,mask_zero=mask_zero,regularization=regularization)
         
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
-                        zfill_num=zfill_num, input_source_file_tag=final_reg_level_tag, 
-                        previous_target_tag = None,reg_level_tag=final_reg_level_tag+'win2'+iter_tag,
+                        zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
+                        previous_target_tag = None,reg_level_tag=final_rigsyn_reg_level_tag+'_win2'+iter_tag,
                         image_weights=image_weights_win2,run_syn=run_syn,run_rigid=run_rigid,
                         scaling_factor=scaling_factor,mask_zero=mask_zero,regularization=regularization)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
-                            zfill_num=zfill_num,reg_level_tag1=final_reg_level_tag+'win1'+iter_tag, 
-                            reg_level_tag2=final_reg_level_tag+'win1'+iter_tag,
-                            reg_output_tag='coreg12nl_win12'+iter_tag,
+                            zfill_num=zfill_num,reg_level_tag1=final_rigsyn_reg_level_tag+'_win1'+iter_tag, 
+                            reg_level_tag2=final_rigsyn_reg_level_tag+'_win2'+iter_tag,
+                            reg_output_tag=final_rigsyn_reg_level_tag+'_win12'+iter_tag,
                             per_slice_template=per_slice_template,df_struct=MI_df_struct,
                             use_nonlin_slice_templates=use_nonlin_slice_templates,max_workers=max_workers)
         if MI_df_struct is not None:
@@ -2476,20 +2482,26 @@ for iter in range(num_syn_reg_iterations):
         logging.warning('\t\tGenerating new template')
         if 'nonlin' in slice_template_type:
             template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                                zfill_num=4,reg_level_tag=final_reg_level_tag +'_win12'+iter_tag,per_slice_template=per_slice_template,
-                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                                zfill_num=4,reg_level_tag=final_rigsyn_reg_level_tag +'_win12'+iter_tag,
+                                                per_slice_template=per_slice_template,
+                                                missing_idxs_to_fill=missing_idxs_to_fill, 
+                                                slice_template_type=slice_template_type,
+                                                scaling_factor=scaling_factor,
+                                                nonlin_interp_max_workers=nonlin_interp_max_workers)
         else:
             template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                                zfill_num=4,reg_level_tag=final_reg_level_tag +'_win12'+iter_tag,per_slice_template=per_slice_template,
-                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers)
+                                                zfill_num=4,reg_level_tag=final_rigsyn_reg_level_tag +'_win12'+iter_tag,
+                                                per_slice_template=per_slice_template,
+                                                missing_idxs_to_fill=missing_idxs_to_fill, 
+                                                slice_template_type=slice_template_type,
+                                                scaling_factor=scaling_factor,
+                                                nonlin_interp_max_workers=nonlin_interp_max_workers)
         
         if use_nonlin_slice_templates:
             template = template_nonlin
         # template_tag = 'coreg12nl_win12'+iter_tag
         final_reg_level_tag = final_reg_level_tag+'win12'+iter_tag
-"""
+
     ## OLD CODE
 
     # slice_offset_list_forward = [-1,-2,-3] #weighted back

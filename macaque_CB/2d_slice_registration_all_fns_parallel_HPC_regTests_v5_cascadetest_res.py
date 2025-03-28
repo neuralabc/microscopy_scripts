@@ -52,6 +52,7 @@ use_nonlin_slice_templates = False #use interpolated slices (from registrations 
                                     # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
                                     # currently BROKEN
 slice_template_type = 'median'
+across_slice_smoothing_sigma = 5 #sigma for smoothing across the stack (only in the slice direction), applied after stacking and before template creation
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
 
@@ -79,7 +80,7 @@ nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice int
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes_slicesmth/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -2221,7 +2222,8 @@ else:
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                            missing_idxs_to_fill=missing_idxs_to_fill,
                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
-                                           sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier)
+                                           sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier,
+                                           across_slice_smoothing_sigma=across_slice_smoothing_sigma)
 
 ## loop over cascades to see what this does for us
 iter_tag = ""
@@ -2250,7 +2252,8 @@ for iter in range(num_cascade_iterations):
 
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                             per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
-                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero)
+                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
+                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma)
         
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
@@ -2325,13 +2328,13 @@ for iter in range(num_reg_iterations):
                                                 zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                                 scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                mask_zero=mask_zero)
+                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
         else:
             template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                                 zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                                 scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                mask_zero=mask_zero)
+                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
         if use_nonlin_slice_templates:
             template = template_nonlin
         # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template

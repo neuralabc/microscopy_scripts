@@ -52,7 +52,7 @@ use_nonlin_slice_templates = False #use interpolated slices (from registrations 
                                     # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
                                     # currently BROKEN
 slice_template_type = 'median'
-across_slice_smoothing_sigma = 5 #sigma for smoothing across the stack (only in the slice direction), applied after stacking and before template creation
+across_slice_smoothing_sigma = 5 # (None/0; pos int} sigma for smoothing across the stack (only in the slice direction), applied after stacking and before template creation
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
 
@@ -60,8 +60,8 @@ if use_nonlin_slice_templates:
 mask_zero = False #mask zeros for nighres registrations
 
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-rescale=40
-# rescale=10
+# rescale=40
+rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
@@ -1459,6 +1459,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
             save_volume(img_stack.split('_stack.nii.gz')[0]+'_orig_stack.nii.gz',nifti)
             img = gaussian_filter(img,sigma=(0,0,across_slice_smoothing_sigma)) #apply 1d smoothing
+        elif across_slice_smoothing_sigma<0:
+            logging.warning('Smoothing sigma is negative, skipping across slice smoothing') 
 
         nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(img_stack,nifti)
@@ -2228,7 +2230,10 @@ else:
                                            sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier,
                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma)
 
-## loop over cascades to see what this does for us
+## we run an initial cascading registration and allow a fair amount of warping to bring things into initial alignment
+# the resulting template (which is iteratively warped with every iteration) is used to anchor the next 
+# set of iterations in the STAGE1 registrations, which are more conservative
+
 iter_tag = ""
 num_cascade_iterations = 1
 anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
@@ -2309,6 +2314,8 @@ for iter in range(num_reg_iterations):
         # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
         ## TODO: YOU NEED TO REMOVE previous_target_tag from everything <---------------------------------------
         ## IT IS COMPLETELY REDUNDANT and confusing... factor it out.
+        ## TODO: potentially REMOVE this first set of registrations entirely (or just do it in the first iter), as it seems to increase noise
+        ##       relative to the one with more slices included
 
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_forward, 

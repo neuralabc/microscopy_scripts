@@ -2260,7 +2260,7 @@ num_reg_iterations = 20
 run_rigid = True
 run_syn = True
 regularization ='Medium'
-template_tag = 'coreg0nl' #initial template tag, which we update with each loop
+# template_tag = 'coreg0nl' #initial template tag, which we update with each loop
 template_tag = f'cascade_{iter}' #'coreg0nl_cascade'
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
@@ -2414,7 +2414,7 @@ logging.warning(f"Output directory: {output_dir}")
 ## TODO: ADAPT AFTER ABOVE WORKING
 #        - iteratively refine registrations by using output of previous as input to current
 
-
+"""
 ## TODO: check that reg level tags are correct
 --------------------------> THEY ARE NOT ; (') <------------------------------------------
 # # # # STEP 2: Syn only
@@ -2486,7 +2486,7 @@ for iter in range(num_syn_reg_iterations):
             template = template_nonlin
         # template_tag = 'coreg12nl_win12'+iter_tag
         final_reg_level_tag = final_reg_level_tag+'win12'+iter_tag
-
+"""
     ## OLD CODE
 
     # slice_offset_list_forward = [-1,-2,-3] #weighted back

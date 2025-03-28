@@ -1280,7 +1280,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
                                 ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,
-                                sigma_multiplier=None, strength_multiplier=None):
+                                sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=None):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -1299,6 +1299,10 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         nonlin_interp_max_workers (int, optional): Number of workers to use for parallelized non-linear interpolation (default is 1).
         scaling_factor (int, optional): Scaling factor for registrations (default is 64)
         voxel_res (tuple, optional): Voxel resolution of the images (default is None).
+        mask_zero (bool, optional): If True, masks zero values in the images (default is False).
+        sigma_multiplier (float, optional): Multiplier for the Gaussian filter applied to the missing slice images after interpolation (default is None).
+        strength_multiplier (float, optional): Multiplier for the unsharp mask applied to the missing slice images after interpolation (default is None).
+        across_slice_smoothing_sigma (float, optional): Sigma value for Gaussian smoothing applied across slices (default is None, 5 is reasonable).
 
     Returns:
         str or list: The filename(s) of the generated template(s). If `per_slice_template` is True, a list of template filenames (both median and non-linear templates) is returned. Otherwise, the filename of the median template is returned.
@@ -1449,6 +1453,9 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         # affine[1,1] = voxel_res[1]
         # affine[2,2] = voxel_res[2]
         
+        if (across_slice_smoothing_sigma is not None) and (across_slice_smoothing_sigma > 0):
+            img = gaussian_filter(img,sigma=(0,0,across_slice_smoothing_sigma)) #apply 1d smoothing
+
         nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(img_stack,nifti)
 
@@ -2409,6 +2416,7 @@ logging.warning(f"Output directory: {output_dir}")
 
 
 ## TODO: check that reg level tags are correct
+--------------------------> THEY ARE NOT ; (') <------------------------------------------
 # # # # STEP 2: Syn only
 print('4. Begin STAGE2 registration iterations - Syn only')
 logger.warning('4. Begin STAGE2 registration iterations - Syn only')

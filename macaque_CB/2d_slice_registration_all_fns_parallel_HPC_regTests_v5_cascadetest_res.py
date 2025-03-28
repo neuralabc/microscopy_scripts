@@ -2220,7 +2220,7 @@ sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_
 
 expected_stack_name = f'{subject}_coreg0nl_stack.nii.gz'
 if os.path.isfile(os.path.join(output_dir,expected_stack_name)):
-    logging.warning('Initial stack exists, skipping the first generate_stack_and_template \n{expected_stack_name}')
+    logging.warning(f'Initial stack exists, skipping the first generate_stack_and_template \n{expected_stack_name}')
 else:
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                            missing_idxs_to_fill=missing_idxs_to_fill,

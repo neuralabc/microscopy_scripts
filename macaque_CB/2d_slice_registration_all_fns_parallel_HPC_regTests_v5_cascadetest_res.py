@@ -1343,6 +1343,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
     """
     
     #we can also output a per_slice_template based on the median of the current and neighbouring slices
+    if across_slice_smoothing_sigma is None:
+        across_slice_smoothing_sigma = 0
     
     if voxel_res is None:
         voxel_res = [1.0,1.0,1.0]

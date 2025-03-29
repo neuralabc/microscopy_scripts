@@ -1281,7 +1281,7 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
                                 ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,
-                                sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=None):
+                                sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=0):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -2241,7 +2241,7 @@ anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they 
 for iter in range(num_cascade_iterations):
     if iter == 0:
         input_source_file_tag = 'coreg0nl'
-        apply_smoothing_kernel = None
+        apply_smoothing_kernel = 0
 
     else:
         input_source_file_tag = iter_tag #updates with the previous iteration
@@ -2283,7 +2283,7 @@ MI_df_struct = {} #output for MI values, will be saved in a csv file
 
 for iter in range(num_reg_iterations):
     if iter == num_reg_iterations-1:
-        across_slice_smoothing_sigma = None # we do not smooth the final output stack and templates
+        across_slice_smoothing_sigma = 0 # we do not smooth the final output stack and templates
     
     #here we always go back to the original coreg0 images, we are basically just refning our target template(s) and trying not to induce too much deformation
     

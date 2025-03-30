@@ -2352,21 +2352,21 @@ for iter in range(num_reg_iterations):
             if MI_df_struct is not None:
                 pd.DataFrame(MI_df_struct).to_csv(output_dir+subject+'_MI_values.csv',index=False)
             
-        logging.warning('\t\tGenerating new template')
-        if 'nonlin' in slice_template_type:
-            template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                                zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
-                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                                scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
-        else:
-            template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                                zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
-                                                missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
-                                                scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
-        if use_nonlin_slice_templates:
-            template = template_nonlin
+            logging.warning('\t\tGenerating new template')
+            if 'nonlin' in slice_template_type:
+                template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                                    zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
+                                                    missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                                    scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                    mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+            else:
+                template = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                                    zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
+                                                    missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                                    scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                    mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+            if use_nonlin_slice_templates:
+                template = template_nonlin
             # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template
             
             ## TODO: insert in here the code to register the stack to the MRI template and then update the tag references as necessary

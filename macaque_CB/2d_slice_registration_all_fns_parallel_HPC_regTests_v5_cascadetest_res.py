@@ -2250,6 +2250,10 @@ for iter in range(num_cascade_iterations):
         if iter == num_cascade_iterations-1:
             apply_smoothing_kernel = across_slice_smoothing_sigma #we only smooth on the last iteration
     iter_tag = f'cascade_{iter}'
+    print(f'\t iteration tag: {iter_tag}')
+    logger.warning('****************************************************************************')
+    logger.warning(f'\titeration {iter_tag}')
+    logger.warning('****************************************************************************')
     expected_stack_fname = f'{subject}_{iter_tag}_stack.nii.gz'
     logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
     if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):

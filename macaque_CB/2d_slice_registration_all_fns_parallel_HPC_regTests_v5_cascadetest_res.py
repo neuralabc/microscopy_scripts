@@ -2409,6 +2409,12 @@ for iter in range(num_reg_iterations):
         # # XXX removed image weights
         # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
         # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
+
+        ##
+        ## including `previous_target_tag` is overriding input_source_file_tag and causing 
+        ## registrations to stack, which may aid convergence but not exactly what we want here
+        ## means that the previous output `rigsyn` is the only one directly registered from coreg0nl
+        ##
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 

@@ -2267,7 +2267,7 @@ for iter in range(num_cascade_iterations):
     template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                         per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
                                         scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
-                                        across_slice_smoothing_sigma=apply_smoothing_kernel)
+                                        across_slice_smoothing_sigma=apply_smoothing_kernel,nonlin_interp_max_workers=nonlin_interp_max_workers)
         
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')

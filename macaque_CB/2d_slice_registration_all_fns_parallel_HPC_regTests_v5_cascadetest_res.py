@@ -2427,6 +2427,9 @@ for iter in range(num_reg_iterations):
                                     regularization=regularization)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
+        ## THREW ERROR HERE
+        logging.warning(template_tag)
+        # logging.warning(f'coreg12nl_win1{iter_tag}')
         select_best_reg_by_MI_parallel(output_dir,subject,all_image_fnames,template_tag=template_tag,
                             zfill_num=zfill_num,reg_level_tag1='coreg12nl_win1'+iter_tag, reg_level_tag2='coreg12nl_win2'+iter_tag,
                             reg_output_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,df_struct=MI_df_struct,

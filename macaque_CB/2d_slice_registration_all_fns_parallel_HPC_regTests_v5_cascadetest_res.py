@@ -2325,7 +2325,7 @@ for iter in range(num_reg_iterations):
         ## rather than the win12 output
         # slice_offset_list_forward = [-1,-2,-3]
         # slice_offset_list_reverse = [1,2,3]
-        image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
+        # image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
 
         slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
         slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
@@ -2341,7 +2341,7 @@ for iter in range(num_reg_iterations):
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg1nl'+iter_tag,
-                                    image_weights=image_weights,
+                                    image_weights=image_weights_win1,
                                     run_syn=run_syn,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
@@ -2351,7 +2351,7 @@ for iter in range(num_reg_iterations):
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg2nl'+iter_tag,
-                                    image_weights=image_weights,
+                                    image_weights=image_weights_win2,
                                     run_syn=run_syn,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,

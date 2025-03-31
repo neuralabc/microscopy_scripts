@@ -2322,8 +2322,11 @@ for iter in range(num_reg_iterations):
         ## THIS MEANS THAT the larger windowing stage has more warping going on, which may not be 
         ## what you should be doing here. Think about this, otherwise just take the std rigsyn output!
         ## rather than the win12 output
-        slice_offset_list_forward = [-1,-2,-3]
-        slice_offset_list_reverse = [1,2,3]
+        # slice_offset_list_forward = [-1,-2,-3]
+        # slice_offset_list_reverse = [1,2,3]
+
+        slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
+        slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
         image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
         # # XXX removes image weights
         # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
@@ -2402,10 +2405,10 @@ for iter in range(num_reg_iterations):
         #increasing the gaussian weigting also results in worse (3-> 5)
 
         # her we include neigbouring slices and increase the sharpness of the gaussian
-        slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
-        slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
-        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=2) #symmetric gaussian, so the same on both sides
-        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=2)
+        slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
+        slice_offset_list_reverse = [-3,-2,-1,1,2,3,4,5,6] #weighted forward, but also back
+        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=4) #symmetric gaussian, so the same on both sides
+        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=4)
         # # XXX removed image weights
         # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
         # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)

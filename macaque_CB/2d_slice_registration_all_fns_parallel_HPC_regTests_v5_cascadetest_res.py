@@ -2230,7 +2230,8 @@ else:
                                            missing_idxs_to_fill=missing_idxs_to_fill,
                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
                                            sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier,
-                                           across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                           across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                           nonlin_interp_max_workers=nonlin_interp_max_workers)
 
 ## we run an initial cascading registration and allow a fair amount of warping to bring things into initial alignment
 # the resulting template (which is iteratively warped with every iteration) is used to anchor the next 
@@ -2324,10 +2325,12 @@ for iter in range(num_reg_iterations):
         ## rather than the win12 output
         # slice_offset_list_forward = [-1,-2,-3]
         # slice_offset_list_reverse = [1,2,3]
+        image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
 
         slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
         slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
-        image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
+        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=3) #symmetric gaussian, so the same on both sides
+        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=3)
         # # XXX removes image weights
         # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
         ## TODO: YOU NEED TO REMOVE previous_target_tag from everything <---------------------------------------

@@ -2500,7 +2500,7 @@ for iter in range(num_syn_reg_iterations):
         input_source_file_tag = final_rigsyn_reg_level_tag
     else: #we use the previous iteration as the input source
         input_source_file_tag = final_rigsyn_reg_level_tag + '_win12' + iter_tag
-    expected_stack_fname = f'{subject}_{input_source_file_tag}_stack.nii.gz'
+    expected_stack_fname = f'{subject}_{input_source_file_tag}{iter_tag}_stack.nii.gz'
     logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
     if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
         logging.warning('Stack exists, skipping the current cascade iteration')

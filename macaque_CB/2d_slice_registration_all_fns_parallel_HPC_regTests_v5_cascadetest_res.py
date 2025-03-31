@@ -2559,7 +2559,7 @@ for iter in range(num_syn_reg_iterations):
         if use_nonlin_slice_templates:
             template = template_nonlin
         # template_tag = 'coreg12nl_win12'+iter_tag
-        final_reg_level_tag = final_reg_level_tag+'win12'+iter_tag
+        input_source_file_tag = final_rigsyn_reg_level_tag + 'win12'+iter_tag
 
     ## OLD CODE
 

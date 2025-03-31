@@ -2277,7 +2277,7 @@ for iter in range(num_cascade_iterations):
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 20
+num_reg_iterations = 5
 run_rigid = True
 run_syn = True
 regularization ='Medium'
@@ -2419,7 +2419,7 @@ for iter in range(num_reg_iterations):
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
-                                    previous_target_tag = 'coreg12nl'+iter_tag,
+                                    previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win1'+iter_tag,
                                     image_weights=image_weights_win1,
                                     run_syn=run_syn,
@@ -2432,7 +2432,7 @@ for iter in range(num_reg_iterations):
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl',
-                                    previous_target_tag = 'coreg12nl'+iter_tag,
+                                    previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win2'+iter_tag,
                                     image_weights=image_weights_win2,
                                     run_syn=run_syn,
@@ -2500,7 +2500,7 @@ for iter in range(num_syn_reg_iterations):
         input_source_file_tag = final_rigsyn_reg_level_tag
     else: #we use the previous iteration as the input source
         input_source_file_tag = final_rigsyn_reg_level_tag + '_win12' + iter_tag
-    expected_stack_fname = f'{subject}_{input_source_file_tag}_stack.nii.gz'
+    expected_stack_fname = f'{subject}_{input_source_file_tag}{iter_tag}_stack.nii.gz'
     logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
     if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
         logging.warning('Stack exists, skipping the current cascade iteration')

@@ -80,7 +80,7 @@ nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice int
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes_slicesmth_nodep_newKernel/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes_slicesmth_nodep_newKernel_v2/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -2327,8 +2327,8 @@ for iter in range(num_reg_iterations):
         # slice_offset_list_reverse = [1,2,3]
         # image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
 
-        slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
-        slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
+        slice_offset_list_forward = [-3,-2,-1,] #weighted back, but also forward
+        slice_offset_list_reverse = [1,2,3] #weighted forward, but also back
         image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=3) #symmetric gaussian, so the same on both sides
         image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=3)
         # # XXX removes image weights

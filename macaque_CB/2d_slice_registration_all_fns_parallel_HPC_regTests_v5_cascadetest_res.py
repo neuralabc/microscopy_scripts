@@ -60,8 +60,8 @@ if use_nonlin_slice_templates:
 mask_zero = False #mask zeros for nighres registrations
 
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=40
-rescale=10
+rescale=40
+# rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
@@ -80,7 +80,7 @@ nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice int
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes_slicesmth/'
+output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes_slicesmth_nodep_newKernel_v2/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -2230,7 +2230,8 @@ else:
                                            missing_idxs_to_fill=missing_idxs_to_fill,
                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
                                            sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier,
-                                           across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                           across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                           nonlin_interp_max_workers=nonlin_interp_max_workers)
 
 ## we run an initial cascading registration and allow a fair amount of warping to bring things into initial alignment
 # the resulting template (which is iteratively warped with every iteration) is used to anchor the next 
@@ -2277,7 +2278,7 @@ for iter in range(num_cascade_iterations):
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 
 # STEP 1: Rigid + Syn
-num_reg_iterations = 20
+num_reg_iterations = 5
 run_rigid = True
 run_syn = True
 regularization ='Medium'
@@ -2322,9 +2323,14 @@ for iter in range(num_reg_iterations):
         ## THIS MEANS THAT the larger windowing stage has more warping going on, which may not be 
         ## what you should be doing here. Think about this, otherwise just take the std rigsyn output!
         ## rather than the win12 output
-        slice_offset_list_forward = [-1,-2,-3]
-        slice_offset_list_reverse = [1,2,3]
-        image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
+        # slice_offset_list_forward = [-1,-2,-3]
+        # slice_offset_list_reverse = [1,2,3]
+        # image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
+
+        slice_offset_list_forward = [-3,-2,-1,] #weighted back
+        slice_offset_list_reverse = [1,2,3] #weighted forward
+        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=3) #symmetric gaussian, so the same on both sides
+        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=3)
         # # XXX removes image weights
         # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
         ## TODO: YOU NEED TO REMOVE previous_target_tag from everything <---------------------------------------
@@ -2335,7 +2341,7 @@ for iter in range(num_reg_iterations):
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg1nl'+iter_tag,
-                                    image_weights=image_weights,
+                                    image_weights=image_weights_win1,
                                     run_syn=run_syn,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
@@ -2345,7 +2351,7 @@ for iter in range(num_reg_iterations):
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg2nl'+iter_tag,
-                                    image_weights=image_weights,
+                                    image_weights=image_weights_win2,
                                     run_syn=run_syn,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
@@ -2402,10 +2408,10 @@ for iter in range(num_reg_iterations):
         #increasing the gaussian weigting also results in worse (3-> 5)
 
         # her we include neigbouring slices and increase the sharpness of the gaussian
-        slice_offset_list_forward = [-4,-3,-2,-1,1] #weighted back, but also forward
-        slice_offset_list_reverse = [-1,1,2,3,4] #weighted forward, but also back
-        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=2) #symmetric gaussian, so the same on both sides
-        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=2)
+        slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
+        slice_offset_list_reverse = [-3,-2,-1,1,2,3,4,5,6] #weighted forward, but also back
+        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=4) #symmetric gaussian, so the same on both sides
+        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=4)
         # # XXX removed image weights
         # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
         # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
@@ -2419,7 +2425,7 @@ for iter in range(num_reg_iterations):
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
-                                    previous_target_tag = 'coreg12nl'+iter_tag,
+                                    previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win1'+iter_tag,
                                     image_weights=image_weights_win1,
                                     run_syn=run_syn,
@@ -2432,7 +2438,7 @@ for iter in range(num_reg_iterations):
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl',
-                                    previous_target_tag = 'coreg12nl'+iter_tag,
+                                    previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win2'+iter_tag,
                                     image_weights=image_weights_win2,
                                     run_syn=run_syn,

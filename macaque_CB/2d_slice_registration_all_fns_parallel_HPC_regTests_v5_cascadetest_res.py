@@ -2327,8 +2327,8 @@ for iter in range(num_reg_iterations):
         # slice_offset_list_reverse = [1,2,3]
         # image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
 
-        slice_offset_list_forward = [-3,-2,-1,] #weighted back, but also forward
-        slice_offset_list_reverse = [1,2,3] #weighted forward, but also back
+        slice_offset_list_forward = [-3,-2,-1,] #weighted back
+        slice_offset_list_reverse = [1,2,3] #weighted forward
         image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=3) #symmetric gaussian, so the same on both sides
         image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=3)
         # # XXX removes image weights

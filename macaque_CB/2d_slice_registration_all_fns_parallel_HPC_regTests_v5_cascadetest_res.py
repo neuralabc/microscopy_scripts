@@ -82,7 +82,7 @@ nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice int
 
 output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes_slicesmth_nodep_newKernel_v2/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
-missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with mean of neigbours
+missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with coreg of neighbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 ## _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
 
@@ -1281,7 +1281,8 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
                                 ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,
-                                sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=0):
+                                sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=0,
+                                match_histograms_to_slice=185):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -1304,7 +1305,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         sigma_multiplier (float, optional): Multiplier for the Gaussian filter applied to the missing slice images after interpolation (default is None).
         strength_multiplier (float, optional): Multiplier for the unsharp mask applied to the missing slice images after interpolation (default is None).
         across_slice_smoothing_sigma (float, optional): Sigma value for Gaussian smoothing applied across slices (default is None, 5 is reasonable).
-
+        match_histograms_to_slice (int, optional): Slice index to match histograms to (default is 185) for output only, not used in 
     Returns:
         str or list: The filename(s) of the generated template(s). If `per_slice_template` is True, a list of template filenames (both median and non-linear templates) is returned. Otherwise, the filename of the median template is returned.
 
@@ -1463,6 +1464,13 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
             img = gaussian_filter(img,sigma=(0,0,across_slice_smoothing_sigma)) #apply 1d smoothing
         elif across_slice_smoothing_sigma<0:
             logging.warning('Smoothing sigma is negative, skipping across slice smoothing') 
+
+        if match_histograms_to_slice is not None and match_histograms_to_slice >0:
+            img_matched = np.zeros_like(img)
+            for hist_slice_idx in range(img.shape[-1]):
+                img_matched[...,hist_slice_idx] = compute_histogram_matched_slice(img[...,hist_slice_idx],img[...,match_histograms_to_slice])
+            nifti = nibabel.Nifti1Image(img_matched,affine=affine,header=header)
+            save_volume(img_stack.split('_stack.nii.gz')[0]+'_histMatched_stack.nii.gz',nifti)
 
         nifti = nibabel.Nifti1Image(img,affine=affine,header=header)
         save_volume(img_stack,nifti)

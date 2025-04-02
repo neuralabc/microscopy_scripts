@@ -2546,10 +2546,10 @@ for iter in range(num_syn_reg_iterations):
         continue
 
     # Perform Syn-only registration using the template from the previous step
-    slice_offset_list_forward = [-4, -3, -2, -1, 1]  # Weighted back, but also forward
-    slice_offset_list_reverse = [-1, 1, 2, 3, 4]  # Weighted forward, but also back
-    image_weights_win1 = generate_gaussian_weights([0, ] + slice_offset_list_forward, gauss_std=2)
-    image_weights_win2 = generate_gaussian_weights([0, ] + slice_offset_list_reverse, gauss_std=2)
+    slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
+    slice_offset_list_reverse = [-3,-2,-1,1,2,3,4,5,6] #weighted forward, but also back
+    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=4) #symmetric gaussian, so the same on both sides
+    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=4)
 
     run_parallel_coregistrations(
         output_dir, subject, all_image_fnames, template, max_workers=max_workers,

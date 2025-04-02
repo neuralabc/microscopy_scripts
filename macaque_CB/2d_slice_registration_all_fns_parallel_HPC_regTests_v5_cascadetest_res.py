@@ -2294,7 +2294,7 @@ MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
 
 ## TODO: nonlin slice templates not working from cascade as of yet?
-
+template_not_generated = True #keeps track of if we generated a template or not at this stage so that we can generate one if we stopped the registration at some point
 for iter in range(num_reg_iterations):
     if iter == num_reg_iterations-1:
         across_slice_smoothing_sigma = 0 # we do not smooth the final output stack and templates
@@ -2479,10 +2479,27 @@ for iter in range(num_reg_iterations):
                                                 scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
                                                 across_slice_smoothing_sigma=across_slice_smoothing_sigma)
         
+        template_not_generated = False
         if use_nonlin_slice_templates:
             template = template_nonlin
         template_tag = 'coreg12nl_win12'+iter_tag
-    
+
+
+if template_not_generated:
+    logging.warning('\t\tGenerating new template')
+    if 'nonlin' in slice_template_type:
+        template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                            zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
+                                            missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+    else:
+        template = generate_stack_and_template(output_dir,subject,all_image_fnames,
+                                            zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
+                                            missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
+                                            scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+
 final_rigsyn_reg_level_tag = template_tag
 
 logging.warning(f"Output directory: {output_dir}")

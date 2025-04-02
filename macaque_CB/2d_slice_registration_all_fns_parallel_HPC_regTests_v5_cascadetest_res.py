@@ -2524,10 +2524,10 @@ final_rigsyn_template = template          # Save the final template path from Ri
 print('4. Begin STAGE2 registration iterations - Syn only')
 logger.warning('4. Begin STAGE2 registration iterations - Syn only')
 
-run_rigid = False
-run_syn = True
+run_rigid = True
+run_syn = False
 num_syn_reg_iterations = 5
-regularization = 'High'  # Increase regularization to decrease deformations on repeated Syn runs
+regularization = 'Low'  # Increase regularization to decrease deformations on repeated Syn runs
 mask_zero = False  # Restrict to non-zero voxels
 
 # Use the final template from Rigid + Syn as the input for Syn only
@@ -2623,8 +2623,6 @@ for iter in range(num_syn_reg_iterations):
     # if use_nonlin_slice_templates:
     #     template = template_nonlin
 
-    # Update the input source file tag for the next iteration
-    # input_source_file_tag = f'{input_source_file_tag}_win12{iter_tag}'
     logging.warning(input_source_file_tag)
 
 ## TODO: ADAPT AFTER ABOVE WORKING

@@ -2498,13 +2498,13 @@ if template_not_generated:
     logging.warning('\t\tGenerating new template')
     if 'nonlin' in slice_template_type:
         template, template_nonlin = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                            zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
+                                            zfill_num=zfill_num,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                             scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
                                             across_slice_smoothing_sigma=across_slice_smoothing_sigma)
     else:
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,
-                                            zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
+                                            zfill_num=zfill_num,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                             scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
                                             across_slice_smoothing_sigma=across_slice_smoothing_sigma)
@@ -2525,10 +2525,10 @@ print('4. Begin STAGE2 registration iterations - Syn only')
 logger.warning('4. Begin STAGE2 registration iterations - Syn only')
 
 run_rigid = True
-run_syn = False
+run_syn = True
 num_syn_reg_iterations = 5
-regularization = 'Low'  # Increase regularization to decrease deformations on repeated Syn runs
-mask_zero = False  # Restrict to non-zero voxels
+regularization = 'High'  # Increase regularization to decrease deformations on repeated Syn runs
+# mask_zero = False  # Restrict to non-zero voxels
 
 # Use the final template from Rigid + Syn as the input for Syn only
 input_source_file_tag = final_rigsyn_template_tag
@@ -2600,7 +2600,7 @@ for iter in range(num_syn_reg_iterations):
     if 'nonlin' in slice_template_type:
         template, template_nonlin = generate_stack_and_template(
             output_dir, subject, all_image_fnames,
-            zfill_num=4,
+            zfill_num=zfill_num,
             reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}',
             per_slice_template=per_slice_template,
             missing_idxs_to_fill=missing_idxs_to_fill,
@@ -2611,7 +2611,7 @@ for iter in range(num_syn_reg_iterations):
     else:
         template = generate_stack_and_template(
             output_dir, subject, all_image_fnames,
-            zfill_num=4,
+            zfill_num=zfill_num,
             reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}',
             per_slice_template=per_slice_template,
             missing_idxs_to_fill=missing_idxs_to_fill,

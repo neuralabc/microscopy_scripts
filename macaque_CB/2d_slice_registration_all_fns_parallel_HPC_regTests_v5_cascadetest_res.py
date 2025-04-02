@@ -2285,6 +2285,7 @@ for iter in range(num_cascade_iterations):
         template_tag = f'cascade_{iter}' #this is to keep track of the template for subsequent reg in STEP 1
 
 if template_not_generated:
+        logging.warning('\t\tGenerating new template')
         #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
                                             per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
@@ -2527,7 +2528,7 @@ run_rigid = False
 run_syn = True
 num_syn_reg_iterations = 5
 regularization = 'High'  # Increase regularization to decrease deformations on repeated Syn runs
-mask_zero = True  # Restrict to non-zero voxels
+mask_zero = False  # Restrict to non-zero voxels
 
 # Use the final template from Rigid + Syn as the input for Syn only
 input_source_file_tag = final_rigsyn_template_tag

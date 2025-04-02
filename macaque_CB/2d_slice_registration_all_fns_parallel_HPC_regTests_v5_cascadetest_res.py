@@ -2282,6 +2282,7 @@ for iter in range(num_cascade_iterations):
                                             scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
                                             across_slice_smoothing_sigma=apply_smoothing_kernel,nonlin_interp_max_workers=nonlin_interp_max_workers)
         template_not_generated = False
+        template_tag = f'cascade_{iter}' #this is to keep track of the template for subsequent reg in STEP 1
 
 if template_not_generated:
         #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
@@ -2289,7 +2290,7 @@ if template_not_generated:
                                             per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
                                             scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
                                             across_slice_smoothing_sigma=apply_smoothing_kernel,nonlin_interp_max_workers=nonlin_interp_max_workers)
-        
+        template_tag = f'cascade_{num_cascade_iterations-1}'        
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
@@ -2297,8 +2298,6 @@ num_reg_iterations = 5
 run_rigid = True
 run_syn = True
 regularization ='Medium'
-# template_tag = 'coreg0nl' #initial template tag, which we update with each loop
-template_tag = f'cascade_{iter}' #'coreg0nl_cascade'
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
 
@@ -2491,7 +2490,7 @@ for iter in range(num_reg_iterations):
         template_not_generated = False
         if use_nonlin_slice_templates:
             template = template_nonlin
-        template_tag = 'coreg12nl_win12'+f"_rigsyn_{num_reg_iterations-1}"
+        template_tag = 'coreg12nl_win12'+iter_tag
 
 
 if template_not_generated:
@@ -2508,7 +2507,7 @@ if template_not_generated:
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                             scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
                                             across_slice_smoothing_sigma=across_slice_smoothing_sigma)
-    template_tag = 'coreg12nl_win12'+
+    template_tag = 'coreg12nl_win12'+f'_rigsyn_{num_reg_iterations-1}'
 
 final_rigsyn_reg_level_tag = template_tag
 

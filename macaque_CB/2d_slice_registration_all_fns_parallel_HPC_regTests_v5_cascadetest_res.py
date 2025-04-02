@@ -2244,6 +2244,7 @@ else:
 # the resulting template (which is iteratively warped with every iteration) is used to anchor the next 
 # set of iterations in the STAGE1 registrations, which are more conservative
 
+template_not_generated = True #keeps track of if we generated a template or not at this stage so that we can generate one if we stopped the registration at some point
 iter_tag = ""
 num_cascade_iterations = 1
 anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
@@ -2275,11 +2276,19 @@ for iter in range(num_cascade_iterations):
                                     reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True,
                                     scaling_factor=scaling_factor) #,mask_zero=mask_zero)
 
-    #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
-    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
-                                        per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
-                                        scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
-                                        across_slice_smoothing_sigma=apply_smoothing_kernel,nonlin_interp_max_workers=nonlin_interp_max_workers)
+        #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
+        template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
+                                            per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
+                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
+                                            across_slice_smoothing_sigma=apply_smoothing_kernel,nonlin_interp_max_workers=nonlin_interp_max_workers)
+        template_not_generated = False
+
+if template_not_generated:
+        #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
+        template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
+                                            per_slice_template=True,missing_idxs_to_fill=missing_idxs_to_fill,
+                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
+                                            across_slice_smoothing_sigma=apply_smoothing_kernel,nonlin_interp_max_workers=nonlin_interp_max_workers)
         
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
@@ -2531,6 +2540,7 @@ for iter in range(num_syn_reg_iterations):
 
     expected_stack_fname = f'{subject}_{input_source_file_tag}{iter_tag}_stack.nii.gz'
     logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
+    break
     if os.path.isfile(os.path.join(output_dir, expected_stack_fname)):
         logging.warning('Stack exists, skipping the current cascade iteration')
         continue

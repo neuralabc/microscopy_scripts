@@ -2624,7 +2624,7 @@ for iter in range(num_syn_reg_iterations):
     #     template = template_nonlin
 
     # Update the input source file tag for the next iteration
-    input_source_file_tag = f'{input_source_file_tag}_win12{iter_tag}'
+    # input_source_file_tag = f'{input_source_file_tag}_win12{iter_tag}'
     logging.warning(input_source_file_tag)
 
 ## TODO: ADAPT AFTER ABOVE WORKING

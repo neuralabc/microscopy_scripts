@@ -2535,12 +2535,12 @@ input_source_file_tag = final_rigsyn_template_tag
 template = final_rigsyn_template
 
 for iter in range(num_syn_reg_iterations):
-    # iter_tag = f"_syn_{iter}"
-    # print(f'\t iteration tag: {iter_tag}')
-    # logger.warning(f'\titeration {iter_tag}')
+    iter_tag = f"_syn_{iter}"
+    print(f'\t iteration tag: {iter_tag}')
+    logger.warning(f'\titeration {iter_tag}')
 
-    # expected_stack_fname = f'{subject}_{input_source_file_tag}{iter_tag}_stack.nii.gz'
-    # logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
+    expected_stack_fname = f'{subject}_{input_source_file_tag}{iter_tag}_stack.nii.gz'
+    logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
     # if os.path.isfile(os.path.join(output_dir, expected_stack_fname)):
     #     logging.warning('Stack exists, skipping the current cascade iteration')
     #     continue

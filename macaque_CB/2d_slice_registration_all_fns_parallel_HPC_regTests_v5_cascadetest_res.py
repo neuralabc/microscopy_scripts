@@ -2491,7 +2491,7 @@ for iter in range(num_reg_iterations):
         template_not_generated = False
         if use_nonlin_slice_templates:
             template = template_nonlin
-        template_tag = 'coreg12nl_win12'+iter_tag
+        template_tag = 'coreg12nl_win12'+f"_rigsyn_{num_reg_iterations-1}"
 
 
 if template_not_generated:
@@ -2508,6 +2508,7 @@ if template_not_generated:
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                             scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
                                             across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+    template_tag = 'coreg12nl_win12'+
 
 final_rigsyn_reg_level_tag = template_tag
 

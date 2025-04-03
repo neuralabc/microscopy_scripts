@@ -2524,7 +2524,7 @@ final_rigsyn_template = template          # Save the final template path from Ri
 print('4. Begin STAGE2 registration iterations - Syn only')
 logger.warning('4. Begin STAGE2 registration iterations - Syn only')
 
-run_rigid = True
+run_rigid = False
 run_syn = True
 num_syn_reg_iterations = 5
 regularization = 'High'  # Increase regularization to decrease deformations on repeated Syn runs

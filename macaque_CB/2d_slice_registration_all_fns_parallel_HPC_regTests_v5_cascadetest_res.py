@@ -2512,8 +2512,6 @@ if template_not_generated:
 
 final_rigsyn_reg_level_tag = template_tag
 
-logging.warning(f"Output directory: {output_dir}")
-
 
 ## ADDED
 # At the end of step 3 (Rigid + Syn)
@@ -2624,6 +2622,8 @@ for iter in range(num_syn_reg_iterations):
         template = template_nonlin
 
     logging.warning(input_source_file_tag)
+
+logging.warning(f"Output directory: {output_dir}")
 
 ## TODO: ADAPT AFTER ABOVE WORKING
 #        - iteratively refine registrations by using output of previous as input to current

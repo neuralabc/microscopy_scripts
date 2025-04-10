@@ -58,9 +58,9 @@ if use_nonlin_slice_templates:
 #this fails on server, for some reason?    
 mask_zero = False #mask zeros for nighres registrations
 
-# rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
+rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 # rescale=40
-rescale=10
+# rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000

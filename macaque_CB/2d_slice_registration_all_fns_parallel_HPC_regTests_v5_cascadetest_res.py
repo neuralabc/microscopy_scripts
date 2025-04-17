@@ -58,9 +58,9 @@ if use_nonlin_slice_templates:
 #this fails on server, for some reason?    
 mask_zero = False #mask zeros for nighres registrations
 
-# rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
+rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 # rescale=40
-rescale=10
+# rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
 in_plane_res_x = rescale*in_plane_res_x/1000
@@ -2512,8 +2512,6 @@ if template_not_generated:
 
 final_rigsyn_reg_level_tag = template_tag
 
-logging.warning(f"Output directory: {output_dir}")
-
 
 ## ADDED
 # At the end of step 3 (Rigid + Syn)
@@ -2524,7 +2522,7 @@ final_rigsyn_template = template          # Save the final template path from Ri
 print('4. Begin STAGE2 registration iterations - Syn only')
 logger.warning('4. Begin STAGE2 registration iterations - Syn only')
 
-run_rigid = True
+run_rigid = False
 run_syn = True
 num_syn_reg_iterations = 5
 regularization = 'High'  # Increase regularization to decrease deformations on repeated Syn runs
@@ -2624,6 +2622,8 @@ for iter in range(num_syn_reg_iterations):
         template = template_nonlin
 
     logging.warning(input_source_file_tag)
+
+logging.warning(f"Output directory: {output_dir}")
 
 ## TODO: ADAPT AFTER ABOVE WORKING
 #        - iteratively refine registrations by using output of previous as input to current

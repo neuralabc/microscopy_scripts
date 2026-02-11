@@ -2232,8 +2232,8 @@ sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_
 
 # deformation files are expected to be in the root output dir directly, so lets copy them here
 for _file in image_list:
-    _def_file = os.path.basename(_file)
-    shutil.copy2(_def_file,output_dir)
+    # _def_file = os.path.basename(_file)
+    shutil.copy2(_file,output_dir)
 
 
 expected_stack_name = f'{subject}_coreg0nl_stack.nii.gz'

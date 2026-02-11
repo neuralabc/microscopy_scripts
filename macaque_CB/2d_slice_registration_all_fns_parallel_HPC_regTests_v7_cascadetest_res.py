@@ -2184,7 +2184,7 @@ logger.warning('2. Bring all image slices into same place as our 2d template wit
 
 #check for expected output name (HARD-CODED here, will need to be changed later here and below if changed)
 expected_stack_fname = f'{subject}_coreg0nl_stack.nii.gz'
-if False: # os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
+if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
     logging.warning('Stack exists, skipping the current alignment step')
 else:
     with ProcessPoolExecutor(max_workers=max_workers) as executor:

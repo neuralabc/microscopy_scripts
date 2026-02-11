@@ -2309,7 +2309,9 @@ template_not_generated = True #keeps track of if we generated a template or not 
 for iter in range(num_reg_iterations):
     if iter == num_reg_iterations-1:
         across_slice_smoothing_sigma = 0 # we do not smooth the final output stack and templates
-    
+        retain_reg_mappings=True #we retain the registration mappings for all outputs at the last level
+    else:
+        retain_reg_mappings=False #and ONLY the last level
     #here we always go back to the original coreg0 images, we are basically just refning our target template(s) and trying not to induce too much deformation
     
     iter_tag = f"_rigsyn_{iter}"
@@ -2362,7 +2364,8 @@ for iter in range(num_reg_iterations):
                                     run_syn=run_syn,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
-                                    regularization=regularization)
+                                    regularization=regularization,
+                                    retain_reg_mappings=retain_reg_mappings)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
@@ -2372,7 +2375,8 @@ for iter in range(num_reg_iterations):
                                     run_syn=run_syn,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
-                                    regularization=regularization)
+                                    regularization=regularization,
+                                    retain_reg_mappings=retain_reg_mappings)
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -2449,7 +2453,8 @@ for iter in range(num_reg_iterations):
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,
-                                    regularization=regularization)
+                                    regularization=regularization,
+                                    retain_reg_mappings=retain_reg_mappings)
         
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
@@ -2462,7 +2467,8 @@ for iter in range(num_reg_iterations):
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,
-                                    regularization=regularization)
+                                    regularization=regularization,
+                                    retain_reg_mappings=retain_reg_mappings)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         

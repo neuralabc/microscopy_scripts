@@ -2431,6 +2431,8 @@ for iter in range(num_reg_iterations):
         # her we include neigbouring slices and increase the sharpness of the gaussian
         slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
         slice_offset_list_reverse = [-3,-2,-1,1,2,3,4,5,6] #weighted forward, but also back
+
+        
         image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=4) #symmetric gaussian, so the same on both sides
         image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=4)
         # # XXX removed image weights
@@ -2552,10 +2554,53 @@ for iter in range(num_syn_reg_iterations):
         continue
 
     # Perform Syn-only registration using the template from the previous step
-    slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
-    slice_offset_list_reverse = [-3,-2,-1,1,2,3,4,5,6] #weighted forward, but also back
-    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=4) #symmetric gaussian, so the same on both sides
-    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=4)
+    
+    ## OLD WAY
+    # slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
+    # slice_offset_list_reverse = [-3,-2,-1,1,2,3,4,5,6] #weighted forward, but also back
+    ##
+    
+    # --- Tune the window size across iterations (coarse → fine) ---
+    # custom schedule that starts with a larger window and then narrows down
+    # smoothing sigma is dependent on the size of the windows somewhat, moves down faster than the window size as well
+    max_major = 6   # dominant side, number of slices to include in the forward or backward direction, depending on the iteration
+    max_minor = 3   # weaker side
+    min_major = 2
+    min_minor = 1
+
+    t = iter / max(1, num_syn_reg_iterations - 1)
+
+    major_radius = int(round(max_major - t*(max_major - min_major)))
+    minor_radius = int(round(max_minor - t*(max_minor - min_minor)))
+
+    major_radius = max(major_radius, 1)
+    minor_radius = max(minor_radius, 1)
+
+    # forward pass (biased backward)
+    slice_offset_list_forward = (
+        list(range(-major_radius, 0)) +
+        list(range(1, minor_radius+1))
+    )
+
+    # reverse pass (biased forward)
+    slice_offset_list_reverse = (
+        list(range(-minor_radius, 0)) +
+        list(range(1, major_radius+1))
+    )
+
+    # --- Gaussian smoothing schedule (decreasing over iterations) ---
+
+    max_std = 4.0
+    min_std = 0.8
+    decay_rate = 2.5  # higher = faster early drop
+
+    gauss_std = min_std + (max_std - min_std) * np.exp(-decay_rate * t)
+
+    # Optional: tie σ gently to radius to prevent over-shrinking
+    gauss_std = max(min_std, min(gauss_std, 0.6 * major_radius + 0.8))
+
+    image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=gauss_std) #symmetric gaussian, so the same on both sides
+    image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=gauss_std)
 
     run_parallel_coregistrations(
         output_dir, subject, all_image_fnames, template, max_workers=max_workers,

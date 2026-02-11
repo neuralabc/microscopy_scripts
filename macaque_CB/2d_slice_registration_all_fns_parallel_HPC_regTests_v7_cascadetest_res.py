@@ -2225,7 +2225,7 @@ else:
 image_list = []
 for idx,img_name in enumerate(all_image_fnames):
     img_name = os.path.basename(img_name).split('.')[0]
-    image_list.append(output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+'_coreg0nl_ants-def0.nii.gz')
+    image_list.append(output_dir+f'/init_translation_slice_{idx.zfill(zfill_num)}/'+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+'_coreg0nl_ants-def0.nii.gz')
 
 #compute the scaling factors for sharpening from the entire dataset
 sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_dataset(image_list)

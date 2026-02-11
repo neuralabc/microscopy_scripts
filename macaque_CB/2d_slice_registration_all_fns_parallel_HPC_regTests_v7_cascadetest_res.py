@@ -2230,6 +2230,11 @@ for idx,img_name in enumerate(all_image_fnames):
 #compute the scaling factors for sharpening from the entire dataset
 sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_dataset(image_list)
 
+# deformation files are expected to be in the root output dir directly, so lets copy them here
+for _file in image_list:
+    _def_file = os.path.basename(_file)
+    shutil.copy2(_def_file,output_dir)
+
 
 expected_stack_name = f'{subject}_coreg0nl_stack.nii.gz'
 if os.path.isfile(os.path.join(output_dir,expected_stack_name)):

@@ -83,7 +83,7 @@ logger = setup_logging(script_name, output_dir)
 
 
 print(f"Output directory: {output_dir}")
-shutil.copyfile(__file__,os.path.join(output_dir,script_name))
+shutil.copyfile(__file__,os.path.join(output_dir,script_name + '.py'))
 logger.info(f'Original .py script file copied to output directory.')
 
 """_summary_

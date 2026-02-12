@@ -262,12 +262,12 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
     # Determine the sources and targets based on `target_slice_offset_list`
     for idx2, slice_offset in enumerate(target_slice_offset_list):
         if slice_offset < 0 and idx >= abs(slice_offset):        
-            prev_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{all_image_names[idx + slice_offset]}{previous_tail}"
+            prev_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{os.path.basename(all_image_names[idx + slice_offset]).split('.')[0]}{previous_tail}"
             sources.append(nifti)
             targets.append(prev_nifti)
             image_weights_ordered.append(image_weights[idx2 + 1])
         elif slice_offset > 0 and idx < len(all_image_names) - slice_offset:
-            next_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{all_image_names[idx + slice_offset]}{previous_tail}"
+            next_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{os.path.basename(all_image_names[idx + slice_offset]).split('.')[0]}{previous_tail}"
             sources.append(nifti)
             targets.append(next_nifti)
             image_weights_ordered.append(image_weights[idx2 + 1])
@@ -358,7 +358,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         futures = []
         for idx, img in enumerate(all_image_fnames):
             futures.append(
-                executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_names, template, 
+                executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_fnames, template, 
                                 target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
                                 input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,

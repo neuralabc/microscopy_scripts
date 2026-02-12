@@ -538,7 +538,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  mask_zero=mask_zero, use_resolution=False):
+                                  mask_zero=False, use_resolution=False):
 
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
 
@@ -801,10 +801,10 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         use_resolution: If True, uses resolution information from images during registration.
                        If False (default), ignores resolution (treats as 1x1x1).
                        Note: Empirical testing suggests False gives better results.
-        
-        course_iterations=100,
-        medium_iterations=100,
-        fine_iterations=50,
+    
+    Note:
+        The nighres wrapper uses fixed iteration counts internally:
+        coarse_iterations=100, medium_iterations=100, fine_iterations=50
     """
     with working_directory(output_dir):
         reg = nighres.registration.embedded_antspy_2d_multi(

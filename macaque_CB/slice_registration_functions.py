@@ -210,7 +210,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
-                       mask_zero=False, include_stack_template=True,regularization='Medium'):
+                       mask_zero=False, include_stack_template=True,regularization='Medium', use_resolution=False):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -308,7 +308,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
                 mask_zero=mask_zero,
                 ignore_affine=True, 
                 ignore_orient=True, 
-                ignore_res=True,
+                ignore_res=not use_resolution,  # Invert: ignore_res=True means don't use resolution
                 save_data=True, 
                 overwrite=False,
                 file_name=output
@@ -329,7 +329,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
-                                  regularization='Medium'):
+                                  regularization='Medium', use_resolution=False):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -352,6 +352,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         scaling_factor (int): Scaling factor for the image resolution during registration.
         image_weights (list): Weights assigned to images during registration to emphasize certain slices.
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
+        use_resolution (bool): If True, uses resolution information from images during registration.
     """
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -364,7 +365,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
                                 scaling_factor=scaling_factor, image_weights=image_weights,
                                 retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero, 
-                                regularization=regularization)
+                                regularization=regularization, use_resolution=use_resolution)
             )
         for future in as_completed(futures):
             try:
@@ -537,7 +538,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  mask_zero=mask_zero):
+                                  mask_zero=mask_zero, use_resolution=False):
 
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
 
@@ -601,7 +602,7 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             output = all_image_fnames_new[moving_idx]
             # previously was just do_reg()
             reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, use_resolution=use_resolution)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
             logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
 
@@ -784,10 +785,24 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 # same, with temporary files
-def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False):
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, use_resolution=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
-            course_iterations=100,
+    
+    Parameters:
+        sources: Source images for registration
+        targets: Target images for registration
+        run_rigid: Whether to run rigid registration
+        run_syn: Whether to run SyN (nonlinear) registration
+        file_name: Output file name prefix
+        output_dir: Output directory
+        scaling_factor: Scaling factor for registration
+        mask_zero: Whether to mask zero values
+        use_resolution: If True, uses resolution information from images during registration.
+                       If False (default), ignores resolution (treats as 1x1x1).
+                       Note: Empirical testing suggests False gives better results.
+        
+        course_iterations=100,
         medium_iterations=100,
         fine_iterations=50,
     """
@@ -806,7 +821,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             mask_zero=mask_zero,
             ignore_affine=True, 
             ignore_orient=True, 
-            ignore_res=True,
+            ignore_res=not use_resolution,  # Invert: ignore_res=True means don't use resolution
             save_data=True, 
             overwrite=True,
             file_name=file_name, 
@@ -817,7 +832,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
 
 def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
                 file_name='reg', output_dir='./', scaling_factor=64,
-                mask_zero=False, syn_flow_sigma=3, syn_total_sigma=0):
+                mask_zero=False, syn_flow_sigma=3, syn_total_sigma=0, use_resolution=False):
 
     """
     Perform registration between source and target images using ANTsPy,
@@ -834,6 +849,8 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
         output_dir: where to write files
         scaling_factor, mask_zero: for compatibility (currently not used directly here)
         syn_flow_sigma, syn_total_sigma: optional SyN smoothing parameters
+        use_resolution: If True, uses resolution information from images during registration.
+                       If False (default), resets spacing to (1,1,1) before registration.
 
     Returns:
         dict with keys: 'transformed_source', 'rigid_transform', 'syn_transform'
@@ -851,6 +868,11 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
 
         source_img = ants.image_read(source)
         target_img = ants.image_read(target)
+        
+        # If not using resolution, reset spacing to (1,1,1) for both images
+        if not use_resolution:
+            source_img.set_spacing((1.0, 1.0, 1.0))
+            target_img.set_spacing((1.0, 1.0, 1.0))
 
         transformed_source = source_img  # default to identity if no registration
 
@@ -908,7 +930,7 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
             }
 
     
-def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False):
+def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, use_resolution=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     Doing only the initial translation step
@@ -919,7 +941,7 @@ def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX',
     clean_file_name = os.path.basename(file_name) #nighres (which is called by do_reg) ignores output_dir if given file name with full path
     #with working_directory(initial_output_dir):
     reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=clean_file_name, 
-                 output_dir=initial_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
+                 output_dir=initial_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero, use_resolution=use_resolution)
                 
                 ## this is what we were doing previously
                 #  nighres.registration.embedded_antspy_2d_multi,source_images=sources, 

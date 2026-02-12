@@ -1671,7 +1671,7 @@ def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_str
 
 
 def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, template_tag='coreg0nl',
-                          zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
+                          zfill_num=4,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
                           overwrite=True):
     '''
     Use MI to determine best registration (forwards or backwards) and select going forward

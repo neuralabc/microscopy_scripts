@@ -358,7 +358,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         futures = []
         for idx, img in enumerate(all_image_fnames):
             futures.append(
-                executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_names, template, 
+                executor.submit(coreg_single_slice_orig, idx, output_dir, subject, img, all_image_fnames, template, 
                                 target_slice_offset_list=target_slice_offset_list, zfill_num=zfill_num, 
                                 input_source_file_tag=input_source_file_tag, reg_level_tag=reg_level_tag,
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
@@ -537,7 +537,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  mask_zero=mask_zero):
+                                  mask_zero=False):
 
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
 
@@ -1671,7 +1671,7 @@ def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_str
 
 
 def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, template_tag='coreg0nl',
-                          zfill_num=zfill_num,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
+                          zfill_num=4,reg_level_tag1='coreg1nl', reg_level_tag2='coreg2nl',reg_output_tag='coreg12nl',per_slice_template=False,
                           overwrite=True):
     '''
     Use MI to determine best registration (forwards or backwards) and select going forward

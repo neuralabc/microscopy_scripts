@@ -23,7 +23,7 @@ ANTs registration functions **automatically use** the spacing information from t
 2. **Transform parameters** are defined in physical coordinates
 3. **Regularization** is applied based on physical distances
 
-There is **no `ignore_res` parameter** in ANTs' native Python API (antspy). The spacing is always considered.
+There is **no `ignore_res` parameter** in ANTs' native Python API (ANTsPy). The spacing is always considered.
 
 ## Implementation Strategy
 

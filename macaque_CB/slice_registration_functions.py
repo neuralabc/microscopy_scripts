@@ -236,10 +236,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
     """
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
-    logging.warning(img)
     img_basename = os.path.basename(img).split('.')[0]
-    logging.warning(img_basename)
-    return None
+
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
     else:
@@ -256,6 +254,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         targets = [template[idx]]
         if include_stack_template: #we want to incldue the stack template to help reduce drift 
             stack_template = os.path.dirname(template[idx]) + os.path.sep + os.path.basename(template[idx]).split('_')[0] + template[idx].split('pix')[1]
+            logging.warning(stack_template)
             #now we append the stack appropriately
             sources.append(nifti)
             targets.append(stack_template)

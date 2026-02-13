@@ -261,7 +261,6 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
     else:
         targets = [template]
     
-    logging.warning(template)
     # Determine the sources and targets based on `target_slice_offset_list`
     for idx2, slice_offset in enumerate(target_slice_offset_list):
         if slice_offset < 0 and idx >= abs(slice_offset):        

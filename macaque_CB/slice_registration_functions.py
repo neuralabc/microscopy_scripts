@@ -205,7 +205,7 @@ def generate_gaussian_weights(slice_order_idxs, gauss_std=3):
 
 # TODO add deformation_smoothing across the stack by introducing deformation_smoothing_kernel = None here
 # and keeping the forward transforms if not none. Smoothing would have to be tackled at the template stage  
-def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, template, 
+def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, template, 
                        target_slice_offset_list=[-1, -2, -3], zfill_num=4, 
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
@@ -234,6 +234,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_names, temp
         include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
             - no effect when only a single template is used
     """
+
+    all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
     img_basename = os.path.basename(img).split('.')[0]
     if previous_target_tag is not None:

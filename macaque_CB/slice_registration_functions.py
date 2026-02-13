@@ -250,7 +250,6 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
 
     # Assign the correct template for this slice    
     if type(template) is list:
-        logging.warning('Template is list')
         #generate the name of the template from the entire stack
         targets = [template[idx]]
         if include_stack_template: #we want to incldue the stack template to help reduce drift 
@@ -260,9 +259,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
             targets.append(stack_template)
             image_weights_ordered.append(image_weights[0])
     else:
-        logging.warning('Template is not list')
         targets = [template]
     
+    logging.warning(template)
     # Determine the sources and targets based on `target_slice_offset_list`
     for idx2, slice_offset in enumerate(target_slice_offset_list):
         if slice_offset < 0 and idx >= abs(slice_offset):        

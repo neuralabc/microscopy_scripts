@@ -234,10 +234,12 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
             - no effect when only a single template is used
     """
-    logging.warning(all_image_fnames)
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
+    logging.warning(img)
     img_basename = os.path.basename(img).split('.')[0]
+    logging.warning(img_basename)
+    return None
     if previous_target_tag is not None:
         previous_tail = f'_{previous_target_tag}_ants-def0.nii.gz' #if we want to use the previous iteration rather than building from scratch every time (useful for windowing)
     else:

@@ -264,12 +264,12 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
     # Determine the sources and targets based on `target_slice_offset_list`
     for idx2, slice_offset in enumerate(target_slice_offset_list):
         if slice_offset < 0 and idx >= abs(slice_offset):        
-            prev_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{os.path.basename(all_image_names[idx + slice_offset]).split('.')[0]}{previous_tail}"
+            prev_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{all_image_names[idx + slice_offset]}{previous_tail}"
             sources.append(nifti)
             targets.append(prev_nifti)
             image_weights_ordered.append(image_weights[idx2 + 1])
         elif slice_offset > 0 and idx < len(all_image_names) - slice_offset:
-            next_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{os.path.basename(all_image_names[idx + slice_offset]).split('.')[0]}{previous_tail}"
+            next_nifti = f"{output_dir}{subject}_{str(idx + slice_offset).zfill(zfill_num)}_{all_image_names[idx + slice_offset]}{previous_tail}"
             sources.append(nifti)
             targets.append(next_nifti)
             image_weights_ordered.append(image_weights[idx2 + 1])

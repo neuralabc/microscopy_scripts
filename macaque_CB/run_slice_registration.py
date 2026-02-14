@@ -860,7 +860,7 @@ groupwise_stack_optimization_v2(
     flow_sigma=15,                       # High smoothness
     total_sigma=12,                      # Strong elastic constraint
     grad_step=0.025,                     # Conservative steps
-    max_displacement=20,                 # Warn if displacements exceed 20 pixels
+    max_displacement=max_displacement_pixels,                 # Warn if displacements exceed 20 pixels
     save_masks=True                      # Save masks for inspection
 )
 

@@ -24,6 +24,11 @@ if use_nonlin_slice_templates:
 #this fails on server, for some reason?    
 mask_zero = False #mask zeros for nighres registrations
 
+# Control whether to use resolution information during registration
+# False (default): Registration works in voxel space (ignore_res=True), better empirical performance
+# True: Registration uses physical resolution (ignore_res=False), more physically accurate
+use_resolution_in_registration = False
+
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 rescale=40
 # rescale=10
@@ -143,16 +148,11 @@ for idx,img_orig in enumerate(all_image_fnames):
             header = nibabel.Nifti1Header()
             header.set_data_shape(slice_img.shape)
             
-            #do not set the res (zooms) the first time
-            affine = create_affine(slice_img.shape)
-            affine[0,0] = 1
-            affine[1,1] = 1
-            affine[2,2] = 1
+            # Set proper affine with resolution from the start
+            affine = create_affine(slice_img.shape, voxel_res=voxel_res)
              
             nifti = nibabel.Nifti1Image(slice_img,affine=affine,header=header)
             nifti.update_header()
-            # nifti.set_zooms((in_plane_res_x*rescale,in_plane_res_y*rescale,in_plane_res_z))
-            # nifti.update_header()
             save_volume(output,nifti)
 
         else:

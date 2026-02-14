@@ -211,7 +211,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
                        mask_zero=False, include_stack_template=True,regularization='Medium',
-                       voxel_res=None):
+                       voxel_res=None, use_resolution_in_registration=False):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -235,8 +235,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
             - no effect when only a single template is used
         voxel_res (tuple or list, optional): Voxel resolution in microns. Can be [x, y] for 2D images or [x, y, z] for 3D images (default is None).
-            Note: voxel_res is used for setting output image metadata. Registration is performed in voxel space 
-            (ignore_res=True in nighres) as this produces better results.
+            Note: voxel_res is used for setting output image metadata.
+        use_resolution_in_registration (bool, optional): If True, registration uses physical resolution (ignore_res=False).
+            If False (default), registration works in voxel space for better empirical performance.
     """
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
@@ -294,10 +295,16 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         #                medium_iterations=1000, 
         #                fine_iterations=200,
     
+        # Determine ignore parameters based on use_resolution_in_registration
+        if use_resolution_in_registration:
+            ignore_res = False
+            ignore_affine = False  # Must respect affines when using resolution
+        else:
+            ignore_res = True  # Default: work in voxel space
+            ignore_affine = False  # Still respect affines for resolution metadata
+        
         with working_directory(tmp_output_dir):
-            # Note: ignore_res=True keeps registration in voxel space (better performance)
-            # ignore_affine=False allows registration to respect affine transformations in input images
-            # which now contain proper resolution information from previous stages
+            # Configure registration based on use_resolution_in_registration setting
             coreg_output = nighres.registration.embedded_antspy_2d_multi(
                 source_images=sources,
                 target_images=targets,
@@ -315,9 +322,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                 regularization=regularization,
                 convergence=1e-6,
                 mask_zero=mask_zero,
-                ignore_affine=False,  # Respect affine transformations (now contain resolution info)
+                ignore_affine=ignore_affine,
                 ignore_orient=True, 
-                ignore_res=True,  # Intentional: registration works better in voxel space
+                ignore_res=ignore_res,
                 save_data=True, 
                 overwrite=False,
                 file_name=output
@@ -338,7 +345,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
-                                  regularization='Medium', voxel_res=None):
+                                  regularization='Medium', voxel_res=None, use_resolution_in_registration=False):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -362,6 +369,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         image_weights (list): Weights assigned to images during registration to emphasize certain slices.
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
         voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
+        use_resolution_in_registration (bool, optional): If True, use physical resolution in registration (default is False).
     """
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -374,7 +382,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
                                 scaling_factor=scaling_factor, image_weights=image_weights,
                                 retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero, 
-                                regularization=regularization, voxel_res=voxel_res)
+                                regularization=regularization, voxel_res=voxel_res,
+                                use_resolution_in_registration=use_resolution_in_registration)
             )
         for future in as_completed(futures):
             try:
@@ -386,7 +395,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
 def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  voxel_res=None):
+                                  voxel_res=None, use_resolution_in_registration=False):
     """
     Cascading slice-based registration
 
@@ -550,7 +559,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  mask_zero=False, voxel_res=None):
+                                  mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
 
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
 
@@ -614,7 +623,8 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             output = all_image_fnames_new[moving_idx]
             # previously was just do_reg()
             reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res,
+                                use_resolution_in_registration=use_resolution_in_registration)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
             logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
 
@@ -798,7 +808,7 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 # same, with temporary files
-def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, voxel_res=None):
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
             course_iterations=100,
@@ -807,14 +817,21 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     
     Parameters:
         voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
-            Note: voxel_res is used for setting output image metadata. Registration is performed 
-            in voxel space (ignore_res=True) for better performance, but affine transformations 
-            are respected (ignore_affine=False) to account for resolution information in inputs.
+            Note: voxel_res is used for setting output image metadata. 
+        use_resolution_in_registration (bool, optional): If True, registration uses physical resolution (ignore_res=False).
+            If False (default), registration works in voxel space (ignore_res=True) for better empirical performance.
+            When True, ignore_affine is also set to False to respect affine transformations.
     """
+    # Determine ignore parameters based on use_resolution_in_registration
+    if use_resolution_in_registration:
+        ignore_res = False
+        ignore_affine = False  # Must respect affines when using resolution
+    else:
+        ignore_res = True  # Default: work in voxel space
+        ignore_affine = False  # Still respect affines for resolution metadata
+    
     with working_directory(output_dir):
-        # Note: ignore_res=True keeps registration in voxel space (better performance)
-        # ignore_affine=False allows registration to respect affine transformations
-        # The voxel_res parameter is used for output image affine matrices
+        # Configure registration based on use_resolution_in_registration setting
         reg = nighres.registration.embedded_antspy_2d_multi(
             source_images=sources,
             target_images=targets,
@@ -827,9 +844,9 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             regularization='High',
             convergence=1e-6,
             mask_zero=mask_zero,
-            ignore_affine=False,  # Respect affine transformations (contain resolution info)
+            ignore_affine=ignore_affine,
             ignore_orient=True, 
-            ignore_res=True,  # Intentional: registration works better in voxel space
+            ignore_res=ignore_res,
             save_data=True, 
             overwrite=True,
             file_name=file_name, 

@@ -217,9 +217,9 @@ else:
             output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
             
             futures.append(
-                # do_initial_translation_reg(sources, targets, run_rigid=False, run_syn=False, file_name=output, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
+                # do_initial_translation_reg(sources, targets, run_rigid=False, run_syn=False, file_name=output, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res)
                 executor.submit(
-                    do_initial_translation_reg(sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero)
+                    do_initial_translation_reg(sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res)
                 )    
                 # executor.submit(
                 #      nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
@@ -319,7 +319,7 @@ for iter in range(num_cascade_iterations):
                                     missing_idxs_to_fill = missing_idxs_to_fill, 
                                     zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
                                     reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True,
-                                    scaling_factor=scaling_factor) #,mask_zero=mask_zero)
+                                    scaling_factor=scaling_factor, voxel_res=voxel_res) #,mask_zero=mask_zero)
 
         #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
@@ -431,7 +431,8 @@ for iter in range(num_reg_iterations):
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
@@ -442,7 +443,8 @@ for iter in range(num_reg_iterations):
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res)
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -522,7 +524,8 @@ for iter in range(num_reg_iterations):
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res)
         
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
@@ -536,7 +539,8 @@ for iter in range(num_reg_iterations):
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         
@@ -700,7 +704,8 @@ for iter in range(num_syn_reg_iterations):
             run_rigid=run_rigid,
             scaling_factor=scaling_factor,
             mask_zero=mask_zero,
-            regularization=regularization
+            regularization=regularization,
+            voxel_res=voxel_res
         )
 
         run_parallel_coregistrations(
@@ -714,7 +719,8 @@ for iter in range(num_syn_reg_iterations):
             run_rigid=run_rigid,
             scaling_factor=scaling_factor,
             mask_zero=mask_zero,
-            regularization=regularization
+            regularization=regularization,
+            voxel_res=voxel_res
         )
 
         logging.warning('\t\tSelecting best registration by MI')

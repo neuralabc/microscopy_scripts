@@ -1937,7 +1937,7 @@ def create_affine(shape, voxel_res=None):
         elif len(shape) >= 3 and len(voxel_res) < 3:
             # Default z-spacing to 1.0 if not provided for 3D images
             # This maintains backward compatibility but logs a warning
-            logging.debug(f"3D image with shape {shape} but voxel_res only has {len(voxel_res)} elements. Using default z-spacing of 1.0")
+            logging.warning(f"3D image with shape {shape} but voxel_res only has {len(voxel_res)} elements. Using default z-spacing of 1.0")
     
     # Center the image
     affine[0, 3] = -shape[0] / 2.0

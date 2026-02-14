@@ -29,7 +29,7 @@ rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
-#Keep resolutions in microns (not mm) - only apply rescale to x and y
+#keep resolutions in microns (not mm) - only apply rescale to x and y
 rescaled_in_plane_res_x = rescale * in_plane_res_x
 rescaled_in_plane_res_y = rescale * in_plane_res_y
 # z resolution stays at original value (not rescaled)

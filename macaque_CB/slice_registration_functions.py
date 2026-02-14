@@ -1908,17 +1908,27 @@ def downsample_image_parallel(image, rescale, n_jobs=-1):
         
         return downsampled_image
             
-def create_affine(shape):
+def create_affine(shape, voxel_res=None):
     """
     Creates an affine transformation matrix centered on the image.
     
     Parameters:
     - shape (tuple): Shape of the downsampled image.
+    - voxel_res (tuple or list, optional): Voxel resolution in [x, y, z] format (default is None, which uses 1.0 for all dimensions).
     
     Returns:
     - numpy.ndarray: 4x4 affine matrix.
     """
     affine = numpy.eye(4)
+    
+    # Set voxel spacing (resolution)
+    if voxel_res is not None:
+        affine[0, 0] = voxel_res[0]
+        affine[1, 1] = voxel_res[1]
+        if len(shape) >= 3 and len(voxel_res) >= 3:
+            affine[2, 2] = voxel_res[2]
+    
+    # Center the image
     affine[0, 3] = -shape[0] / 2.0
     affine[1, 3] = -shape[1] / 2.0
     return affine

@@ -777,6 +777,43 @@ for iter in range(num_syn_reg_iterations):
 
         logging.warning(input_source_file_tag)
 
+
+# After final SyN iterations
+logging.warning("=" * 80)
+logging.warning("STARTING GROUPWISE OPTIMIZATION - This will reduce wave artifacts")
+logging.warning("=" * 80)
+
+groupwise_stack_optimization(
+    output_dir, subject, all_image_fnames,
+    reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}',
+    iterations=5,
+    scaling_factor=scaling_factor
+)
+
+logging.warning('\t\tGenerating new template')
+if 'nonlin' in slice_template_type:
+    template, template_nonlin = generate_stack_and_template(
+        output_dir, subject, all_image_fnames,
+        zfill_num=zfill_num,
+        reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}'+ '_groupwise',
+        per_slice_template=per_slice_template,
+        missing_idxs_to_fill=missing_idxs_to_fill,
+        slice_template_type=slice_template_type,
+        scaling_factor=scaling_factor,
+        nonlin_interp_max_workers=nonlin_interp_max_workers
+    )
+else:
+    template = generate_stack_and_template(
+        output_dir, subject, all_image_fnames,
+        zfill_num=zfill_num,
+        reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}'+ '_groupwise',
+        per_slice_template=per_slice_template,
+        missing_idxs_to_fill=missing_idxs_to_fill,
+        slice_template_type=slice_template_type,
+        scaling_factor=scaling_factor,
+        nonlin_interp_max_workers=nonlin_interp_max_workers
+    )
+
 logging.warning(f"Output directory: {output_dir}")
 
 ## TODO: ADAPT AFTER ABOVE WORKING

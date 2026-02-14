@@ -1254,6 +1254,260 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
         missing_slices_interpolated = None
     return missing_slices_interpolated
 
+def groupwise_stack_optimization(output_dir, subject, all_image_fnames, 
+                                reg_level_tag, iterations=5, zfill_num=4):
+    """
+    Jointly optimize all slices together to enforce smooth transitions.
+    Converts ANTs warps to nighres-compatible deformation maps.
+    """
+    import ants
+    import nibabel as nib
+    
+    logging.warning("=" * 80)
+    logging.warning("Starting groupwise optimization")
+    logging.warning("=" * 80)
+    
+    # Load all registered slices
+    images = []
+    for idx, img_fname in enumerate(all_image_fnames):
+        img_name = os.path.basename(img_fname).split('.')[0]
+        img_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_ants-def0.nii.gz"
+        images.append(ants.image_read(img_path))
+    
+    # Iteratively refine to mean template
+    for iteration in range(iterations):
+        logging.warning(f"Groupwise iteration {iteration+1}/{iterations}")
+        
+        # Compute current mean template
+        mean_data = np.mean([img.numpy() for img in images], axis=0)
+        mean_template = ants.from_numpy(mean_data)
+        mean_template.set_spacing(images[0].spacing)
+        mean_template.set_origin(images[0].origin)
+        mean_template.set_direction(images[0].direction)
+        
+        # Register each slice to mean with VERY smooth constraints
+        registered_images = []
+        for idx, img in enumerate(images):
+            img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
+            
+            logging.info(f"  Processing slice {idx}/{len(images)}")
+            
+            # Create temporary directory for this registration
+            with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_iter{iteration}_") as tmp_dir:
+                output_prefix = os.path.join(tmp_dir, "reg")
+                
+                # Registration with high smoothness
+                reg = ants.registration(
+                    fixed=mean_template,
+                    moving=img,
+                    type_of_transform='SyNOnly',
+                    flow_sigma=10,
+                    total_sigma=8,
+                    grad_step=0.05,
+                    reg_iterations=(100, 50, 25),
+                    outprefix=output_prefix
+                )
+                
+                registered_images.append(reg['warpedmovout'])
+                
+                # On the LAST iteration, save and convert the transforms
+                if iteration == iterations - 1:
+                    # Define final output names
+                    final_output_def = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-def0.nii.gz"
+                    final_output_map = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-map.nii.gz"
+                    final_output_invmap = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-invmap.nii.gz"
+                    
+                    # Save the warped image
+                    ants.image_write(reg['warpedmovout'], final_output_def)
+                    
+                    # Convert ANTs displacement field to deformation field
+                    fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
+                    inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
+                    
+                    if os.path.exists(fwd_warp):
+                        convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
+                    else:
+                        logging.warning(f"Forward warp not found for slice {idx}")
+                    
+                    if os.path.exists(inv_warp):
+                        convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
+                    else:
+                        logging.warning(f"Inverse warp not found for slice {idx}")
+        
+        # Update images for next iteration
+        images = registered_images
+        logging.warning(f"Completed groupwise iteration {iteration+1}/{iterations}")
+    
+    logging.warning("=" * 80)
+    logging.warning("Groupwise optimization complete")
+    logging.warning(f"Saved {len(all_image_fnames)} deformation maps")
+    logging.warning("=" * 80)
+    
+    return images
+
+
+### XXX UNTESTED FUNCTIONS BELOW
+def convert_ants_warp_to_deformation(warp_file, output_file):
+    """
+    Convert ANTs displacement field (warp) to absolute deformation field (map).
+    Handles both 2D (z=1) and 3D data.
+    
+    ANTs warp: displacement vectors (how much each voxel moves)
+    Deformation map: absolute coordinates (where each voxel ends up)
+    
+    Parameters:
+    -----------
+    warp_file : str
+        Path to ANTs warp file (displacement field)
+    output_file : str
+        Path to save deformation map
+    reference_image : ants.ANTsImage
+        Reference image for spatial information
+    """
+    import nibabel as nib
+    
+    # Load the displacement field
+    warp_nib = nib.load(warp_file)
+    displacement = warp_nib.get_fdata()
+    
+    # Get image dimensions
+    shape = displacement.shape[:3]  # (x, y, z)
+    
+    logging.info(f"Converting warp with shape: {shape}, displacement shape: {displacement.shape}")
+    
+    # Determine if 2D or 3D based on z dimension
+    is_2d = (shape[2] == 1)
+    
+    if is_2d:
+        # For 2D: only create grid for x and y
+        x_coords = np.arange(shape[0], dtype=np.float32)
+        y_coords = np.arange(shape[1], dtype=np.float32)
+        z_coords = np.zeros(1, dtype=np.float32)  # Single z slice
+        
+        # Create 2D meshgrid
+        xx, yy = np.meshgrid(x_coords, y_coords, indexing='ij')
+        
+        # Expand to include z dimension (all zeros for 2D)
+        zz = np.zeros_like(xx)
+        
+        # Stack to create identity mapping: (x, y, 1, 3)
+        # Note: displacement from ANTs should have shape (x, y, 1, 2) or (x, y, 1, 3)
+        deformation = np.zeros((*shape, 3), dtype=np.float32)
+        deformation[..., 0] = xx
+        deformation[..., 1] = yy
+        deformation[..., 2] = zz
+        
+        # Add displacement
+        # ANTs 2D warp might be (x, y, 1, 2) - only x,y components
+        if displacement.shape[-1] == 2:
+            # Only x and y displacements
+            deformation[..., 0] += displacement[..., 0, 0]
+            deformation[..., 1] += displacement[..., 0, 1]
+            # z stays at 0 (no displacement in z)
+        elif displacement.shape[-1] == 3:
+            # Full 3D displacement (but z should be ~0)
+            deformation += displacement
+        else:
+            raise ValueError(f"Unexpected displacement shape: {displacement.shape}")
+            
+    else:
+        # For 3D: create full 3D grid
+        coords = np.meshgrid(
+            np.arange(shape[0], dtype=np.float32),
+            np.arange(shape[1], dtype=np.float32),
+            np.arange(shape[2], dtype=np.float32),
+            indexing='ij'
+        )
+        
+        # Stack into deformation field: (x, y, z, 3)
+        deformation = np.stack(coords, axis=-1)
+        
+        # Add displacement
+        deformation += displacement
+    
+    # Save as deformation map
+    deformation_nib = nib.Nifti1Image(
+        deformation.astype(np.float32), 
+        affine=warp_nib.affine, 
+        header=warp_nib.header
+    )
+    nib.save(deformation_nib, output_file)
+    
+    logging.info(f"Converted {'2D' if is_2d else '3D'} warp to deformation map: {os.path.basename(output_file)}")
+    logging.info(f"  Deformation field shape: {deformation.shape}")
+
+
+def convert_ants_warp_to_deformation_v2(warp_file, output_file, reference_image):
+    """
+    Alternative version: squeeze out singleton z dimension for true 2D.
+    Use this if nighres expects 2D maps to be (x, y, 2) not (x, y, 1, 3).
+    """
+    import nibabel as nib
+    
+    # Load the displacement field
+    warp_nib = nib.load(warp_file)
+    displacement = warp_nib.get_fdata()
+    
+    # Get image dimensions
+    shape = displacement.shape[:3]
+    is_2d = (shape[2] == 1)
+    
+    if is_2d:
+        # Squeeze out z dimension for true 2D
+        logging.info(f"Creating 2D deformation map (shape will be {shape[0]}, {shape[1]}, 2)")
+        
+        # Create 2D identity grid
+        x_coords = np.arange(shape[0], dtype=np.float32)
+        y_coords = np.arange(shape[1], dtype=np.float32)
+        
+        xx, yy = np.meshgrid(x_coords, y_coords, indexing='ij')
+        
+        # Create 2D deformation field (x, y, 2) - only x and y components
+        deformation_2d = np.zeros((shape[0], shape[1], 2), dtype=np.float32)
+        deformation_2d[..., 0] = xx
+        deformation_2d[..., 1] = yy
+        
+        # Add displacement (squeeze z dimension)
+        if displacement.shape[-1] == 2:
+            # displacement is (x, y, 1, 2)
+            deformation_2d[..., 0] += displacement[..., 0, 0]
+            deformation_2d[..., 1] += displacement[..., 0, 1]
+        elif displacement.shape[-1] == 3:
+            # displacement is (x, y, 1, 3) - take only x,y
+            deformation_2d[..., 0] += displacement[..., 0, 0]
+            deformation_2d[..., 1] += displacement[..., 0, 1]
+        
+        # Create 2D affine (remove z dimension)
+        affine_2d = warp_nib.affine[:3, :3]  # 3x3 instead of 4x4
+        
+        # Save as 2D deformation map
+        deformation_nib = nib.Nifti1Image(
+            deformation_2d.astype(np.float32),
+            affine=warp_nib.affine,  # Keep original affine for compatibility
+            header=warp_nib.header
+        )
+        
+    else:
+        # 3D case - same as before
+        coords = np.meshgrid(
+            np.arange(shape[0], dtype=np.float32),
+            np.arange(shape[1], dtype=np.float32),
+            np.arange(shape[2], dtype=np.float32),
+            indexing='ij'
+        )
+        deformation = np.stack(coords, axis=-1)
+        deformation += displacement
+        
+        deformation_nib = nib.Nifti1Image(
+            deformation.astype(np.float32),
+            affine=warp_nib.affine,
+            header=warp_nib.header
+        )
+    
+    nib.save(deformation_nib, output_file)
+    logging.info(f"Converted warp to deformation map: {os.path.basename(output_file)}")
+
+
 def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,reg_level_tag='coreg12nl',
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
                                 ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,

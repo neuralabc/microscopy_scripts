@@ -28,7 +28,7 @@ mask_zero = False #mask zeros for nighres registrations
 # False (default): Registration works in voxel space (ignore_res=True), better empirical performance
 #                  Output images will have the specified voxel resolution in their headers, but registration itself does not use this information
 # True: Registration uses physical resolution (ignore_res=False), more physically accurate
-use_resolution_in_registration = False
+use_resolution_in_registration = True
 
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 rescale=40

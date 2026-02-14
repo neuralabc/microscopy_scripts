@@ -1917,7 +1917,8 @@ def create_affine(shape, voxel_res=None):
     
     Parameters:
     - shape (tuple): Shape of the downsampled image.
-    - voxel_res (tuple or list, optional): Voxel resolution in [x, y, z] format (default is None, which uses 1.0 for all dimensions).
+    - voxel_res (tuple or list, optional): Voxel resolution in [x, y, z] format in microns (default is None, which uses 1.0 for all dimensions).
+      For 2D images (shape with 2 dimensions), only the first 2 elements of voxel_res are used.
     
     Returns:
     - numpy.ndarray: 4x4 affine matrix.
@@ -1926,10 +1927,17 @@ def create_affine(shape, voxel_res=None):
     
     # Set voxel spacing (resolution)
     if voxel_res is not None:
-        affine[0, 0] = voxel_res[0]
-        affine[1, 1] = voxel_res[1]
+        if len(voxel_res) >= 1:
+            affine[0, 0] = voxel_res[0]
+        if len(voxel_res) >= 2:
+            affine[1, 1] = voxel_res[1]
+        # For 3D images, set z-spacing if provided
         if len(shape) >= 3 and len(voxel_res) >= 3:
             affine[2, 2] = voxel_res[2]
+        elif len(shape) >= 3 and len(voxel_res) < 3:
+            # Default z-spacing to 1.0 if not provided for 3D images
+            # This maintains backward compatibility but logs a warning
+            logging.debug(f"3D image with shape {shape} but voxel_res only has {len(voxel_res)} elements. Using default z-spacing of 1.0")
     
     # Center the image
     affine[0, 3] = -shape[0] / 2.0

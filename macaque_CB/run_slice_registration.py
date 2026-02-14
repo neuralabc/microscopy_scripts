@@ -30,11 +30,12 @@ rescale=40
 
 #based on the rescale value, we adjust our in-plane resolution
 #Keep resolutions in microns (not mm) - only apply rescale to x and y
-in_plane_res_x = rescale*in_plane_res_x
-in_plane_res_y = rescale*in_plane_res_y
+rescaled_in_plane_res_x = rescale * in_plane_res_x
+rescaled_in_plane_res_y = rescale * in_plane_res_y
 # z resolution stays at original value (not rescaled)
+in_plane_res_z_microns = in_plane_res_z
 
-actual_voxel_res = [in_plane_res_x,in_plane_res_y,in_plane_res_z]
+actual_voxel_res = [rescaled_in_plane_res_x, rescaled_in_plane_res_y, in_plane_res_z_microns]
 #if we don't want to set the voxel resolution, we can set it to None and it will be 1x1x1
 voxel_res = actual_voxel_res # defines voxel resolution for output template in microns # registration itself performs much better when we do not specify the res
 

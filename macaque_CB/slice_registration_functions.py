@@ -1934,41 +1934,37 @@ def downsample_image_parallel(image, rescale, n_jobs=-1):
         
         return downsampled_image
             
-def create_affine(shape, voxel_res=None):
+def create_affine(shape, voxel_res=None, center=True):
     """
-    Creates an affine transformation matrix centered on the image.
+    Creates an affine transformation matrix.
     
     Parameters:
-    - shape (tuple): Shape of the downsampled image.
-    - voxel_res (tuple or list, optional): Voxel resolution in [x, y, z] format in microns (default is None, which uses 1.0 for all dimensions).
-      For 2D images (shape with 2 dimensions), only the first 2 elements of voxel_res are used.
+    - shape (tuple): Shape of the image.
+    - voxel_res (tuple or list, optional): Voxel resolution [x, y, z].
+    - center (bool): If True, center the image at the origin.
     
     Returns:
     - numpy.ndarray: 4x4 affine matrix.
     """
+    if voxel_res is None:
+        voxel_res = [1.0, 1.0, 1.0]
+    
+    voxel_res = list(voxel_res)
+    while len(voxel_res) < 3:
+        voxel_res.append(1.0)
+    
     affine = numpy.eye(4)
+    affine[0, 0] = voxel_res[0]
+    affine[1, 1] = voxel_res[1]
+    affine[2, 2] = voxel_res[2]
     
-    # Set voxel spacing (resolution)
-    if voxel_res is not None:
-        if len(voxel_res) >= 1:
-            affine[0, 0] = voxel_res[0]
-        if len(voxel_res) >= 2:
-            affine[1, 1] = voxel_res[1]
-        # For 3D images, set z-spacing if provided
-        if len(shape) >= 3:
-            if len(voxel_res) >= 3:
-                affine[2, 2] = voxel_res[2]
-            else:
-                # Default z-spacing to 1.0 if not provided for 3D images
-                affine[2, 2] = 1.0
-                logging.warning(
-                    f"3D image with shape {shape} but voxel_res only has {len(voxel_res)} elements. "
-                    f"Using default z-spacing of 1.0. Pass a 3-element tuple/list as voxel_res to specify z-spacing."
-                )
+    if center:
+        # Center at origin
+        affine[0, 3] = -(shape[0] - 1) / 2.0 * voxel_res[0]
+        affine[1, 3] = -(shape[1] - 1) / 2.0 * voxel_res[1]
+        if len(shape) >= 3 and shape[2] > 1:
+            affine[2, 3] = -(shape[2] - 1) / 2.0 * voxel_res[2]
     
-    # Center the image
-    affine[0, 3] = -shape[0] / 2.0
-    affine[1, 3] = -shape[1] / 2.0
     return affine
 
 def generate_slice_mask(img_data, threshold_pct = 5):

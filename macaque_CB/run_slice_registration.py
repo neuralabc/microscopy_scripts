@@ -66,7 +66,7 @@ all_image_fnames = list(_df['file_name'].values)
 
 ## for testing XXX
 all_image_fnames = all_image_fnames[0:35] #for testing
-missing_idxs_to_fill = missing_idxs_to_fill[0]
+missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')

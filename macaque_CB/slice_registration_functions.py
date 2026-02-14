@@ -1349,7 +1349,7 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
     
     return images
 
-def groupwise_stack_optimization(output_dir, subject, all_image_fnames, 
+def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames, 
                                 reg_level_tag, iterations=5, zfill_num=4,
                                 restrict_boundary_deformation=True,
                                 boundary_mask_erosion=15,
@@ -1757,7 +1757,7 @@ def create_ants_mask(mask_data, reference_image):
     return mask_img
 
 
-### XXX UNTESTED FUNCTIONS BELOW
+
 def convert_ants_warp_to_deformation(warp_file, output_file, reference_image):
     """
     Convert ANTs displacement field (warp) to absolute deformation field (map).

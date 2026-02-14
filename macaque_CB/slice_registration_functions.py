@@ -948,12 +948,14 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
             }
 
     
-def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, voxel_res=None):
+def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     
     Parameters:
         voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
+        use_resolution_in_registration (bool, optional): If True, registration uses physical resolution (ignore_res=False).
+            If False (default), registration works in voxel space for better empirical performance.
     Doing only the initial translation step
     """
     #with tempfile.TemporaryDirectory(prefix=f"init_translation_slice_{idx}_") as tmp_output_dir:
@@ -962,7 +964,8 @@ def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX',
     clean_file_name = os.path.basename(file_name) #nighres (which is called by do_reg) ignores output_dir if given file name with full path
     #with working_directory(initial_output_dir):
     reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=clean_file_name, 
-                 output_dir=initial_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
+                 output_dir=initial_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res,
+                 use_resolution_in_registration=use_resolution_in_registration)
                 
                 ## this is what we were doing previously
                 #  nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
@@ -1255,7 +1258,8 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
     return missing_slices_interpolated
 
 def groupwise_stack_optimization(output_dir, subject, all_image_fnames, 
-                                reg_level_tag, iterations=5, zfill_num=4):
+                                reg_level_tag, iterations=5, zfill_num=4,
+                                scaling_factor=64, voxel_res=None):
     """
     Jointly optimize all slices together to enforce smooth transitions.
     Converts ANTs warps to nighres-compatible deformation maps.
@@ -1347,7 +1351,7 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
 
 
 ### XXX UNTESTED FUNCTIONS BELOW
-def convert_ants_warp_to_deformation(warp_file, output_file):
+def convert_ants_warp_to_deformation(warp_file, output_file, reference_image=None):
     """
     Convert ANTs displacement field (warp) to absolute deformation field (map).
     Handles both 2D (z=1) and 3D data.
@@ -1361,8 +1365,8 @@ def convert_ants_warp_to_deformation(warp_file, output_file):
         Path to ANTs warp file (displacement field)
     output_file : str
         Path to save deformation map
-    reference_image : ants.ANTsImage
-        Reference image for spatial information
+    reference_image : ants.ANTsImage, optional
+        Reference image for spatial information (currently unused but kept for API compatibility)
     """
     import nibabel as nib
     

@@ -1349,15 +1349,419 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
     
     return images
 
+def groupwise_stack_optimization(output_dir, subject, all_image_fnames, 
+                                reg_level_tag, iterations=5, zfill_num=4,
+                                restrict_boundary_deformation=True,
+                                boundary_mask_erosion=15,
+                                mask_threshold_method='otsu',
+                                mask_min_size=100,
+                                flow_sigma=15,
+                                total_sigma=12,
+                                grad_step=0.025,
+                                max_displacement=20,
+                                save_masks=True):
+    """
+    Jointly optimize all slices together to enforce smooth transitions.
+    Includes boundary constraints to prevent edge artifacts.
+    
+    Parameters:
+    -----------
+    [... previous docstring ...]
+    max_displacement : float
+        Maximum allowed displacement in PIXELS (not mm)
+    """
+    import ants
+    
+    logging.warning("=" * 80)
+    logging.warning("Starting groupwise optimization with boundary constraints")
+    logging.warning(f"  Boundary erosion: {boundary_mask_erosion} pixels")
+    logging.warning(f"  Flow sigma: {flow_sigma}, Total sigma: {total_sigma}")
+    logging.warning(f"  Gradient step: {grad_step}")
+    logging.warning(f"  Max displacement check: {max_displacement} pixels")
+    logging.warning("=" * 80)
+    
+    # Load all registered slices and generate masks
+    images = []
+    masks = []
+    
+    for idx, img_fname in enumerate(all_image_fnames):
+        img_name = os.path.basename(img_fname).split('.')[0]
+        img_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_ants-def0.nii.gz"
+        
+        img = ants.image_read(img_path)
+        images.append(img)
+        
+        # Generate mask for this slice
+        if restrict_boundary_deformation:
+            logging.info(f"Generating mask for slice {idx}")
+            
+            mask_data = generate_tissue_mask(
+                img,
+                threshold_method=mask_threshold_method,
+                min_size=mask_min_size,
+                erosion_pixels=boundary_mask_erosion
+            )
+            
+            mask_img = create_ants_mask(mask_data, img)
+            masks.append(mask_img)
+            
+            # Optionally save mask
+            if save_masks:
+                mask_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_mask.nii.gz"
+                ants.image_write(mask_img, mask_path)
+        else:
+            masks.append(None)
+    
+    logging.warning(f"Generated {len(masks)} masks")
+    
+    # Track deformation statistics across iterations
+    deformation_stats = []
+    
+    # Iteratively refine to mean template
+    for iteration in range(iterations):
+        logging.warning(f"Groupwise iteration {iteration+1}/{iterations}")
+        
+        # Compute current mean template
+        mean_data = np.mean([img.numpy() for img in images], axis=0)
+        mean_template = ants.from_numpy(mean_data)
+        mean_template.set_spacing(images[0].spacing)
+        mean_template.set_origin(images[0].origin)
+        mean_template.set_direction(images[0].direction)
+        
+        # Create mean mask for fixed image if using boundary constraints
+        if restrict_boundary_deformation:
+            mean_mask_data = np.mean([m.numpy() for m in masks], axis=0)
+            # Threshold at 0.5 to get binary mask
+            mean_mask_data = (mean_mask_data > 0.5).astype(np.float32)
+            mean_mask = create_ants_mask(mean_mask_data, mean_template)
+            
+            logging.info(f"Mean (fixed) mask coverage: {100*mean_mask_data.sum()/mean_mask_data.size:.1f}%")
+        
+        # Register each slice to mean with constraints
+        registered_images = []
+        iter_deform_stats = []
+        
+        for idx, img in enumerate(images):
+            img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
+            
+            logging.info(f"  Processing slice {idx+1}/{len(images)}")
+            
+            with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_iter{iteration}_") as tmp_dir:
+                output_prefix = os.path.join(tmp_dir, "reg")
+                
+                # Registration with both fixed and moving masks
+                if restrict_boundary_deformation:
+                    reg = ants.registration(
+                        fixed=mean_template,
+                        moving=img,
+                        mask=mean_mask,           # ← Fixed image mask
+                        moving_mask=masks[idx],   # ← Moving image mask (this slice's mask)
+                        type_of_transform='SyNOnly',
+                        flow_sigma=flow_sigma,
+                        total_sigma=total_sigma,
+                        grad_step=grad_step,
+                        reg_iterations=(100, 50, 25),
+                        outprefix=output_prefix
+                    )
+                else:
+                    reg = ants.registration(
+                        fixed=mean_template,
+                        moving=img,
+                        type_of_transform='SyNOnly',
+                        flow_sigma=flow_sigma,
+                        total_sigma=total_sigma,
+                        grad_step=grad_step,
+                        reg_iterations=(100, 50, 25),
+                        outprefix=output_prefix
+                    )
+                
+                registered_images.append(reg['warpedmovout'])
+                
+                # Check deformation magnitude (in PIXELS)
+                fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
+                if os.path.exists(fwd_warp):
+                    is_reasonable, stats = check_deformation_magnitude(
+                        fwd_warp, 
+                        max_displacement=max_displacement,
+                        reference_image=img  # Pass for pixel vs mm conversion if needed
+                    )
+                    iter_deform_stats.append({
+                        'slice': idx,
+                        'iteration': iteration,
+                        **stats
+                    })
+                
+                # On the LAST iteration, save transforms
+                if iteration == iterations - 1:
+                    final_output_def = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-def0.nii.gz"
+                    final_output_map = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-map.nii.gz"
+                    final_output_invmap = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-invmap.nii.gz"
+                    
+                    # Save warped image
+                    ants.image_write(reg['warpedmovout'], final_output_def)
+                    
+                    # Convert and save transforms
+                    inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
+                    
+                    if os.path.exists(fwd_warp):
+                        try:
+                            convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
+                        except Exception as e:
+                            logging.error(f"Failed to convert forward warp for slice {idx}: {e}")
+                    
+                    if os.path.exists(inv_warp):
+                        try:
+                            convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
+                        except Exception as e:
+                            logging.error(f"Failed to convert inverse warp for slice {idx}: {e}")
+        
+        # Update images for next iteration
+        images = registered_images
+        deformation_stats.extend(iter_deform_stats)
+        
+        # Log iteration summary
+        if iter_deform_stats:
+            mean_disp = np.mean([s['mean'] for s in iter_deform_stats])
+            max_disp = np.max([s['max'] for s in iter_deform_stats])
+            logging.warning(f"Iteration {iteration+1} complete: mean displacement={mean_disp:.2f}, max={max_disp:.2f} pixels")
+    
+    # Save deformation statistics
+    if deformation_stats:
+        import pandas as pd
+        df_stats = pd.DataFrame(deformation_stats)
+        stats_path = f"{output_dir}{subject}_{reg_level_tag}_groupwise_deformation_stats.csv"
+        df_stats.to_csv(stats_path, index=False)
+        logging.info(f"Saved deformation statistics to: {stats_path}")
+    
+    logging.warning("=" * 80)
+    logging.warning("Groupwise optimization complete")
+    logging.warning(f"Saved {len(all_image_fnames)} aligned slices and deformation maps")
+    logging.warning("=" * 80)
+    
+    return images
+
+def check_deformation_magnitude(warp_file, max_displacement=20, percentile_check=99, reference_image=None):
+    """
+    Check if deformations are reasonable (not pulling too far).
+    
+    Parameters:
+    -----------
+    warp_file : str
+        Path to ANTs warp file (displacement field in PHYSICAL units)
+    max_displacement : float
+        Maximum allowed displacement in PIXELS (not mm)
+    percentile_check : float
+        Percentile to check (default 99 to allow some outliers)
+    reference_image : ants.ANTsImage, optional
+        Reference image to get voxel spacing for pixel conversion
+    
+    Returns:
+    --------
+    is_reasonable : bool
+        True if deformations are reasonable
+    stats : dict
+        Statistics about the deformation (in both pixels and mm)
+    """
+    import nibabel as nib
+    
+    warp = nib.load(warp_file)
+    displacement = warp.get_fdata()
+    
+    # Get voxel spacing (for converting mm to pixels)
+    spacing = warp.header.get_zooms()[:3]  # (x_spacing, y_spacing, z_spacing) in mm
+    
+    if reference_image is not None:
+        # Use reference image spacing if provided (more reliable)
+        spacing = reference_image.spacing
+    
+    logging.debug(f"Voxel spacing: {spacing} mm/voxel")
+    
+    # Calculate displacement magnitude in PHYSICAL units (mm)
+    if len(displacement.shape) == 4:
+        if displacement.shape[-1] == 2:
+            # 2D: sqrt(dx^2 + dy^2)
+            if displacement.shape[2] == 1:
+                # Shape: (x, y, 1, 2)
+                dx_mm = displacement[:, :, 0, 0]
+                dy_mm = displacement[:, :, 0, 1]
+            else:
+                # Shape: (x, y, z, 2) - shouldn't happen for 2D
+                dx_mm = displacement[..., 0]
+                dy_mm = displacement[..., 1]
+            
+            magnitude_mm = np.sqrt(dx_mm**2 + dy_mm**2)
+            
+            # Convert to pixels
+            # For each component, divide by spacing, then compute magnitude
+            dx_pix = dx_mm / spacing[0]
+            dy_pix = dy_mm / spacing[1]
+            magnitude_pix = np.sqrt(dx_pix**2 + dy_pix**2)
+            
+        elif displacement.shape[-1] == 3:
+            # 3D: sqrt(dx^2 + dy^2 + dz^2)
+            if displacement.shape[2] == 1:
+                # Shape: (x, y, 1, 3)
+                dx_mm = displacement[:, :, 0, 0]
+                dy_mm = displacement[:, :, 0, 1]
+                dz_mm = displacement[:, :, 0, 2]
+            else:
+                # Shape: (x, y, z, 3)
+                dx_mm = displacement[..., 0]
+                dy_mm = displacement[..., 1]
+                dz_mm = displacement[..., 2]
+            
+            magnitude_mm = np.sqrt(dx_mm**2 + dy_mm**2 + dz_mm**2)
+            
+            # Convert to pixels
+            dx_pix = dx_mm / spacing[0]
+            dy_pix = dy_mm / spacing[1]
+            dz_pix = dz_mm / spacing[2]
+            magnitude_pix = np.sqrt(dx_pix**2 + dy_pix**2 + dz_pix**2)
+    else:
+        logging.warning(f"Unexpected displacement shape: {displacement.shape}")
+        return True, {}
+    
+    # Calculate statistics in PIXELS
+    max_pix = magnitude_pix.max()
+    mean_pix = magnitude_pix.mean()
+    p99_pix = np.percentile(magnitude_pix, percentile_check)
+    
+    # Also calculate in MM for reference
+    max_mm = magnitude_mm.max()
+    mean_mm = magnitude_mm.mean()
+    p99_mm = np.percentile(magnitude_mm, percentile_check)
+    
+    stats = {
+        'max_pixels': max_pix,
+        'mean_pixels': mean_pix,
+        f'p{percentile_check}_pixels': p99_pix,
+        'max_mm': max_mm,
+        'mean_mm': mean_mm,
+        f'p{percentile_check}_mm': p99_mm,
+        'spacing_x_mm': spacing[0],
+        'spacing_y_mm': spacing[1],
+        'spacing_z_mm': spacing[2] if len(spacing) > 2 else None
+    }
+    
+    logging.info(f"Deformation in pixels: max={max_pix:.2f}, mean={mean_pix:.2f}, p99={p99_pix:.2f}")
+    logging.info(f"Deformation in mm:     max={max_mm:.3f}, mean={mean_mm:.3f}, p99={p99_mm:.3f}")
+    
+    # Check against threshold in PIXELS
+    is_reasonable = p99_pix <= max_displacement
+    
+    if not is_reasonable:
+        logging.warning(f"⚠ Large deformation detected!")
+        logging.warning(f"  p99 displacement = {p99_pix:.2f} pixels ({p99_mm:.3f} mm)")
+        logging.warning(f"  Threshold = {max_displacement} pixels")
+        logging.warning("  Consider increasing regularization or adjusting boundary masks")
+    
+    return is_reasonable, stats
+
+def generate_tissue_mask(image, threshold_method='otsu', min_size=100, erosion_pixels=10):
+    """
+    Generate a binary mask from tissue image, with boundary erosion.
+    
+    Parameters:
+    -----------
+    image : ants.ANTsImage or numpy.ndarray
+        Input image
+    threshold_method : str
+        'otsu' or 'percentile'
+    min_size : int
+        Minimum connected component size to keep
+    erosion_pixels : int
+        Number of pixels to erode from boundary
+    
+    Returns:
+    --------
+    mask : numpy.ndarray
+        Binary mask (same shape as input)
+    """
+    from skimage import filters, morphology, measure
+    from scipy.ndimage import binary_erosion
+    
+    # Convert to numpy if needed
+    if hasattr(image, 'numpy'):
+        img_data = image.numpy()
+    else:
+        img_data = image
+    
+    # Handle 3D with singleton z dimension
+    if len(img_data.shape) == 3 and img_data.shape[2] == 1:
+        img_2d = img_data[:, :, 0]
+    else:
+        img_2d = img_data
+    
+    # Threshold to get tissue regions
+    if threshold_method == 'otsu':
+        if img_2d.max() > 0:
+            threshold = filters.threshold_otsu(img_2d[img_2d > 0])
+        else:
+            threshold = 0
+    elif threshold_method == 'percentile':
+        threshold = np.percentile(img_2d[img_2d > 0], 5) if np.any(img_2d > 0) else 0
+    else:
+        raise ValueError(f"Unknown threshold method: {threshold_method}")
+    
+    # Create binary mask
+    mask = (img_2d > threshold).astype(np.uint8)
+    
+    # Remove small components
+    if min_size > 0:
+        mask = morphology.remove_small_objects(mask.astype(bool), min_size=min_size).astype(np.uint8)
+    
+    # Fill holes
+    mask = morphology.remove_small_holes(mask.astype(bool), area_threshold=min_size).astype(np.uint8)
+    
+    # Erode to create boundary-free zone
+    if erosion_pixels > 0:
+        structure = morphology.disk(erosion_pixels)
+        mask = binary_erosion(mask, structure=structure).astype(np.uint8)
+    
+    # Restore 3D shape if needed
+    if len(img_data.shape) == 3 and img_data.shape[2] == 1:
+        mask = mask[:, :, np.newaxis]
+    
+    logging.info(f"Generated mask: {mask.sum()} / {mask.size} pixels ({100*mask.sum()/mask.size:.1f}%)")
+    
+    return mask
+
+
+def create_ants_mask(mask_data, reference_image):
+    """
+    Convert numpy mask to ANTs image with proper spatial information.
+    
+    Parameters:
+    -----------
+    mask_data : numpy.ndarray
+        Binary mask array
+    reference_image : ants.ANTsImage
+        Reference image for spatial information
+    
+    Returns:
+    --------
+    mask_img : ants.ANTsImage
+        ANTs mask image
+    """
+    import ants
+    
+    # Convert to float32 for ANTs
+    mask_float = mask_data.astype(np.float32)
+    
+    # Create ANTs image
+    mask_img = ants.from_numpy(mask_float)
+    mask_img.set_spacing(reference_image.spacing)
+    mask_img.set_origin(reference_image.origin)
+    mask_img.set_direction(reference_image.direction)
+    
+    return mask_img
+
 
 ### XXX UNTESTED FUNCTIONS BELOW
-def convert_ants_warp_to_deformation(warp_file, output_file, reference_image=None):
+def convert_ants_warp_to_deformation(warp_file, output_file, reference_image):
     """
     Convert ANTs displacement field (warp) to absolute deformation field (map).
     Handles both 2D (z=1) and 3D data.
-    
-    ANTs warp: displacement vectors (how much each voxel moves)
-    Deformation map: absolute coordinates (where each voxel ends up)
     
     Parameters:
     -----------
@@ -1365,8 +1769,8 @@ def convert_ants_warp_to_deformation(warp_file, output_file, reference_image=Non
         Path to ANTs warp file (displacement field)
     output_file : str
         Path to save deformation map
-    reference_image : ants.ANTsImage, optional
-        Reference image for spatial information (currently unused but kept for API compatibility)
+    reference_image : ants.ANTsImage
+        Reference image for spatial information
     """
     import nibabel as nib
     
@@ -1377,7 +1781,7 @@ def convert_ants_warp_to_deformation(warp_file, output_file, reference_image=Non
     # Get image dimensions
     shape = displacement.shape[:3]  # (x, y, z)
     
-    logging.info(f"Converting warp with shape: {shape}, displacement shape: {displacement.shape}")
+    logging.debug(f"Converting warp: shape={shape}, displacement shape={displacement.shape}")
     
     # Determine if 2D or 3D based on z dimension
     is_2d = (shape[2] == 1)
@@ -1386,7 +1790,6 @@ def convert_ants_warp_to_deformation(warp_file, output_file, reference_image=Non
         # For 2D: only create grid for x and y
         x_coords = np.arange(shape[0], dtype=np.float32)
         y_coords = np.arange(shape[1], dtype=np.float32)
-        z_coords = np.zeros(1, dtype=np.float32)  # Single z slice
         
         # Create 2D meshgrid
         xx, yy = np.meshgrid(x_coords, y_coords, indexing='ij')
@@ -1395,25 +1798,22 @@ def convert_ants_warp_to_deformation(warp_file, output_file, reference_image=Non
         zz = np.zeros_like(xx)
         
         # Stack to create identity mapping: (x, y, 1, 3)
-        # Note: displacement from ANTs should have shape (x, y, 1, 2) or (x, y, 1, 3)
         deformation = np.zeros((*shape, 3), dtype=np.float32)
-        deformation[..., 0] = xx
-        deformation[..., 1] = yy
-        deformation[..., 2] = zz
+        deformation[..., 0] = xx[:, :, np.newaxis]
+        deformation[..., 1] = yy[:, :, np.newaxis]
+        deformation[..., 2] = zz[:, :, np.newaxis]
         
         # Add displacement
-        # ANTs 2D warp might be (x, y, 1, 2) - only x,y components
         if displacement.shape[-1] == 2:
-            # Only x and y displacements
-            deformation[..., 0] += displacement[..., 0, 0]
-            deformation[..., 1] += displacement[..., 0, 1]
-            # z stays at 0 (no displacement in z)
+            # Only x and y displacements: (x, y, 1, 2)
+            deformation[:, :, 0, 0] += displacement[:, :, 0, 0]
+            deformation[:, :, 0, 1] += displacement[:, :, 0, 1]
         elif displacement.shape[-1] == 3:
-            # Full 3D displacement (but z should be ~0)
+            # Full 3D displacement: (x, y, 1, 3)
             deformation += displacement
         else:
             raise ValueError(f"Unexpected displacement shape: {displacement.shape}")
-            
+    
     else:
         # For 3D: create full 3D grid
         coords = np.meshgrid(
@@ -1437,8 +1837,7 @@ def convert_ants_warp_to_deformation(warp_file, output_file, reference_image=Non
     )
     nib.save(deformation_nib, output_file)
     
-    logging.info(f"Converted {'2D' if is_2d else '3D'} warp to deformation map: {os.path.basename(output_file)}")
-    logging.info(f"  Deformation field shape: {deformation.shape}")
+    logging.debug(f"Saved deformation map: {os.path.basename(output_file)}")
 
 
 def convert_ants_warp_to_deformation_v2(warp_file, output_file, reference_image):

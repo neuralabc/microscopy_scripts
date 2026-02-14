@@ -234,7 +234,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
         include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
             - no effect when only a single template is used
-        voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
+        voxel_res (tuple or list, optional): Voxel resolution in microns. Can be [x, y] for 2D images or [x, y, z] for 3D images (default is None).
     """
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
@@ -1928,12 +1928,14 @@ def create_affine(shape, voxel_res=None):
         if len(voxel_res) >= 2:
             affine[1, 1] = voxel_res[1]
         # For 3D images, set z-spacing if provided
-        if len(shape) >= 3 and len(voxel_res) >= 3:
-            affine[2, 2] = voxel_res[2]
-        elif len(shape) >= 3 and len(voxel_res) < 3:
-            # Default z-spacing to 1.0 if not provided for 3D images
-            logging.warning(f"3D image with shape {shape} but voxel_res only has {len(voxel_res)} elements. "
-                          f"Using default z-spacing of 1.0. Pass a 3-element tuple/list as voxel_res to specify z-spacing.")
+        if len(shape) >= 3:
+            if len(voxel_res) >= 3:
+                affine[2, 2] = voxel_res[2]
+            else:
+                # Default z-spacing to 1.0 if not provided for 3D images
+                affine[2, 2] = 1.0
+                logging.warning(f"3D image with shape {shape} but voxel_res only has {len(voxel_res)} elements. "
+                              f"Using default z-spacing of 1.0. Pass a 3-element tuple/list as voxel_res to specify z-spacing.")
     
     # Center the image
     affine[0, 3] = -shape[0] / 2.0

@@ -296,7 +296,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
     
         with working_directory(tmp_output_dir):
             # Note: ignore_res=True keeps registration in voxel space (better performance)
-            # The voxel_res parameter is used for output image affine matrices, not registration
+            # ignore_affine=False allows registration to respect affine transformations in input images
+            # which now contain proper resolution information from previous stages
             coreg_output = nighres.registration.embedded_antspy_2d_multi(
                 source_images=sources,
                 target_images=targets,
@@ -314,7 +315,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                 regularization=regularization,
                 convergence=1e-6,
                 mask_zero=mask_zero,
-                ignore_affine=True, 
+                ignore_affine=False,  # Respect affine transformations (now contain resolution info)
                 ignore_orient=True, 
                 ignore_res=True,  # Intentional: registration works better in voxel space
                 save_data=True, 
@@ -806,12 +807,14 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     
     Parameters:
         voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
-            Note: voxel_res is used for setting output image metadata, but registration 
-            is performed in voxel space (ignore_res=True) as this produces better results.
+            Note: voxel_res is used for setting output image metadata. Registration is performed 
+            in voxel space (ignore_res=True) for better performance, but affine transformations 
+            are respected (ignore_affine=False) to account for resolution information in inputs.
     """
     with working_directory(output_dir):
         # Note: ignore_res=True keeps registration in voxel space (better performance)
-        # The voxel_res parameter is used for output image affine matrices, not registration
+        # ignore_affine=False allows registration to respect affine transformations
+        # The voxel_res parameter is used for output image affine matrices
         reg = nighres.registration.embedded_antspy_2d_multi(
             source_images=sources,
             target_images=targets,
@@ -824,7 +827,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             regularization='High',
             convergence=1e-6,
             mask_zero=mask_zero,
-            ignore_affine=True, 
+            ignore_affine=False,  # Respect affine transformations (contain resolution info)
             ignore_orient=True, 
             ignore_res=True,  # Intentional: registration works better in voxel space
             save_data=True, 

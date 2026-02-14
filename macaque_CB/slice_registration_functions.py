@@ -1900,10 +1900,13 @@ def compute_MI_for_slice(idx, img_name, output_dir, subject, template_tail, out_
         shutil.copyfile(slice2_path, output_path)
     
     # Clean up old files
+    logging.warning(f'Removing old intermediate files for idx {idx}: {img_name}')
     for f in glob.glob(output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + "*_ants-*map.nii.gz"):
         if out_tail not in f:
             os.remove(f)
             time.sleep(0.5)
+    logging.warning(f'---> Intermediate files removed')
+
     os.remove(slice1_path)
     time.sleep(0.5)
     os.remove(slice2_path)

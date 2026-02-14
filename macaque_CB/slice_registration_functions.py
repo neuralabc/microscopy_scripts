@@ -235,6 +235,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
             - no effect when only a single template is used
         voxel_res (tuple or list, optional): Voxel resolution in microns. Can be [x, y] for 2D images or [x, y, z] for 3D images (default is None).
+            Note: voxel_res is used for setting output image metadata. Registration is performed in voxel space 
+            (ignore_res=True in nighres) as this produces better results.
     """
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
@@ -293,6 +295,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         #                fine_iterations=200,
     
         with working_directory(tmp_output_dir):
+            # Note: ignore_res=True keeps registration in voxel space (better performance)
+            # The voxel_res parameter is used for output image affine matrices, not registration
             coreg_output = nighres.registration.embedded_antspy_2d_multi(
                 source_images=sources,
                 target_images=targets,
@@ -312,7 +316,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                 mask_zero=mask_zero,
                 ignore_affine=True, 
                 ignore_orient=True, 
-                ignore_res=True,
+                ignore_res=True,  # Intentional: registration works better in voxel space
                 save_data=True, 
                 overwrite=False,
                 file_name=output
@@ -802,8 +806,12 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     
     Parameters:
         voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
+            Note: voxel_res is used for setting output image metadata, but registration 
+            is performed in voxel space (ignore_res=True) as this produces better results.
     """
     with working_directory(output_dir):
+        # Note: ignore_res=True keeps registration in voxel space (better performance)
+        # The voxel_res parameter is used for output image affine matrices, not registration
         reg = nighres.registration.embedded_antspy_2d_multi(
             source_images=sources,
             target_images=targets,
@@ -818,7 +826,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             mask_zero=mask_zero,
             ignore_affine=True, 
             ignore_orient=True, 
-            ignore_res=True,
+            ignore_res=True,  # Intentional: registration works better in voxel space
             save_data=True, 
             overwrite=True,
             file_name=file_name, 

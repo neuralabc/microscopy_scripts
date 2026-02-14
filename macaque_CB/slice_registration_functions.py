@@ -210,7 +210,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
-                       mask_zero=False, include_stack_template=True,regularization='Medium'):
+                       mask_zero=False, include_stack_template=True,regularization='Medium',
+                       voxel_res=None, use_resolution_in_registration=False):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -233,6 +234,10 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
         include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
             - no effect when only a single template is used
+        voxel_res (tuple or list, optional): Voxel resolution in microns. Can be [x, y] for 2D images or [x, y, z] for 3D images (default is None).
+            Note: voxel_res is used for setting output image metadata.
+        use_resolution_in_registration (bool, optional): If True, registration uses physical resolution (ignore_res=False).
+            If False (default), registration works in voxel space for better empirical performance.
     """
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
@@ -290,7 +295,16 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         #                medium_iterations=1000, 
         #                fine_iterations=200,
     
+        # Determine ignore parameters based on use_resolution_in_registration
+        if use_resolution_in_registration:
+            ignore_res = False
+            ignore_affine = False  # Must respect affines when using resolution
+        else:
+            ignore_res = True  # Default: work in voxel space
+            ignore_affine = False  # Still respect affines for resolution metadata
+        
         with working_directory(tmp_output_dir):
+            # Configure registration based on use_resolution_in_registration setting
             coreg_output = nighres.registration.embedded_antspy_2d_multi(
                 source_images=sources,
                 target_images=targets,
@@ -308,9 +322,9 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                 regularization=regularization,
                 convergence=1e-6,
                 mask_zero=mask_zero,
-                ignore_affine=True, 
+                ignore_affine=ignore_affine,
                 ignore_orient=True, 
-                ignore_res=True,
+                ignore_res=ignore_res,
                 save_data=True, 
                 overwrite=False,
                 file_name=output
@@ -331,7 +345,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
-                                  regularization='Medium'):
+                                  regularization='Medium', voxel_res=None, use_resolution_in_registration=False):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -354,6 +368,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         scaling_factor (int): Scaling factor for the image resolution during registration.
         image_weights (list): Weights assigned to images during registration to emphasize certain slices.
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
+        voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
+        use_resolution_in_registration (bool, optional): If True, use physical resolution in registration (default is False).
     """
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -366,7 +382,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
                                 scaling_factor=scaling_factor, image_weights=image_weights,
                                 retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero, 
-                                regularization=regularization)
+                                regularization=regularization, voxel_res=voxel_res,
+                                use_resolution_in_registration=use_resolution_in_registration)
             )
         for future in as_completed(futures):
             try:
@@ -377,7 +394,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
 
 def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
-                                  reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64):
+                                  reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
+                                  voxel_res=None, use_resolution_in_registration=False):
     """
     Cascading slice-based registration
 
@@ -409,6 +427,8 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 
     previous_target_tag : str, optional
         Optional tag to specify a previously registered target for the initial alignment. If None, defaults to `input_source_file_tag`.
+        
+    voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
 
     Workflow:
     ---------
@@ -539,7 +559,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  mask_zero=False):
+                                  mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
 
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
 
@@ -603,14 +623,14 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             output = all_image_fnames_new[moving_idx]
             # previously was just do_reg()
             reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res,
+                                use_resolution_in_registration=use_resolution_in_registration)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
             logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
 
 def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, additional_coreg_mean = True, 
-                                          idx=None):
+                                          idx=None, voxel_res=None):
     """
-    GENERATED BY CHATGPT TODO:edit this
     Compute an intermediate slice by averaging rigid and non-linear transformations between adjacent slices in a histology stack. 
     This approach ensures smooth transitions and alignment between slices, enabling consistent 3D volume reconstruction. 
     Optional additional coregistration refines the intermediate slice by registering pre/post slices to the computed intermediate 
@@ -651,6 +671,8 @@ def compute_intermediate_non_linear_slice(pre_img, post_img, current_img=None, a
 
     idx : int, optional
         Slice index for tracking during parallelized runs.
+        
+    voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
 
     Returns:
     --------
@@ -786,14 +808,30 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 # same, with temporary files
-def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False):
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
             course_iterations=100,
         medium_iterations=100,
         fine_iterations=50,
+    
+    Parameters:
+        voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
+            Note: voxel_res is used for setting output image metadata. 
+        use_resolution_in_registration (bool, optional): If True, registration uses physical resolution (ignore_res=False).
+            If False (default), registration works in voxel space (ignore_res=True) for better empirical performance.
+            When True, ignore_affine is also set to False to respect affine transformations.
     """
+    # Determine ignore parameters based on use_resolution_in_registration
+    if use_resolution_in_registration:
+        ignore_res = False
+        ignore_affine = False  # Must respect affines when using resolution
+    else:
+        ignore_res = True  # Default: work in voxel space
+        ignore_affine = False  # Still respect affines for resolution metadata
+    
     with working_directory(output_dir):
+        # Configure registration based on use_resolution_in_registration setting
         reg = nighres.registration.embedded_antspy_2d_multi(
             source_images=sources,
             target_images=targets,
@@ -806,9 +844,9 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             regularization='High',
             convergence=1e-6,
             mask_zero=mask_zero,
-            ignore_affine=True, 
+            ignore_affine=ignore_affine,
             ignore_orient=True, 
-            ignore_res=True,
+            ignore_res=ignore_res,
             save_data=True, 
             overwrite=True,
             file_name=file_name, 
@@ -819,7 +857,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
 
 def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
                 file_name='reg', output_dir='./', scaling_factor=64,
-                mask_zero=False, syn_flow_sigma=3, syn_total_sigma=0):
+                mask_zero=False, syn_flow_sigma=3, syn_total_sigma=0, voxel_res=None):
 
     """
     Perform registration between source and target images using ANTsPy,
@@ -836,6 +874,7 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
         output_dir: where to write files
         scaling_factor, mask_zero: for compatibility (currently not used directly here)
         syn_flow_sigma, syn_total_sigma: optional SyN smoothing parameters
+        voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
 
     Returns:
         dict with keys: 'transformed_source', 'rigid_transform', 'syn_transform'
@@ -910,9 +949,12 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
             }
 
     
-def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False):
+def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, voxel_res=None):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
+    
+    Parameters:
+        voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
     Doing only the initial translation step
     """
     #with tempfile.TemporaryDirectory(prefix=f"init_translation_slice_{idx}_") as tmp_output_dir:
@@ -942,7 +984,7 @@ def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX',
 
 def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, delete_intermediate_files=True, 
                                reg_refinement_iterations=7, output_dir=None ,scaling_factor=64, mask_zero=False,
-                               sigma_multiplier=None,strength_multiplier=None):
+                               sigma_multiplier=None,strength_multiplier=None,voxel_res=None):
     """
     Computes an interpolated slice between two input images (pre_img and post_img) using iterative refinement 
     through rigid and SyN-based registration. Optionally, registers a third image (current_img) to the computed 
@@ -968,6 +1010,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         **Leave as None** unless you are testing, in some cases ANTs creates files in the cwd and they can be overwritten during parallelized calls.
     scaling_factor: int, optional
         Scaling factor for the image resolution during registration. Default is 64 but this will fail with low resolution images
+    voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
 
     Returns:
     --------
@@ -1006,9 +1049,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     try:
         
         pre_post = do_reg_ants([pre_img], [avg_fname], file_name='pre_post', output_dir=temp_dir, 
-                          scaling_factor=scaling_factor,mask_zero=mask_zero)
+                          scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
         post_pre = do_reg_ants([post_img], [avg_fname], file_name='post_pre', output_dir=temp_dir, 
-                          scaling_factor=scaling_factor,mask_zero=mask_zero)
+                          scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
 
         reg_pre = pre_post['transformed_source']
         reg_post = post_pre['transformed_source']
@@ -1036,9 +1079,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             for refinement_iter in range(reg_refinement_iterations):
                 
                 pre_avg = do_reg_ants([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
                 post_avg = do_reg_ants([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
                 
                 img1 = load_volume(pre_avg['transformed_source'])
                 img2 = load_volume(post_avg['transformed_source'])
@@ -1072,7 +1115,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         # If current_img is provided, refine it to match the final average
         if current_img is not None:
             current_avg = nibabel.load(do_reg_ants([current_img], [avg_fname], file_name='current_avg', run_syn=True, 
-                                              output_dir=temp_dir)['transformed_source'],mask_zero=mask_zero)
+                                              output_dir=temp_dir, voxel_res=voxel_res)['transformed_source'],mask_zero=mask_zero)
         else:
             current_avg = avg
 
@@ -1095,7 +1138,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
 
 def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fnames=None,method='intermediate_nonlin_mean',
                             nonlin_interp_max_workers=1,scaling_factor=64,mask_zero=False,
-                            sigma_multiplier=None, strength_multiplier=None):
+                            sigma_multiplier=None, strength_multiplier=None, voxel_res=None):
     """
     Parallelized generation of missing slices in a histology stack by interpolating between adjacent slices using specified methods. 
     This function supports simple averaging or advanced interpolation using non-linear transformations, making it 
@@ -1135,6 +1178,8 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 
     nonlin_interp_max_workers : int, default=1
         Maximum number of workers to use for parallel non-linear interpolation.
+        
+    voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
 
     Returns:
     --------
@@ -1187,7 +1232,8 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
                     idx=idx,scaling_factor=scaling_factor,
                     mask_zero=mask_zero,
                     sigma_multiplier=sigma_multiplier,
-                    strength_multiplier=strength_multiplier
+                    strength_multiplier=strength_multiplier,
+                    voxel_res=voxel_res
                 ))
             for future in as_completed(futures):
                 try:
@@ -1348,7 +1394,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                                                   nonlin_interp_max_workers=nonlin_interp_max_workers,
                                                                   scaling_factor=scaling_factor,mask_zero=mask_zero,
                                                                   sigma_multiplier=sigma_multiplier, 
-                                                                  strength_multiplier=strength_multiplier)
+                                                                  strength_multiplier=strength_multiplier,
+                                                                  voxel_res=voxel_res)
 
             
             #now we can fill the slices with the interpolated value
@@ -1364,10 +1411,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 header = nibabel.Nifti1Header()
                 header.set_data_shape(interp_slice.shape)
                 
-                affine = create_affine(interp_slice.shape)
-                # affine[0,0] = voxel_res[0]
-                # affine[1,1] = voxel_res[1]
-                # affine[2,2] = voxel_res[2]
+                affine = create_affine(interp_slice.shape, voxel_res=voxel_res)
                 
                 nifti = nibabel.Nifti1Image(interp_slice,affine=affine,header=header)
                 nifti.update_header()
@@ -1382,10 +1426,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         header = nibabel.Nifti1Header()
         header.set_data_shape(img.shape)
         
-        affine = create_affine(img.shape)
-        # affine[0,0] = voxel_res[0]
-        # affine[1,1] = voxel_res[1]
-        # affine[2,2] = voxel_res[2]
+        affine = create_affine(img.shape, voxel_res=voxel_res)
         
         if (across_slice_smoothing_sigma is not None) and (across_slice_smoothing_sigma > 0):
             # save the original stack first
@@ -1429,10 +1470,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.median(img[...,start:stop],axis=-1)
             
                     header.set_data_shape(slice_template.shape)
-                    affine = create_affine(slice_template.shape)
-                    # affine[0,0] = voxel_res[0]
-                    # affine[1,1] = voxel_res[1]
-                    # affine[2,2] = voxel_res[2]
+                    affine = create_affine(slice_template.shape, voxel_res=voxel_res)
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1455,10 +1493,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                         slice_template = numpy.mean(img[...,start:stop],axis=-1)
             
                     header.set_data_shape(slice_template.shape)
-                    affine = create_affine(slice_template.shape)
-                    # affine[0,0] = voxel_res[0]
-                    # affine[1,1] = voxel_res[1]
-                    # affine[2,2] = voxel_res[2]
+                    affine = create_affine(slice_template.shape, voxel_res=voxel_res)
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1471,10 +1506,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template_fname = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+template_nochange_tail
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
-                    affine = create_affine(slice_template.shape)
-                    # affine[0,0] = voxel_res[0]
-                    # affine[1,1] = voxel_res[1]
-                    # affine[2,2] = voxel_res[2]
+                    affine = create_affine(slice_template.shape, voxel_res=voxel_res)
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1491,10 +1523,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                     slice_template = img[...,idx]
 
                     header.set_data_shape(slice_template.shape)
-                    affine = create_affine(slice_template.shape)
-                    # affine[0,0] = voxel_res[0]
-                    # affine[1,1] = voxel_res[1]
-                    # affine[2,2] = voxel_res[2]
+                    affine = create_affine(slice_template.shape, voxel_res=voxel_res)
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname,nifti)
@@ -1507,7 +1536,8 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                                                  current_fnames=template_nonlin_list[1:-1],
                                                                  method='intermediate_nonlin_mean',
                                                                  nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                 scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                                                 scaling_factor=scaling_factor,mask_zero=mask_zero,
+                                                                 voxel_res=voxel_res)
 
                 #fill the image stack with the interpolated slices
                 # save with a differnt fname so that we can see what this looks like
@@ -1519,10 +1549,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 for idx,slice_template_fname_nonlin in enumerate(template_nonlin_list):
                     slice_template = img[...,idx]
                     header.set_data_shape(slice_template.shape)
-                    affine = create_affine(slice_template.shape)
-                    # affine[0,0] = voxel_res[0]
-                    # affine[1,1] = voxel_res[1]
-                    # affine[2,2] = voxel_res[2]
+                    affine = create_affine(slice_template.shape, voxel_res=voxel_res)
                     nifti = nibabel.Nifti1Image(slice_template,affine=affine,header=header)
                     nifti.update_header()
                     save_volume(slice_template_fname_nonlin,nifti)
@@ -1908,17 +1935,39 @@ def downsample_image_parallel(image, rescale, n_jobs=-1):
         
         return downsampled_image
             
-def create_affine(shape):
+def create_affine(shape, voxel_res=None):
     """
     Creates an affine transformation matrix centered on the image.
     
     Parameters:
     - shape (tuple): Shape of the downsampled image.
+    - voxel_res (tuple or list, optional): Voxel resolution in [x, y, z] format in microns (default is None, which uses 1.0 for all dimensions).
+      For 2D images (shape with 2 dimensions), only the first 2 elements of voxel_res are used.
     
     Returns:
     - numpy.ndarray: 4x4 affine matrix.
     """
     affine = numpy.eye(4)
+    
+    # Set voxel spacing (resolution)
+    if voxel_res is not None:
+        if len(voxel_res) >= 1:
+            affine[0, 0] = voxel_res[0]
+        if len(voxel_res) >= 2:
+            affine[1, 1] = voxel_res[1]
+        # For 3D images, set z-spacing if provided
+        if len(shape) >= 3:
+            if len(voxel_res) >= 3:
+                affine[2, 2] = voxel_res[2]
+            else:
+                # Default z-spacing to 1.0 if not provided for 3D images
+                affine[2, 2] = 1.0
+                logging.warning(
+                    f"3D image with shape {shape} but voxel_res only has {len(voxel_res)} elements. "
+                    f"Using default z-spacing of 1.0. Pass a 3-element tuple/list as voxel_res to specify z-spacing."
+                )
+    
+    # Center the image
     affine[0, 3] = -shape[0] / 2.0
     affine[1, 3] = -shape[1] / 2.0
     return affine

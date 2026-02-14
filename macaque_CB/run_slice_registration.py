@@ -24,18 +24,25 @@ if use_nonlin_slice_templates:
 #this fails on server, for some reason?    
 mask_zero = False #mask zeros for nighres registrations
 
+# Control whether to use resolution information during registration
+# False (default): Registration works in voxel space (ignore_res=True), better empirical performance
+# True: Registration uses physical resolution (ignore_res=False), more physically accurate
+use_resolution_in_registration = False
+
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
-in_plane_res_x = rescale*in_plane_res_x/1000
-in_plane_res_y = rescale*in_plane_res_y/1000
-in_plane_res_z = in_plane_res_z/1000
+#keep resolutions in microns (not mm) - only apply rescale to x and y
+rescaled_in_plane_res_x = rescale * in_plane_res_x
+rescaled_in_plane_res_y = rescale * in_plane_res_y
+# z resolution stays at original value (not rescaled)
+in_plane_res_z_microns = in_plane_res_z
 
-actual_voxel_res = [in_plane_res_x,in_plane_res_y,in_plane_res_z]
+actual_voxel_res = [rescaled_in_plane_res_x, rescaled_in_plane_res_y, in_plane_res_z_microns]
 #if we don't want to set the voxel resolution, we can set it to None and it will be 1x1x1
-voxel_res = actual_voxel_res # defines voxel resolution for output template # registration itself performs much better when we do not specify the res
+voxel_res = actual_voxel_res # defines voxel resolution for output template in microns # registration itself performs much better when we do not specify the res
 
 downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
 max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
@@ -141,16 +148,11 @@ for idx,img_orig in enumerate(all_image_fnames):
             header = nibabel.Nifti1Header()
             header.set_data_shape(slice_img.shape)
             
-            #do not set the res (zooms) the first time
-            affine = create_affine(slice_img.shape)
-            affine[0,0] = 1
-            affine[1,1] = 1
-            affine[2,2] = 1
+            # Set proper affine with resolution from the start
+            affine = create_affine(slice_img.shape, voxel_res=voxel_res)
              
             nifti = nibabel.Nifti1Image(slice_img,affine=affine,header=header)
             nifti.update_header()
-            # nifti.set_zooms((in_plane_res_x*rescale,in_plane_res_y*rescale,in_plane_res_z))
-            # nifti.update_header()
             save_volume(output,nifti)
 
         else:
@@ -216,9 +218,8 @@ else:
             output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
             
             futures.append(
-                # do_initial_translation_reg(sources, targets, run_rigid=False, run_syn=False, file_name=output, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero)
                 executor.submit(
-                    do_initial_translation_reg(sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero)
+                    do_initial_translation_reg(sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res)
                 )    
                 # executor.submit(
                 #      nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
@@ -318,7 +319,8 @@ for iter in range(num_cascade_iterations):
                                     missing_idxs_to_fill = missing_idxs_to_fill, 
                                     zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
                                     reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True,
-                                    scaling_factor=scaling_factor) #,mask_zero=mask_zero)
+                                    scaling_factor=scaling_factor, voxel_res=voxel_res,
+                                    use_resolution_in_registration=use_resolution_in_registration) #,mask_zero=mask_zero)
 
         #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
@@ -430,7 +432,9 @@ for iter in range(num_reg_iterations):
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res,
+                                    use_resolution_in_registration=use_resolution_in_registration)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
@@ -441,7 +445,9 @@ for iter in range(num_reg_iterations):
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res,
+                                    use_resolution_in_registration=use_resolution_in_registration)
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -521,7 +527,9 @@ for iter in range(num_reg_iterations):
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res,
+                                    use_resolution_in_registration=use_resolution_in_registration)
         
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
@@ -535,7 +543,9 @@ for iter in range(num_reg_iterations):
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,
                                     regularization=regularization,
-                                    retain_reg_mappings=retain_reg_mappings)
+                                    retain_reg_mappings=retain_reg_mappings,
+                                    voxel_res=voxel_res,
+                                    use_resolution_in_registration=use_resolution_in_registration)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         
@@ -699,7 +709,9 @@ for iter in range(num_syn_reg_iterations):
             run_rigid=run_rigid,
             scaling_factor=scaling_factor,
             mask_zero=mask_zero,
-            regularization=regularization
+            regularization=regularization,
+            voxel_res=voxel_res,
+            use_resolution_in_registration=use_resolution_in_registration
         )
 
         run_parallel_coregistrations(
@@ -713,7 +725,9 @@ for iter in range(num_syn_reg_iterations):
             run_rigid=run_rigid,
             scaling_factor=scaling_factor,
             mask_zero=mask_zero,
-            regularization=regularization
+            regularization=regularization,
+            voxel_res=voxel_res,
+            use_resolution_in_registration=use_resolution_in_registration
         )
 
         logging.warning('\t\tSelecting best registration by MI')

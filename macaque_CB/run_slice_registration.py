@@ -220,7 +220,7 @@ else:
             
             futures.append(
                 executor.submit(
-                    do_initial_translation_reg(sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res)
+                    do_initial_translation_reg, sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res, use_resolution_in_registration=use_resolution_in_registration
                 )    
                 # executor.submit(
                 #      nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
@@ -465,13 +465,15 @@ for iter in range(num_reg_iterations):
                                                 zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                                 scaling_factor=scaling_factor, nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                                voxel_res=voxel_res)
         else:
             template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                                 zfill_num=4,reg_level_tag='coreg12nl'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                                 scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                                mask_zero=mask_zero,across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                                voxel_res=voxel_res)
         if use_nonlin_slice_templates:
             template = template_nonlin
         # missing_idxs_to_fill = None #if we only want to fill in missing slices on the first iteration, then we just use that image as the template
@@ -566,13 +568,15 @@ for iter in range(num_reg_iterations):
                                                 zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                                 scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                                across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                                voxel_res=voxel_res)
         else:
             template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                                 zfill_num=4,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                                 missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                                 scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                                across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                                voxel_res=voxel_res)
         
         template_not_generated = False
         if use_nonlin_slice_templates:
@@ -587,13 +591,15 @@ if template_not_generated:
                                             zfill_num=zfill_num,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                             scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                            voxel_res=voxel_res)
     else:
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,
                                             zfill_num=zfill_num,reg_level_tag='coreg12nl_win12'+iter_tag,per_slice_template=per_slice_template,
                                             missing_idxs_to_fill=missing_idxs_to_fill, slice_template_type=slice_template_type,
                                             scaling_factor=scaling_factor,nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma)
+                                            across_slice_smoothing_sigma=across_slice_smoothing_sigma,
+                                            voxel_res=voxel_res)
     template_tag = 'coreg12nl_win12'+f'_rigsyn_{num_reg_iterations-1}'
 
 final_rigsyn_reg_level_tag = template_tag
@@ -758,7 +764,8 @@ for iter in range(num_syn_reg_iterations):
                 missing_idxs_to_fill=missing_idxs_to_fill,
                 slice_template_type=slice_template_type,
                 scaling_factor=scaling_factor,
-                nonlin_interp_max_workers=nonlin_interp_max_workers
+                nonlin_interp_max_workers=nonlin_interp_max_workers,
+                voxel_res=voxel_res
             )
         else:
             template = generate_stack_and_template(
@@ -769,7 +776,8 @@ for iter in range(num_syn_reg_iterations):
                 missing_idxs_to_fill=missing_idxs_to_fill,
                 slice_template_type=slice_template_type,
                 scaling_factor=scaling_factor,
-                nonlin_interp_max_workers=nonlin_interp_max_workers
+                nonlin_interp_max_workers=nonlin_interp_max_workers,
+                voxel_res=voxel_res
             )
 
         if use_nonlin_slice_templates:
@@ -787,7 +795,8 @@ groupwise_stack_optimization(
     output_dir, subject, all_image_fnames,
     reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}',
     iterations=5,
-    scaling_factor=scaling_factor
+    scaling_factor=scaling_factor,
+    voxel_res=voxel_res
 )
 
 logging.warning('\t\tGenerating new template')
@@ -800,7 +809,8 @@ if 'nonlin' in slice_template_type:
         missing_idxs_to_fill=missing_idxs_to_fill,
         slice_template_type=slice_template_type,
         scaling_factor=scaling_factor,
-        nonlin_interp_max_workers=nonlin_interp_max_workers
+        nonlin_interp_max_workers=nonlin_interp_max_workers,
+        voxel_res=voxel_res
     )
 else:
     template = generate_stack_and_template(
@@ -811,7 +821,8 @@ else:
         missing_idxs_to_fill=missing_idxs_to_fill,
         slice_template_type=slice_template_type,
         scaling_factor=scaling_factor,
-        nonlin_interp_max_workers=nonlin_interp_max_workers
+        nonlin_interp_max_workers=nonlin_interp_max_workers,
+        voxel_res=voxel_res
     )
 
 logging.warning(f"Output directory: {output_dir}")

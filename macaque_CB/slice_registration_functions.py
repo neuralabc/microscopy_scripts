@@ -1363,12 +1363,6 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
     """
     Jointly optimize all slices together to enforce smooth transitions.
     Includes boundary constraints to prevent edge artifacts.
-    
-    Parameters:
-    -----------
-    [... previous docstring ...]
-    max_displacement : float
-        Maximum allowed displacement in PIXELS (not mm)
     """
     import ants
     
@@ -1380,7 +1374,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
     logging.warning(f"  Max displacement check: {max_displacement} pixels")
     logging.warning("=" * 80)
     
-    # Load all registered slices and generate masks
+    # Load all registered slices and generate INITIAL masks
     images = []
     masks = []
     
@@ -1391,9 +1385,9 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
         img = ants.image_read(img_path)
         images.append(img)
         
-        # Generate mask for this slice
+        # Generate INITIAL mask for this slice
         if restrict_boundary_deformation:
-            logging.info(f"Generating mask for slice {idx}")
+            logging.info(f"Generating initial mask for slice {idx}")
             
             mask_data = generate_tissue_mask(
                 img,
@@ -1405,14 +1399,14 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
             mask_img = create_ants_mask(mask_data, img)
             masks.append(mask_img)
             
-            # Optionally save mask
+            # Save initial mask
             if save_masks:
-                mask_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_mask.nii.gz"
+                mask_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_mask_iter0.nii.gz"
                 ants.image_write(mask_img, mask_path)
         else:
             masks.append(None)
     
-    logging.warning(f"Generated {len(masks)} masks")
+    logging.warning(f"Generated {len(masks)} initial masks")
     
     # Track deformation statistics across iterations
     deformation_stats = []
@@ -1439,6 +1433,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
         
         # Register each slice to mean with constraints
         registered_images = []
+        warped_masks = []
         iter_deform_stats = []
         
         for idx, img in enumerate(images):
@@ -1454,8 +1449,8 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                     reg = ants.registration(
                         fixed=mean_template,
                         moving=img,
-                        mask=mean_mask,           # ← Fixed image mask
-                        moving_mask=masks[idx],   # ← Moving image mask (this slice's mask)
+                        mask=mean_mask,
+                        moving_mask=masks[idx],
                         type_of_transform='SyNOnly',
                         flow_sigma=flow_sigma,
                         total_sigma=total_sigma,
@@ -1475,55 +1470,114 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                         outprefix=output_prefix
                     )
                 
-                registered_images.append(reg['warpedmovout'])
-                
-                # Check deformation magnitude (in PIXELS)
+                # Check deformation magnitude and decide whether to accept
                 fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
+                use_registration = True  # Default: accept registration
+                
                 if os.path.exists(fwd_warp):
                     is_reasonable, stats = check_deformation_magnitude(
                         fwd_warp, 
                         max_displacement=max_displacement,
-                        reference_image=img  # Pass for pixel vs mm conversion if needed
+                        reference_image=img
                     )
+                    
+                    # Record stats
                     iter_deform_stats.append({
                         'slice': idx,
                         'iteration': iteration,
+                        'reverted': False,
                         **stats
                     })
+                    
+                    # Decide whether to use this registration
+                    if not is_reasonable:
+                        logging.warning(
+                            f"⚠ Excessive deformation for slice {idx} (iteration {iteration+1}). "
+                            f"Reverting to previous version."
+                        )
+                        use_registration = False
+                        iter_deform_stats[-1]['reverted'] = True
+                else:
+                    logging.warning(f"No warp file found for slice {idx}, keeping previous version")
+                    use_registration = False
                 
-                # On the LAST iteration, save transforms
+                # Append image based on decision
+                if use_registration:
+                    registered_images.append(reg['warpedmovout'])
+                else:
+                    registered_images.append(img)  # Keep previous version
+                
+                # Warp mask if using registration and masks are enabled
+                if restrict_boundary_deformation:
+                    if use_registration and os.path.exists(fwd_warp):
+                        # Apply transformation to mask
+                        warped_mask = ants.apply_transforms(
+                            fixed=mean_template,
+                            moving=masks[idx],
+                            transformlist=[fwd_warp], #  can convert to transformlist=reg['fwdtransforms'],
+                            interpolator='nearestNeighbor'
+                        )
+                        warped_masks.append(warped_mask)
+                        
+                        # Optionally save warped mask
+                        if save_masks and iteration < iterations - 1:
+                            mask_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_mask_iter{iteration+1}.nii.gz"
+                            ants.image_write(warped_mask, mask_path)
+                    else:
+                        # Keep previous mask
+                        warped_masks.append(masks[idx])
+                else:
+                    warped_masks.append(None)
+                
+                # On the LAST iteration, save transforms (even if reverted)
                 if iteration == iterations - 1:
                     final_output_def = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-def0.nii.gz"
                     final_output_map = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-map.nii.gz"
                     final_output_invmap = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-invmap.nii.gz"
                     
-                    # Save warped image
-                    ants.image_write(reg['warpedmovout'], final_output_def)
+                    # Save the final image (might be reverted version)
+                    ants.image_write(registered_images[-1], final_output_def)
                     
-                    # Convert and save transforms
-                    inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
+                    # Only save transforms if registration was accepted
+                    if use_registration:
+                        # Convert and save transforms
+                        inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
+                        
+                        if os.path.exists(fwd_warp):
+                            try:
+                                convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
+                            except Exception as e:
+                                logging.error(f"Failed to convert forward warp for slice {idx}: {e}")
+                        
+                        if os.path.exists(inv_warp):
+                            try:
+                                convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
+                            except Exception as e:
+                                logging.error(f"Failed to convert inverse warp for slice {idx}: {e}")
+                    else:
+                        logging.info(f"Skipping transform save for slice {idx} (registration was reverted)")
                     
-                    if os.path.exists(fwd_warp):
-                        try:
-                            convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
-                        except Exception as e:
-                            logging.error(f"Failed to convert forward warp for slice {idx}: {e}")
-                    
-                    if os.path.exists(inv_warp):
-                        try:
-                            convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
-                        except Exception as e:
-                            logging.error(f"Failed to convert inverse warp for slice {idx}: {e}")
+                    # Save final mask
+                    if save_masks and restrict_boundary_deformation:
+                        final_mask_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_mask_final.nii.gz"
+                        ants.image_write(warped_masks[-1], final_mask_path)
         
-        # Update images for next iteration
+        # Update images AND masks for next iteration
         images = registered_images
+        masks = warped_masks
         deformation_stats.extend(iter_deform_stats)
         
         # Log iteration summary
         if iter_deform_stats:
-            mean_disp = np.mean([s['mean'] for s in iter_deform_stats])
-            max_disp = np.max([s['max'] for s in iter_deform_stats])
-            logging.warning(f"Iteration {iteration+1} complete: mean displacement={mean_disp:.2f}, max={max_disp:.2f} pixels")
+            mean_disp = np.mean([s['mean_pixels'] for s in iter_deform_stats])
+            max_disp = np.max([s['max_pixels'] for s in iter_deform_stats])
+            n_reverted = sum([s.get('reverted', False) for s in iter_deform_stats])
+            logging.warning(
+                f"Iteration {iteration+1} complete: "
+                f"mean displacement={mean_disp:.2f}, max={max_disp:.2f} pixels"
+            )
+            if n_reverted > 0:
+                logging.warning(f"  {n_reverted} slice(s) reverted due to excessive deformation")
     
     # Save deformation statistics
     if deformation_stats:

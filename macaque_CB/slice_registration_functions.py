@@ -1516,7 +1516,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
                                 ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,
                                 sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=0,
-                                match_histograms_to_slice=185):
+                                match_histograms_to_slice=None):
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.

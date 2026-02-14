@@ -1936,7 +1936,7 @@ def downsample_image_parallel(image, rescale, n_jobs=-1):
             
 def create_affine(shape, voxel_res=None, center=True):
     """
-    Creates an affine transformation matrix.
+    Creates an affine transformation matrix. Should be RAS+
     
     Parameters:
     - shape (tuple): Shape of the image.

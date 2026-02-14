@@ -17,7 +17,7 @@ use_nonlin_slice_templates = False #use interpolated slices (from registrations 
                                     # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
                                     # currently BROKEN
 slice_template_type = 'median'
-across_slice_smoothing_sigma = 5 # (None/0; pos int} sigma for smoothing across the stack (only in the slice direction), applied after stacking and before template creation
+across_slice_smoothing_sigma = None # (None/0; pos int} sigma for smoothing across the stack (only in the slice direction), applied after stacking and before template creation
 if use_nonlin_slice_templates:
     slice_template_type = [slice_template_type,'nonlin']
 

@@ -210,7 +210,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                        input_source_file_tag='coreg0nl', reg_level_tag='coreg1nl',
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
-                       mask_zero=False, include_stack_template=True,regularization='Medium'):
+                       mask_zero=False, include_stack_template=True,regularization='Medium',
+                       voxel_res=None):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -233,6 +234,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
         include_stack_template (bool): If True, we also include the entire stack template with the same weight as the slice-specific template
             - no effect when only a single template is used
+        voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
     """
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
@@ -331,7 +333,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
-                                  regularization='Medium'):
+                                  regularization='Medium', voxel_res=None):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -354,6 +356,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
         scaling_factor (int): Scaling factor for the image resolution during registration.
         image_weights (list): Weights assigned to images during registration to emphasize certain slices.
         retain_reg_mappings (bool): If True, retain all of the registration output mappings for later use.
+        voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
     """
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -366,7 +369,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 run_syn=run_syn, run_rigid=run_rigid, previous_target_tag=previous_target_tag,
                                 scaling_factor=scaling_factor, image_weights=image_weights,
                                 retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero, 
-                                regularization=regularization)
+                                regularization=regularization, voxel_res=voxel_res)
             )
         for future in as_completed(futures):
             try:
@@ -377,7 +380,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
 
 def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
-                                  reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64):
+                                  reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
+                                  voxel_res=None):
     """
     Cascading slice-based registration
 
@@ -409,6 +413,8 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 
     previous_target_tag : str, optional
         Optional tag to specify a previously registered target for the initial alignment. If None, defaults to `input_source_file_tag`.
+        
+    voxel_res (tuple, optional): Voxel resolution in [x, y, z] format in microns (default is None).
 
     Workflow:
     ---------
@@ -539,7 +545,7 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  mask_zero=False):
+                                  mask_zero=False, voxel_res=None):
 
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
 
@@ -603,7 +609,7 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             output = all_image_fnames_new[moving_idx]
             # previously was just do_reg()
             reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
             logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
 
@@ -1016,9 +1022,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
     try:
         
         pre_post = do_reg_ants([pre_img], [avg_fname], file_name='pre_post', output_dir=temp_dir, 
-                          scaling_factor=scaling_factor,mask_zero=mask_zero)
+                          scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
         post_pre = do_reg_ants([post_img], [avg_fname], file_name='post_pre', output_dir=temp_dir, 
-                          scaling_factor=scaling_factor,mask_zero=mask_zero)
+                          scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
 
         reg_pre = pre_post['transformed_source']
         reg_post = post_pre['transformed_source']
@@ -1046,9 +1052,9 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
             for refinement_iter in range(reg_refinement_iterations):
                 
                 pre_avg = do_reg_ants([pre_img], [avg_fname], file_name='pre_avg', run_syn=True, output_dir=temp_dir, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
                 post_avg = do_reg_ants([post_img], [avg_fname], file_name='post_avg', run_syn=True, output_dir=temp_dir, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
                 
                 img1 = load_volume(pre_avg['transformed_source'])
                 img2 = load_volume(post_avg['transformed_source'])
@@ -1082,7 +1088,7 @@ def compute_intermediate_slice(pre_img, post_img, current_img=None, idx=None, de
         # If current_img is provided, refine it to match the final average
         if current_img is not None:
             current_avg = nibabel.load(do_reg_ants([current_img], [avg_fname], file_name='current_avg', run_syn=True, 
-                                              output_dir=temp_dir)['transformed_source'],mask_zero=mask_zero)
+                                              output_dir=temp_dir, voxel_res=voxel_res)['transformed_source'],mask_zero=mask_zero)
         else:
             current_avg = avg
 

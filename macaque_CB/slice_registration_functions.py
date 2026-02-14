@@ -1516,7 +1516,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
                                 ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,
                                 sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=0,
-                                match_histograms_to_slice=None):
+                                match_histograms_to_slice=None): #XXX change back to 185 when ready
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -1693,7 +1693,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         elif across_slice_smoothing_sigma<0:
             logging.warning('Smoothing sigma is negative, skipping across slice smoothing') 
 
-        if match_histograms_to_slice is not None and match_histograms_to_slice >0:
+        if match_histograms_to_slice is not None and match_histograms_to_slice >0 and match_histograms_to_slice < img.shape[-1]:
             img_matched = np.zeros_like(img)
             for hist_slice_idx in range(img.shape[-1]):
                 img_matched[...,hist_slice_idx] = compute_histogram_matched_slice(img[...,hist_slice_idx],img[...,match_histograms_to_slice])

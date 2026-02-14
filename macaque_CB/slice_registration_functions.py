@@ -1933,7 +1933,7 @@ def select_best_reg_by_MI_parallel(output_dir, subject, all_image_fnames, df_str
         (idx, img_name, output_dir, subject, template_tail, out_tail, tag1_tail, tag2_tail, zfill_num, per_slice_template, overwrite)
         for idx, img_name in enumerate(all_image_fnames)
     ]
-    
+    logging.warning(all_image_fnames)    
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_img = {executor.submit(compute_MI_for_slice, *arg): arg[1] for arg in args}
         for future in as_completed(future_to_img):

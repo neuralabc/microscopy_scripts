@@ -218,7 +218,6 @@ else:
             output = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'_coreg0nl.nii.gz'
             
             futures.append(
-                # do_initial_translation_reg(sources, targets, run_rigid=False, run_syn=False, file_name=output, output_dir=tmp_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res)
                 executor.submit(
                     do_initial_translation_reg(sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res)
                 )    

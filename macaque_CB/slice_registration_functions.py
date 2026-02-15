@@ -1471,13 +1471,27 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                         outprefix=output_prefix
                     )
                 
-                # Check deformation magnitude and decide whether to accept
-                fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
+                # Check deformation magnitude and decide whether to accept, pull the warp file from the reg output
+                # fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
+                # fwd_warp = glob.glob(os.path.join(tmp_dir, "*reg?Warp*"))
+                if reg['fwdtransforms']:
+                    fwd_warp = reg['fwdtransforms'][-1]  # Last one is the warp
+                    logging.debug(f"Forward warp: {fwd_warp}")
+                else:
+                    fwd_warp = None
+
+                if reg['invtransforms']:
+                    inv_warp = reg['invtransforms'][0]  # First inverse is the warp
+                    logging.debug(f"Inverse warp: {inv_warp}")
+                else:
+                    inv_warp = None
+                
                 use_registration = True  # Default: accept registration
-                logging.warning(tmp_dir)
-                os.makedirs('/tmp/XXX_cjs_test', exist_ok=True)
-                shutil.copytree(tmp_dir, f'/tmp/XXX_cjs_test/slice_{idx}_iter{iteration}', dirs_exist_ok=True)
-                return None
+                
+                # logging.warning(tmp_dir)
+                # os.makedirs('/tmp/XXX_cjs_test', exist_ok=True)
+                # shutil.copytree(tmp_dir, f'/tmp/XXX_cjs_test/slice_{idx}_iter{iteration}', dirs_exist_ok=True)
+                # return None
 
                 if os.path.exists(fwd_warp):
                     is_reasonable, stats = check_deformation_magnitude(
@@ -1546,7 +1560,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                     # Only save transforms if registration was accepted
                     if use_registration:
                         # Convert and save transforms
-                        inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
+                        # inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
                         
                         if os.path.exists(fwd_warp):
                             try:

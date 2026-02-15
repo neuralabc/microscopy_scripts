@@ -1475,6 +1475,8 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                 fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
                 use_registration = True  # Default: accept registration
                 logging.warning(tmp_dir)
+                os.path.makedirs('/tmp/XXX_cjs_test', exist_ok=True)
+                shutil.copytree(tmp_dir, f'/tmp/XXX_cjs_test/slice_{idx}_iter{iteration}', dirs_exist_ok=True)
                 return None
 
                 if os.path.exists(fwd_warp):

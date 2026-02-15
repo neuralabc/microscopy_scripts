@@ -1324,19 +1324,48 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
                     # Save the warped image
                     ants.image_write(reg['warpedmovout'], final_output_def)
                     
-                    # Convert ANTs displacement field to deformation field
-                    fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
-                    inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
+                    # # Convert ANTs displacement field to deformation field
+                    # fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
+                    # inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
                     
-                    if os.path.exists(fwd_warp):
-                        convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
-                    else:
-                        logging.warning(f"Forward warp not found for slice {idx}")
+                    ## XXX CURRENTLY WE DO NOT do anything to these transforms. XXX TODO: fix to deal w/ transforms?
+
+                    # # Get warp files from registration output (filter out affine .mat files)
+                    # fwd_warp = None
+                    # inv_warp = None
+
+                    # if 'fwdtransforms' in reg and reg['fwdtransforms']:
+                    #     # Find the warp file (not .mat files)
+                    #     for tf in reversed(reg['fwdtransforms']):  # Start from end
+                    #         if tf.endswith('.nii.gz') or tf.endswith('.nii'):
+                    #             fwd_warp = tf
+                    #             logging.debug(f"Forward warp: {os.path.basename(fwd_warp)}")
+                    #             break
+                        
+                    #     if not fwd_warp:
+                    #         logging.warning(f"No .nii.gz warp found in fwdtransforms: {reg['fwdtransforms']}")
+
+                    # if 'invtransforms' in reg and reg['invtransforms']:
+                    #     # Find the inverse warp file (not .mat files)
+                    #     for tf in reg['invtransforms']:  # Start from beginning for inverse
+                    #         if tf.endswith('.nii.gz') or tf.endswith('.nii'):
+                    #             inv_warp = tf
+                    #             logging.debug(f"Inverse warp: {os.path.basename(inv_warp)}")
+                    #             break
+                        
+                    #     if not inv_warp:
+                    #         logging.warning(f"No .nii.gz warp found in invtransforms: {reg['invtransforms']}")
                     
-                    if os.path.exists(inv_warp):
-                        convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
-                    else:
-                        logging.warning(f"Inverse warp not found for slice {idx}")
+
+                    # if os.path.exists(fwd_warp):
+                    #     convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
+                    # else:
+                    #     logging.warning(f"Forward warp not found for slice {idx}")
+                    
+                    # if os.path.exists(inv_warp):
+                    #     convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
+                    # else:
+                    #     logging.warning(f"Inverse warp not found for slice {idx}")
         
         # Update images for next iteration
         images = registered_images

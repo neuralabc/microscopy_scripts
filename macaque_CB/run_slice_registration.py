@@ -847,23 +847,23 @@ max_displacement_pixels = 20  # Still 20 pixels
 # max_displacement_pixels = max_displacement_mm / 0.4  # = 20 pixels
 
 # Run groupwise optimization with boundary constraints
-groupwise_stack_optimization_v2(
-    output_dir=output_dir,
-    subject=subject,
-    all_image_fnames=all_image_fnames,
-    reg_level_tag=input_source_file_tag + '_win12' + iter_tag,  # Your final tag
-    iterations=5,
-    zfill_num=zfill_num,
-    restrict_boundary_deformation=True,  # Enable boundary protection
-    boundary_mask_erosion=1,            # 1-pixel around the edge of the image
-    mask_threshold_method='percentile',        # Auto-threshold for tissue
-    mask_min_size=100,                   # Remove small noise regions
-    flow_sigma=15,                       # High smoothness
-    total_sigma=12,                      # Strong elastic constraint
-    grad_step=0.025,                     # Conservative steps
-    max_displacement=max_displacement_pixels,                 # Warn if displacements exceed 20 pixels
-    save_masks=True                      # Save masks for inspection
-)
+# groupwise_stack_optimization_v2(
+#     output_dir=output_dir,
+#     subject=subject,
+#     all_image_fnames=all_image_fnames,
+#     reg_level_tag=input_source_file_tag + '_win12' + iter_tag,  # Your final tag
+#     iterations=5,
+#     zfill_num=zfill_num,
+#     restrict_boundary_deformation=True,  # Enable boundary protection
+#     boundary_mask_erosion=1,            # 1-pixel around the edge of the image
+#     mask_threshold_method='percentile',        # Auto-threshold for tissue
+#     mask_min_size=100,                   # Remove small noise regions
+#     flow_sigma=15,                       # High smoothness
+#     total_sigma=12,                      # Strong elastic constraint
+#     grad_step=0.025,                     # Conservative steps
+#     max_displacement=max_displacement_pixels,                 # Warn if displacements exceed 20 pixels
+#     save_masks=True                      # Save masks for inspection
+# )
 
 # Generate final stack from groupwise results
 logging.warning("Generating final stack from groupwise optimization...")

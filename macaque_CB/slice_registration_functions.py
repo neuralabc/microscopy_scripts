@@ -341,6 +341,429 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
     else:
         logging.warning(f"\t\tRegistration completed for slice {idx}. \t\t(intermediate files retained)")
 
+def embedded_antspy_groupwise(
+    source_images, target_images,
+    moving_masks=None, fixed_masks=None,
+    run_rigid=False,
+    run_affine=False,
+    run_syn=True,
+    coarse_iterations=100,
+    medium_iterations=50,
+    fine_iterations=25,
+    syn_gradient_step=0.2, # Expose SyN parameters!
+    syn_flow_sigma=15.0,
+    syn_total_sigma=12.0,
+    scaling_factor=64,
+    cost_function='Mattes',
+    interpolation='Linear',
+    convergence=1e-6,
+    ignore_affine=False,
+    ignore_orient=False,
+    ignore_res=False,
+    save_data=True,
+    overwrite=True,
+    output_dir=None,
+    file_name=None,
+    cost_function='MutualInformation'
+):
+    """
+    Custom groupwise registration with exposed SyN smoothness parameters.
+    
+    Based on nighres.registration.embedded_antspy_2d_multi but with:
+    - Exposed syn_flow_sigma and syn_total_sigma for high smoothness
+    - Exposed syn_gradient_step for conservative updates
+    - Support for external masks (not just mask_zero)
+    - Simplified for single-pair registration
+    
+    Parameters
+    ----------
+    source_images : list of str
+        Paths to moving images (usually just one for groupwise)
+    target_images : list of str
+        Paths to fixed images (usually just one for groupwise)
+    moving_masks : list of str, optional
+        Paths to moving image masks
+    fixed_masks : list of str, optional
+        Paths to fixed image masks
+    run_rigid : bool
+        Whether to run rigid registration (default False)
+    run_affine : bool
+        Whether to run affine registration (default False)
+    run_syn : bool
+        Whether to run SyN registration (default True)
+    coarse_iterations : int
+        Iterations at coarse level (default 100)
+    medium_iterations : int
+        Iterations at medium level (default 50)
+    fine_iterations : int
+        Iterations at fine level (default 25)
+    syn_gradient_step : float
+        SyN gradient step size (default 0.2, smaller = more conservative)
+    syn_flow_sigma : float
+        SyN flow smoothing sigma (default 15.0, higher = smoother)
+    syn_total_sigma : float
+        SyN total field smoothing sigma (default 12.0, higher = more elastic)
+    scaling_factor : int
+        Downsampling factor for multi-scale (default 64)
+    cost_function : str
+        'Mattes' or 'MutualInformation' or 'CrossCorrelation'
+    interpolation : str
+        'Linear' or 'NearestNeighbor'
+    convergence : float
+        Convergence threshold (default 1e-6)
+    ignore_affine : bool
+        Ignore affine from header (default False)
+    ignore_orient : bool
+        Ignore orientation from header (default True)
+    ignore_res : bool
+        Ignore resolution from header (default True)
+    save_data : bool
+        Save output files (default True)
+    overwrite : bool
+        Overwrite existing files (default False)
+    output_dir : str
+        Output directory
+    file_name : str
+        Base filename for outputs
+    
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+        - 'transformed_source': Path to registered image (*_ants-def0.nii.gz)
+        - 'mapping': Path to forward deformation map (*_ants-map.nii.gz)
+        - 'inverse': Path to inverse deformation map (*_ants-invmap.nii.gz)
+    """
+    import ants
+    import nibabel
+    import numpy as np
+    import os
+    import math
+    from glob import glob
+    from nighres.io import load_volume, save_volume
+    
+    print('\nCustom Embedded ANTs Groupwise Registration')
+    print(f'  SyN parameters: gradient_step={syn_gradient_step}, flow_sigma={syn_flow_sigma}, total_sigma={syn_total_sigma}')
+    
+    # Setup output directory
+    if output_dir is None:
+        output_dir = os.path.dirname(source_images[0])
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Define output filenames (nighres convention)
+    if file_name is None:
+        file_name = os.path.basename(source_images[0]).split('.')[0]
+    
+    transformed_source_file = os.path.join(output_dir, f"{file_name}_ants-def0.nii.gz")
+    mapping_file = os.path.join(output_dir, f"{file_name}_ants-map.nii.gz")
+    inverse_mapping_file = os.path.join(output_dir, f"{file_name}_ants-invmap.nii.gz")
+    
+    # Check if already exists
+    if save_data and not overwrite:
+        if (os.path.isfile(transformed_source_file) and 
+            os.path.isfile(mapping_file) and 
+            os.path.isfile(inverse_mapping_file)):
+            print("Skip computation (use existing results)")
+            return {
+                'transformed_source': transformed_source_file,
+                'mapping': mapping_file,
+                'inverse': inverse_mapping_file
+            }
+    
+    # Load images
+    source = load_volume(source_images[0])
+    target = load_volume(target_images[0])
+    
+    src_affine = source.affine
+    src_header = source.header
+    trg_affine = target.affine
+    trg_header = target.header
+    
+    nsx, nsy = source.header.get_data_shape()[0:2]
+    ntx, nty = target.header.get_data_shape()[0:2]
+    
+    orig_src_aff = source.affine
+    orig_src_hdr = source.header
+    orig_trg_aff = target.affine
+    orig_trg_hdr = target.header
+    
+    # Handle ignore_affine/orient/res (same as nighres)
+    if ignore_affine or ignore_orient or ignore_res:
+        rsx = source.header.get_zooms()[0]
+        rsy = source.header.get_zooms()[1]
+        rtx = target.header.get_zooms()[0]
+        rty = target.header.get_zooms()[1]
+        
+        # Create modified affines (simplified - assuming 2D)
+        if ignore_res or ignore_orient:
+            src_new_affine = np.eye(4)
+            src_new_affine[0, 0] = 1.0 if ignore_res else rsx
+            src_new_affine[1, 1] = 1.0 if ignore_res else rsy
+            src_new_affine[2, 2] = 1.0
+            src_new_affine[0, 3] = -nsx / 2.0
+            src_new_affine[1, 3] = -nsy / 2.0
+            
+            src_img = nibabel.Nifti1Image(source.get_fdata(), src_new_affine, source.header)
+            src_img_file = os.path.join(output_dir, f"{file_name}_tmp_src.nii.gz")
+            save_volume(src_img_file, src_img)
+            source = load_volume(src_img_file)
+            
+            trg_new_affine = np.eye(4)
+            trg_new_affine[0, 0] = 1.0 if ignore_res else rtx
+            trg_new_affine[1, 1] = 1.0 if ignore_res else rty
+            trg_new_affine[2, 2] = 1.0
+            trg_new_affine[0, 3] = -ntx / 2.0
+            trg_new_affine[1, 3] = -nty / 2.0
+            
+            trg_img = nibabel.Nifti1Image(target.get_fdata(), trg_new_affine, target.header)
+            trg_img_file = os.path.join(output_dir, f"{file_name}_tmp_trg.nii.gz")
+            save_volume(trg_img_file, trg_img)
+            target = load_volume(trg_img_file)
+    
+    # Create coordinate grids for mapping
+    src_coordX = np.zeros((nsx, nsy))
+    src_coordY = np.zeros((nsx, nsy))
+    for x in range(nsx):
+        for y in range(nsy):
+            src_coordX[x, y] = x
+            src_coordY[x, y] = y
+    
+    src_mapX_file = os.path.join(output_dir, f"{file_name}_tmp_srcX.nii.gz")
+    src_mapY_file = os.path.join(output_dir, f"{file_name}_tmp_srcY.nii.gz")
+    save_volume(src_mapX_file, nibabel.Nifti1Image(src_coordX, source.affine, source.header))
+    save_volume(src_mapY_file, nibabel.Nifti1Image(src_coordY, source.affine, source.header))
+    
+    trg_coordX = np.zeros((ntx, nty))
+    trg_coordY = np.zeros((ntx, nty))
+    for x in range(ntx):
+        for y in range(nty):
+            trg_coordX[x, y] = x
+            trg_coordY[x, y] = y
+    
+    trg_mapX_file = os.path.join(output_dir, f"{file_name}_tmp_trgX.nii.gz")
+    trg_mapY_file = os.path.join(output_dir, f"{file_name}_tmp_trgY.nii.gz")
+    save_volume(trg_mapX_file, nibabel.Nifti1Image(trg_coordX, target.affine, target.header))
+    save_volume(trg_mapY_file, nibabel.Nifti1Image(trg_coordY, target.affine, target.header))
+    
+    # Build ANTs command
+    prefix = f"{file_name}_tmp_syn"
+    
+    args = [
+        '--collapse-output-transforms', '1',
+        '--dimensionality', '2',
+        '--initialize-transforms-per-stage', '0',
+        '--interpolation', 'Linear',
+        '--output', prefix
+    ]
+    
+    # Add masks if provided
+    if fixed_masks and moving_masks:
+        args.extend(['--masks', f'[{fixed_masks[0]},{moving_masks[0]}]'])
+    
+    # Calculate multi-scale parameters
+    n_scales = math.ceil(math.log(scaling_factor) / math.log(2.0))
+    
+    iter_rigid = str(1000)
+    iter_affine = str(1000)
+    iter_syn = str(coarse_iterations)
+    smooth = str(float(scaling_factor))
+    shrink = str(scaling_factor)
+    
+    for n in range(n_scales):
+        iter_rigid += 'x1000'
+        iter_affine += 'x1000'
+        if n < (n_scales - 1) / 2:
+            iter_syn += f'x{coarse_iterations}'
+        elif n < n_scales - 1:
+            iter_syn += f'x{medium_iterations}'
+        else:
+            iter_syn += f'x{fine_iterations}'
+        smooth += f'x{scaling_factor / math.pow(2.0, n + 1)}'
+        shrink += f'x{math.ceil(scaling_factor / math.pow(2.0, n + 1))}'
+    
+    # Rigid (optional)
+    if run_rigid:
+        args.extend([
+            '--transform', 'Rigid[0.1]',
+            '--metric', f'MI[{target.get_filename()},{source.get_filename()},1.0,32,Random,0.3]',
+            '--convergence', f'[{iter_rigid},{convergence},10]',
+            '--smoothing-sigmas', smooth,
+            '--shrink-factors', shrink,
+            '--use-histogram-matching', '0',
+            '--winsorize-image-intensities', '[0.001,0.999]'
+        ])
+    
+    # Affine (optional)
+    if run_affine:
+        args.extend([
+            '--transform', 'Affine[0.1]',
+            '--metric', f'MI[{target.get_filename()},{source.get_filename()},1.0,32,Random,0.3]',
+            '--convergence', f'[{iter_affine},{convergence},10]',
+            '--smoothing-sigmas', smooth,
+            '--shrink-factors', shrink,
+            '--use-histogram-matching', '0',
+            '--winsorize-image-intensities', '[0.001,0.999]'
+        ])
+    
+    # SyN with CUSTOM parameters
+    if run_syn:
+        # KEY: Custom syn_param with your high smoothness values!
+        # syn_param = [syn_gradient_step, syn_flow_sigma, syn_total_sigma]
+        
+        # metric = 'MI' if cost_function in ['Mattes', 'MutualInformation'] else 'CC'
+        if cost_function == 'MutualInformation':
+            metric_params = '1.0,32,Random,0.3'
+        else:
+            metric_params = '1.0,5,Random,0.3'
+        
+        args.extend([
+            '--transform', f'SyN[{syn_gradient_step},{syn_flow_sigma},{syn_total_sigma}]',
+            '--metric', f'{cost_function}[{target.get_filename()},{source.get_filename()},{metric_params}]',
+            '--convergence', f'[{iter_syn},{convergence},5]',
+            '--smoothing-sigmas', smooth,
+            '--shrink-factors', shrink,
+            '--use-histogram-matching', '0',
+            '--winsorize-image-intensities', '[0.001,0.999]'
+        ])
+    
+    args.extend(['--write-composite-transform', '0'])
+    
+    # Run ANTs registration
+    print(f"Running ANTs with custom SyN parameters...")
+    processed_args = ants.utils._int_antsProcessArguments(args)
+    libfn = ants.utils.get_lib_fn("antsRegistration")
+    libfn(processed_args)
+    
+    # Find output transforms
+    results = sorted(glob(f'{prefix}*'))
+    forward = [r for r in results if r.endswith('GenericAffine.mat') or 
+               (r.endswith('Warp.nii.gz') and not r.endswith('InverseWarp.nii.gz'))]
+    inverse = [r for r in results[::-1] if r.endswith('GenericAffine.mat') or 
+               r.endswith('InverseWarp.nii.gz')]
+    
+    flag = [r.endswith('GenericAffine.mat') for r in forward]
+    linear = [r.endswith('GenericAffine.mat') for r in inverse]
+    
+    # Apply transforms to source image
+    at_args = [
+        '--dimensionality', '2',
+        '--input-image-type', '0',
+        '--input', source.get_filename(),
+        '--reference-image', target.get_filename(),
+        '--interpolation', interpolation
+    ]
+    
+    for idx, transform in enumerate(forward):
+        invert = '1' if flag[idx] else '0'
+        at_args.extend(['--transform', f'[{transform},{invert}]'])
+    
+    at_args.extend(['--output', transformed_source_file])
+    
+    processed_at = ants.utils._int_antsProcessArguments(at_args)
+    libfn = ants.utils.get_lib_fn("antsApplyTransforms")
+    libfn(processed_at)
+    
+    # Create forward mapping (source → target coordinates)
+    src_mapX_trans = os.path.join(output_dir, f"{file_name}_tmp_srcX_trans.nii.gz")
+    src_mapY_trans = os.path.join(output_dir, f"{file_name}_tmp_srcY_trans.nii.gz")
+    
+    for coord_file, output_file in [(src_mapX_file, src_mapX_trans), 
+                                     (src_mapY_file, src_mapY_trans)]:
+        at_args = [
+            '--dimensionality', '2',
+            '--input-image-type', '0',
+            '--input', coord_file,
+            '--reference-image', target.get_filename(),
+            '--interpolation', 'Linear'
+        ]
+        
+        for idx, transform in enumerate(forward):
+            invert = '1' if flag[idx] else '0'
+            at_args.extend(['--transform', f'[{transform},{invert}]'])
+        
+        at_args.extend(['--output', output_file])
+        
+        processed_at = ants.utils._int_antsProcessArguments(at_args)
+        libfn = ants.utils.get_lib_fn("antsApplyTransforms")
+        libfn(processed_at)
+    
+    # Combine X, Y into single mapping
+    mapX = load_volume(src_mapX_trans).get_fdata()
+    mapY = load_volume(src_mapY_trans).get_fdata()
+    src_map = np.stack((mapX, mapY), axis=-1)
+    mapping = nibabel.Nifti1Image(src_map, target.affine, target.header)
+    save_volume(mapping_file, mapping)
+    
+    # Create inverse mapping (target → source coordinates)
+    trg_mapX_trans = os.path.join(output_dir, f"{file_name}_tmp_trgX_trans.nii.gz")
+    trg_mapY_trans = os.path.join(output_dir, f"{file_name}_tmp_trgY_trans.nii.gz")
+    
+    for coord_file, output_file in [(trg_mapX_file, trg_mapX_trans), 
+                                     (trg_mapY_file, trg_mapY_trans)]:
+        at_args = [
+            '--dimensionality', '2',
+            '--input-image-type', '0',
+            '--input', coord_file,
+            '--reference-image', source.get_filename(),
+            '--interpolation', 'Linear'
+        ]
+        
+        for idx, transform in enumerate(inverse):
+            invert = '1' if linear[idx] else '0'
+            at_args.extend(['--transform', f'[{transform},{invert}]'])
+        
+        at_args.extend(['--output', output_file])
+        
+        processed_at = ants.utils._int_antsProcessArguments(at_args)
+        libfn = ants.utils.get_lib_fn("antsApplyTransforms")
+        libfn(processed_at)
+    
+    # Combine X, Y into single inverse mapping
+    mapX = load_volume(trg_mapX_trans).get_fdata()
+    mapY = load_volume(trg_mapY_trans).get_fdata()
+    trg_map = np.stack((mapX, mapY), axis=-1)
+    inverse_mapping = nibabel.Nifti1Image(trg_map, source.affine, source.header)
+    save_volume(inverse_mapping_file, inverse_mapping)
+    
+    # Clean up temporary files
+    temp_files = [
+        src_mapX_file, src_mapY_file, trg_mapX_file, trg_mapY_file,
+        src_mapX_trans, src_mapY_trans, trg_mapX_trans, trg_mapY_trans
+    ]
+    
+    if ignore_affine or ignore_orient or ignore_res:
+        temp_files.extend([src_img_file, trg_img_file])
+    
+    for temp_file in temp_files:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+    
+    for transform in forward + inverse:
+        if os.path.exists(transform):
+            os.remove(transform)
+    
+    # Restore original headers if needed
+    if ignore_affine or ignore_orient or ignore_res:
+        mapping = load_volume(mapping_file)
+        save_volume(mapping_file, nibabel.Nifti1Image(mapping.get_fdata(), orig_trg_aff, orig_trg_hdr))
+        
+        inverse = load_volume(inverse_mapping_file)
+        save_volume(inverse_mapping_file, nibabel.Nifti1Image(inverse.get_fdata(), orig_src_aff, orig_src_hdr))
+        
+        trans = load_volume(transformed_source_file)
+        save_volume(transformed_source_file, nibabel.Nifti1Image(trans.get_fdata(), orig_trg_aff, orig_trg_hdr))
+    
+    print(f"Registration complete:")
+    print(f"  Transformed: {transformed_source_file}")
+    print(f"  Forward map: {mapping_file}")
+    print(f"  Inverse map: {inverse_mapping_file}")
+    
+    return {
+        'transformed_source': transformed_source_file,
+        'mapping': mapping_file,
+        'inverse': inverse_mapping_file
+    }
+
 def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=3, 
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 

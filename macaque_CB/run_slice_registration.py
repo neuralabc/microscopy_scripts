@@ -31,7 +31,7 @@ mask_zero = False #mask zeros for nighres registrations
 use_resolution_in_registration = True
 
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-rescale=40
+# rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
@@ -65,8 +65,8 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 all_image_fnames = list(_df['file_name'].values)
 
 ## for testing XXX
-# all_image_fnames = all_image_fnames[0:35] #for testing
-# missing_idxs_to_fill = [missing_idxs_to_fill[0]]
+all_image_fnames = all_image_fnames[0:35] #for testing
+missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')

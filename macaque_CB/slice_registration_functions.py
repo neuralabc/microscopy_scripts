@@ -1446,6 +1446,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                 
                 # Registration with both fixed and moving masks
                 if restrict_boundary_deformation:
+                    logging.warning('\tUsing boundary constraints for registration')
                     reg = ants.registration(
                         fixed=mean_template,
                         moving=img,
@@ -1473,7 +1474,9 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                 # Check deformation magnitude and decide whether to accept
                 fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
                 use_registration = True  # Default: accept registration
-                
+                logging.warning(tmp_dir)
+                return None
+
                 if os.path.exists(fwd_warp):
                     is_reasonable, stats = check_deformation_magnitude(
                         fwd_warp, 

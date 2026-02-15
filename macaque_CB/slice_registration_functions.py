@@ -354,7 +354,7 @@ def embedded_antspy_groupwise(
     syn_flow_sigma=15.0,
     syn_total_sigma=12.0,
     scaling_factor=64,
-    cost_function='Mattes',
+    cost_function='MutualInformation',
     interpolation='Linear',
     convergence=1e-6,
     ignore_affine=False,
@@ -364,7 +364,6 @@ def embedded_antspy_groupwise(
     overwrite=True,
     output_dir=None,
     file_name=None,
-    cost_function='MutualInformation'
 ):
     """
     Custom groupwise registration with exposed SyN smoothness parameters.

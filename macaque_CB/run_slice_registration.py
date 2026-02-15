@@ -31,7 +31,7 @@ mask_zero = False #mask zeros for nighres registrations
 use_resolution_in_registration = True
 
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=40
+rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
@@ -53,7 +53,7 @@ nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice int
 
 
 
-output_dir = f'/tmp/slice_reg_perSliceTemplate_image_weights_dwnsmple_parallel_v2_{rescale}_casc_v5_test_v4_full_med_mattes_slicesmth_nodep_newKernel_v3_fns/'
+output_dir = f'/tmp/{subject}_sliceReg_rescale_{rescale}/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with coreg of neighbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -65,8 +65,8 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 all_image_fnames = list(_df['file_name'].values)
 
 ## for testing XXX
-all_image_fnames = all_image_fnames[0:35] #for testing
-missing_idxs_to_fill = [missing_idxs_to_fill[0]]
+# all_image_fnames = all_image_fnames[0:35] #for testing
+# missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -847,23 +847,23 @@ max_displacement_pixels = 20  # Still 20 pixels
 # max_displacement_pixels = max_displacement_mm / 0.4  # = 20 pixels
 
 # Run groupwise optimization with boundary constraints
-# groupwise_stack_optimization_v2(
-#     output_dir=output_dir,
-#     subject=subject,
-#     all_image_fnames=all_image_fnames,
-#     reg_level_tag=input_source_file_tag + '_win12' + iter_tag,  # Your final tag
-#     iterations=5,
-#     zfill_num=zfill_num,
-#     restrict_boundary_deformation=True,  # Enable boundary protection
-#     boundary_mask_erosion=1,            # 1-pixel around the edge of the image
-#     mask_threshold_method='percentile',        # Auto-threshold for tissue
-#     mask_min_size=100,                   # Remove small noise regions
-#     flow_sigma=15,                       # High smoothness
-#     total_sigma=12,                      # Strong elastic constraint
-#     grad_step=0.025,                     # Conservative steps
-#     max_displacement=max_displacement_pixels,                 # Warn if displacements exceed 20 pixels
-#     save_masks=True                      # Save masks for inspection
-# )
+groupwise_stack_optimization_v2(
+    output_dir=output_dir,
+    subject=subject,
+    all_image_fnames=all_image_fnames,
+    reg_level_tag=input_source_file_tag + '_win12' + iter_tag,  # Your final tag
+    iterations=5,
+    zfill_num=zfill_num,
+    restrict_boundary_deformation=True,  # Enable boundary protection
+    boundary_mask_erosion=1,            # 1-pixel around the edge of the image
+    mask_threshold_method='percentile',        # Auto-threshold for tissue
+    mask_min_size=100,                   # Remove small noise regions
+    flow_sigma=15,                       # High smoothness
+    total_sigma=12,                      # Strong elastic constraint
+    grad_step=0.025,                     # Conservative steps
+    max_displacement=max_displacement_pixels,                 # Warn if displacements exceed 20 pixels
+    save_masks=True                      # Save masks for inspection
+)
 
 # Generate final stack from groupwise results
 logging.warning("Generating final stack from groupwise optimization...")

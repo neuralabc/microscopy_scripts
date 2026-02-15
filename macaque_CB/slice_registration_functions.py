@@ -1452,8 +1452,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                         moving=img,
                         mask=mean_mask,
                         moving_mask=masks[idx],
-                        type_of_transform='SyNOnly',
-                        initial_transform='identity', #this is set to ensure only syn (assume perfect overlay to start)
+                        type_of_transform='SyNOnly', #initial_transform='identity', #this is set to ensure only syn (assume perfect overlay to start)
                         flow_sigma=flow_sigma,
                         total_sigma=total_sigma,
                         grad_step=grad_step,
@@ -1464,8 +1463,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                     reg = ants.registration(
                         fixed=mean_template,
                         moving=img,
-                        type_of_transform='SyNOnly',
-                        initial_transform='identity', #this is set to ensure that only syn is run (assumes perfect overlay to start)
+                        type_of_transform='SyNOnly', #initial_transform='identity', #this is set to ensure that only syn is run (assumes perfect overlay to start)
                         flow_sigma=flow_sigma,
                         total_sigma=total_sigma,
                         grad_step=grad_step,

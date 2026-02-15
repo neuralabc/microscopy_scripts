@@ -1446,7 +1446,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                 
                 # Registration with both fixed and moving masks
                 if restrict_boundary_deformation:
-                    logging.warning('\tUsing boundary constraints for registration')
+                    # logging.warning('\tUsing boundary constraints for registration')
                     reg = ants.registration(
                         fixed=mean_template,
                         moving=img,

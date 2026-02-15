@@ -31,7 +31,7 @@ mask_zero = False #mask zeros for nighres registrations
 use_resolution_in_registration = True
 
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=40
+rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
@@ -65,8 +65,8 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 all_image_fnames = list(_df['file_name'].values)
 
 ## for testing XXX
-# all_image_fnames = all_image_fnames[0:35] #for testing
-# missing_idxs_to_fill = [missing_idxs_to_fill[0]]
+all_image_fnames = all_image_fnames[0:35] #for testing
+missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -607,195 +607,17 @@ if template_not_generated:
 final_rigsyn_reg_level_tag = template_tag
 
 
-## ADDED
-# At the end of step 3 (Rigid + Syn)
-final_rigsyn_template_tag = template_tag  # Save the final template tag from Rigid + Syn
-final_rigsyn_template = template          # Save the final template path from Rigid + Syn
-
-# At the start of step 4 (Syn only)
-print('4. Begin STAGE2 registration iterations - Syn only')
-logger.warning('4. Begin STAGE2 registration iterations - Syn only')
-
-run_rigid = False
-run_syn = True
-num_syn_reg_iterations = 5
-regularization = 'High'  # Increase regularization to decrease deformations on repeated Syn runs
-# mask_zero = False  # Restrict to non-zero voxels
-
 # Use the final template from Rigid + Syn as the input for Syn only
-input_source_file_tag = final_rigsyn_template_tag
-template = final_rigsyn_template
+input_source_file_tag = final_rigsyn_reg_level_tag
 
-for iter in range(num_syn_reg_iterations):
-    iter_tag = f"_syn_{iter}"
-    print(f'\t iteration tag: {iter_tag}')
-    logger.warning(f'\titeration {iter_tag}')
-
-    expected_stack_fname = f'{subject}_{input_source_file_tag}_win12{iter_tag}_stack.nii.gz'
-    logging.warning(f'====>Iteration: {iter_tag} {expected_stack_fname}')
-    if os.path.isfile(os.path.join(output_dir, expected_stack_fname)):
-        logging.warning('Stack exists, skipping the current STAGE2 iteration')
-        # Load the template that would have been generated
-        if per_slice_template:
-            # Build list of per-slice template filenames
-            template = []
-            for idx, img_name in enumerate(all_image_fnames):
-                img_name = os.path.basename(img_name).split('.')[0]
-                slice_template = output_dir + subject + '_' + str(idx).zfill(zfill_num) + '_' + img_name + f'_{input_source_file_tag}_win12{iter_tag}_template.nii.gz'
-                template.append(slice_template)
-            if use_nonlin_slice_templates:
-                template_nonlin = []
-                for idx, img_name in enumerate(all_image_fnames):
-                    img_name = os.path.basename(img_name).split('.')[0]
-                    slice_template = output_dir + subject + '_' + str(idx).zfill(zfill_num) + '_' + img_name + f'_{input_source_file_tag}_win12{iter_tag}_template_nonlin.nii.gz'
-                    template_nonlin.append(slice_template)
-                template = template_nonlin
-        else:
-            template = output_dir + subject + f'_{input_source_file_tag}_win12{iter_tag}_template.nii.gz'
-            if use_nonlin_slice_templates:
-                template_nonlin = output_dir + subject + f'_{input_source_file_tag}_win12{iter_tag}_template_nonlin.nii.gz'
-                template = template_nonlin
-        logging.warning(f'\t\tLoaded existing template(s)')
-    
-    else:
-        # Perform Syn-only registration using the template from the previous step
-        
-        ## OLD WAY
-        # slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
-        # slice_offset_list_reverse = [-3,-2,-1,1,2,3,4,5,6] #weighted forward, but also back
-        ##
-        
-        # --- Tune the window size across iterations (coarse → fine) ---
-        # custom schedule that starts with a larger window and then narrows down
-        # smoothing sigma is dependent on the size of the windows somewhat, moves down faster than the window size as well
-        max_major = 6   # dominant side, number of slices to include in the forward or backward direction, depending on the iteration
-        max_minor = 3   # weaker side
-        min_major = 2
-        min_minor = 1
-
-        t = iter / max(1, num_syn_reg_iterations - 1)
-
-        major_radius = int(round(max_major - t*(max_major - min_major)))
-        minor_radius = int(round(max_minor - t*(max_minor - min_minor)))
-
-        major_radius = max(major_radius, 1)
-        minor_radius = max(minor_radius, 1)
-
-        # forward pass (biased backward)
-        slice_offset_list_forward = (
-            list(range(-major_radius, 0)) +
-            list(range(1, minor_radius+1))
-        )
-
-        # reverse pass (biased forward)
-        slice_offset_list_reverse = (
-            list(range(-minor_radius, 0)) +
-            list(range(1, major_radius+1))
-        )
-
-        # --- Gaussian smoothing schedule (decreasing over iterations) ---
-
-        max_std = 4.0
-        min_std = 0.8
-        decay_rate = 2.5  # higher = faster early drop
-
-        gauss_std = min_std + (max_std - min_std) * np.exp(-decay_rate * t)
-
-        # Optional: tie σ gently to radius to prevent over-shrinking
-        gauss_std = max(min_std, min(gauss_std, 0.6 * major_radius + 0.8))
-
-        image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=gauss_std) #symmetric gaussian, so the same on both sides
-        image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=gauss_std)
-
-        run_parallel_coregistrations(
-            output_dir, subject, all_image_fnames, template, max_workers=max_workers,
-            target_slice_offset_list=slice_offset_list_forward,
-            zfill_num=zfill_num,
-            input_source_file_tag=input_source_file_tag,
-            reg_level_tag=f'{input_source_file_tag}_win1{iter_tag}',
-            image_weights=image_weights_win1,
-            run_syn=run_syn,
-            run_rigid=run_rigid,
-            scaling_factor=scaling_factor,
-            mask_zero=mask_zero,
-            regularization=regularization,
-            voxel_res=voxel_res,
-            use_resolution_in_registration=use_resolution_in_registration
-        )
-
-        run_parallel_coregistrations(
-            output_dir, subject, all_image_fnames, template, max_workers=max_workers,
-            target_slice_offset_list=slice_offset_list_reverse,
-            zfill_num=zfill_num,
-            input_source_file_tag=input_source_file_tag,
-            reg_level_tag=f'{input_source_file_tag}_win2{iter_tag}',
-            image_weights=image_weights_win2,
-            run_syn=run_syn,
-            run_rigid=run_rigid,
-            scaling_factor=scaling_factor,
-            mask_zero=mask_zero,
-            regularization=regularization,
-            voxel_res=voxel_res,
-            use_resolution_in_registration=use_resolution_in_registration
-        )
-
-        logging.warning('\t\tSelecting best registration by MI')
-
-        select_best_reg_by_MI_parallel(
-            output_dir, subject, all_image_fnames, template_tag=input_source_file_tag,
-            zfill_num=zfill_num,
-            reg_level_tag1=f'{input_source_file_tag}_win1{iter_tag}',
-            reg_level_tag2=f'{input_source_file_tag}_win2{iter_tag}',
-            reg_output_tag=f'{input_source_file_tag}_win12{iter_tag}',
-            per_slice_template=per_slice_template,
-            df_struct=MI_df_struct,
-            use_nonlin_slice_templates=use_nonlin_slice_templates,
-            max_workers=max_workers
-        )
-
-        if MI_df_struct is not None:
-            pd.DataFrame(MI_df_struct).to_csv(output_dir + subject + '_MI_values.csv', index=False)
-
-        logging.warning('\t\tGenerating new template')
-        if 'nonlin' in slice_template_type:
-            template, template_nonlin = generate_stack_and_template(
-                output_dir, subject, all_image_fnames,
-                zfill_num=zfill_num,
-                reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}',
-                per_slice_template=per_slice_template,
-                missing_idxs_to_fill=missing_idxs_to_fill,
-                slice_template_type=slice_template_type,
-                scaling_factor=scaling_factor,
-                nonlin_interp_max_workers=nonlin_interp_max_workers,
-                voxel_res=voxel_res
-            )
-        else:
-            template = generate_stack_and_template(
-                output_dir, subject, all_image_fnames,
-                zfill_num=zfill_num,
-                reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}',
-                per_slice_template=per_slice_template,
-                missing_idxs_to_fill=missing_idxs_to_fill,
-                slice_template_type=slice_template_type,
-                scaling_factor=scaling_factor,
-                nonlin_interp_max_workers=nonlin_interp_max_workers,
-                voxel_res=voxel_res
-            )
-
-        if use_nonlin_slice_templates:
-            template = template_nonlin
-
-        logging.warning(input_source_file_tag)
-
-
-# After final SyN iterations
+# After final Rigid + Syn iterations
 logging.warning("=" * 80)
 logging.warning("STARTING GROUPWISE OPTIMIZATION - This will reduce wave artifacts")
 logging.warning("=" * 80)
 
 groupwise_stack_optimization(
     output_dir, subject, all_image_fnames,
-    reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}',
+    reg_level_tag=f'{input_source_file_tag}',
     iterations=5,
     scaling_factor=scaling_factor,
     voxel_res=voxel_res
@@ -806,7 +628,7 @@ if 'nonlin' in slice_template_type:
     template, template_nonlin = generate_stack_and_template(
         output_dir, subject, all_image_fnames,
         zfill_num=zfill_num,
-        reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}'+ '_groupwise',
+        reg_level_tag=f'{input_source_file_tag}'+ '_groupwise',
         per_slice_template=per_slice_template,
         missing_idxs_to_fill=missing_idxs_to_fill,
         slice_template_type=slice_template_type,
@@ -818,7 +640,7 @@ else:
     template = generate_stack_and_template(
         output_dir, subject, all_image_fnames,
         zfill_num=zfill_num,
-        reg_level_tag=f'{input_source_file_tag}_win12{iter_tag}'+ '_groupwise',
+        reg_level_tag=f'{input_source_file_tag}'+ '_groupwise',
         per_slice_template=per_slice_template,
         missing_idxs_to_fill=missing_idxs_to_fill,
         slice_template_type=slice_template_type,
@@ -882,4 +704,4 @@ logging.warning("=" * 80)
 logging.warning("PIPELINE COMPLETE")
 logging.warning(f"Final output: {template}")
 logging.warning("=" * 80)
-''''''
+'''

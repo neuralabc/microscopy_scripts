@@ -1474,17 +1474,32 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                 # Check deformation magnitude and decide whether to accept, pull the warp file from the reg output
                 # fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
                 # fwd_warp = glob.glob(os.path.join(tmp_dir, "*reg?Warp*"))
-                if reg['fwdtransforms']:
-                    fwd_warp = reg['fwdtransforms'][-1]  # Last one is the warp
-                    logging.debug(f"Forward warp: {fwd_warp}")
-                else:
-                    fwd_warp = None
+                
+                # Get warp files from registration output (filter out affine .mat files)
+                fwd_warp = None
+                inv_warp = None
 
-                if reg['invtransforms']:
-                    inv_warp = reg['invtransforms'][0]  # First inverse is the warp
-                    logging.debug(f"Inverse warp: {inv_warp}")
-                else:
-                    inv_warp = None
+                if 'fwdtransforms' in reg and reg['fwdtransforms']:
+                    # Find the warp file (not .mat files)
+                    for tf in reversed(reg['fwdtransforms']):  # Start from end
+                        if tf.endswith('.nii.gz') or tf.endswith('.nii'):
+                            fwd_warp = tf
+                            logging.debug(f"Forward warp: {os.path.basename(fwd_warp)}")
+                            break
+                    
+                    if not fwd_warp:
+                        logging.warning(f"No .nii.gz warp found in fwdtransforms: {reg['fwdtransforms']}")
+
+                if 'invtransforms' in reg and reg['invtransforms']:
+                    # Find the inverse warp file (not .mat files)
+                    for tf in reg['invtransforms']:  # Start from beginning for inverse
+                        if tf.endswith('.nii.gz') or tf.endswith('.nii'):
+                            inv_warp = tf
+                            logging.debug(f"Inverse warp: {os.path.basename(inv_warp)}")
+                            break
+                    
+                    if not inv_warp:
+                        logging.warning(f"No .nii.gz warp found in invtransforms: {reg['invtransforms']}")
                 
                 use_registration = True  # Default: accept registration
                 

@@ -1711,7 +1711,7 @@ def check_deformation_magnitude(warp_file, max_displacement=20, percentile_check
     
     return is_reasonable, stats
 
-def generate_tissue_mask(image, threshold_method='otsu', min_size=100, erosion_pixels=10):
+def generate_tissue_mask(image, threshold_method='percentile', min_size=100, erosion_pixels=1):
     """
     Generate a binary mask from tissue image, with boundary erosion.
     

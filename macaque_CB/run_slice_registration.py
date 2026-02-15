@@ -855,8 +855,8 @@ groupwise_stack_optimization_v2(
     iterations=5,
     zfill_num=zfill_num,
     restrict_boundary_deformation=True,  # Enable boundary protection
-    boundary_mask_erosion=15,            # 15-pixel safety zone from edges
-    mask_threshold_method='otsu',        # Auto-threshold for tissue
+    boundary_mask_erosion=1,            # 1-pixel around the edge of the image
+    mask_threshold_method='percentile',        # Auto-threshold for tissue
     mask_min_size=100,                   # Remove small noise regions
     flow_sigma=15,                       # High smoothness
     total_sigma=12,                      # Strong elastic constraint

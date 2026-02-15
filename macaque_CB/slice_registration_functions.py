@@ -1453,6 +1453,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                         mask=mean_mask,
                         moving_mask=masks[idx],
                         type_of_transform='SyNOnly',
+                        initial_transform='identity', #this is set to ensure only syn (assume perfect overlay to start)
                         flow_sigma=flow_sigma,
                         total_sigma=total_sigma,
                         grad_step=grad_step,
@@ -1464,6 +1465,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                         fixed=mean_template,
                         moving=img,
                         type_of_transform='SyNOnly',
+                        initial_transform='identity', #this is set to ensure that only syn is run (assumes perfect overlay to start)
                         flow_sigma=flow_sigma,
                         total_sigma=total_sigma,
                         grad_step=grad_step,
@@ -1472,8 +1474,6 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                     )
                 
                 # Check deformation magnitude and decide whether to accept, pull the warp file from the reg output
-                # fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
-                # fwd_warp = glob.glob(os.path.join(tmp_dir, "*reg?Warp*"))
                 
                 # Get warp files from registration output (filter out affine .mat files)
                 fwd_warp = None
@@ -1601,25 +1601,26 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
         masks = warped_masks
         deformation_stats.extend(iter_deform_stats)
         
-        # Log iteration summary
-        if iter_deform_stats:
-            mean_disp = np.mean([s['mean_pixels'] for s in iter_deform_stats])
-            max_disp = np.max([s['max_pixels'] for s in iter_deform_stats])
-            n_reverted = sum([s.get('reverted', False) for s in iter_deform_stats])
-            logging.warning(
-                f"Iteration {iteration+1} complete: "
-                f"mean displacement={mean_disp:.2f}, max={max_disp:.2f} pixels"
-            )
-            if n_reverted > 0:
-                logging.warning(f"  {n_reverted} slice(s) reverted due to excessive deformation")
+        #XXX UNCOMMENT IF YOU GET THIS TO WORK
+    #     # Log iteration summary
+    #     if iter_deform_stats:
+    #         mean_disp = np.mean([s['mean_pixels'] for s in iter_deform_stats])
+    #         max_disp = np.max([s['max_pixels'] for s in iter_deform_stats])
+    #         n_reverted = sum([s.get('reverted', False) for s in iter_deform_stats])
+    #         logging.warning(
+    #             f"Iteration {iteration+1} complete: "
+    #             f"mean displacement={mean_disp:.2f}, max={max_disp:.2f} pixels"
+    #         )
+    #         if n_reverted > 0:
+    #             logging.warning(f"  {n_reverted} slice(s) reverted due to excessive deformation")
     
-    # Save deformation statistics
-    if deformation_stats:
-        import pandas as pd
-        df_stats = pd.DataFrame(deformation_stats)
-        stats_path = f"{output_dir}{subject}_{reg_level_tag}_groupwise_deformation_stats.csv"
-        df_stats.to_csv(stats_path, index=False)
-        logging.info(f"Saved deformation statistics to: {stats_path}")
+    # # Save deformation statistics
+    # if deformation_stats:
+    #     import pandas as pd
+    #     df_stats = pd.DataFrame(deformation_stats)
+    #     stats_path = f"{output_dir}{subject}_{reg_level_tag}_groupwise_deformation_stats.csv"
+    #     df_stats.to_csv(stats_path, index=False)
+    #     logging.info(f"Saved deformation statistics to: {stats_path}")
     
     logging.warning("=" * 80)
     logging.warning("Groupwise optimization complete")

@@ -626,7 +626,8 @@ logging.warning("=" * 80)
 
 groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
                                 reg_level_tag=f'{input_source_file_tag}', iterations=5, zfill_num=4,
-                                scaling_factor=scaling_factor, use_resolution_in_registration=use_resolution_in_registration)
+                                scaling_factor=scaling_factor, 
+                                use_resolution_in_registration=use_resolution_in_registration,max_workers=max_workers)
 
 logging.warning('\t\tGenerating new template')
 if 'nonlin' in slice_template_type:

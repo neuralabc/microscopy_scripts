@@ -1976,7 +1976,7 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
             syn_flow_sigma=10,
             syn_total_sigma=8,
             scaling_factor=scaling_factor,
-            cost_function='MutualInformation',
+            cost_function='CrossCorrelation',
             interpolation='Linear',
             convergence=1e-6,
             ignore_affine=ignore_affine,

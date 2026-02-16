@@ -470,7 +470,6 @@ def embedded_antspy_groupwise(
             }
     
     # Load images
-    logging.warning(source_images[0])
     source = load_volume(source_images[0])
     target = load_volume(target_images[0])
     

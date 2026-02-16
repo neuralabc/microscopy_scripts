@@ -1825,10 +1825,12 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
 
     # Load all registered slices
     images = []
+    images_fnames = []
     for idx, img_fname in enumerate(all_image_fnames):
         img_name = os.path.basename(img_fname).split('.')[0]
         img_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_ants-def0.nii.gz"
         images.append(ants.image_read(img_path))
+        images_fnames.append(img_path)
     
     # Iteratively refine to mean template
     for iteration in range(iterations):
@@ -1843,8 +1845,8 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         
         # Register each slice to mean with VERY smooth constraints
         registered_images = []
-        for idx, img in enumerate(images):
-            img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
+        for idx, img_name in enumerate(images_fnames):
+            # img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
             
             logging.info(f"  Processing slice: {idx}/{len(images)}")
             logging.warning(f'             Image: {img_name}') #turn back to info XXX: TODO

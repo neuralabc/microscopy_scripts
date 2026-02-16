@@ -1847,7 +1847,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
             img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
             
             logging.info(f"  Processing slice: {idx}/{len(images)}")
-            logging.info(f'             Image: {img_name}')
+            logging.warning(f'             Image: {img_name}') #turn back to info XXX: TODO
             # Create temporary directory for this registration
             with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_iter{iteration}_") as tmp_dir:
                 output_prefix = os.path.join(tmp_dir, "reg")

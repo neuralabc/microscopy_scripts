@@ -1879,7 +1879,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                     output_dir,
                     scaling_factor,
                     ignore_affine,
-                    True,
+                    ignore_res,
                     output_filename  # Pass the filename
                 )
                 futures[future] = idx
@@ -1948,7 +1948,7 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
             coarse_iterations=100,
             medium_iterations=50,
             fine_iterations=25,
-            syn_gradient_step=0.05,
+            syn_gradient_step=0.1,
             syn_flow_sigma=10,
             syn_total_sigma=8,
             scaling_factor=scaling_factor,

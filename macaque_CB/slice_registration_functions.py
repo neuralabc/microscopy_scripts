@@ -1939,54 +1939,54 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
         logging.info(f"  Processing slice: {idx}")
         logging.info(f'             Image: {full_img_name}')
         
-        # reg = nighres.registration.embedded_antspy_2d_multi(
-        #     source_images=[full_img_name],
-        #     target_images=[template_fname],
-        #     run_rigid=True,
-        #     rigid_iterations=5000,
-        #     run_affine=False,
-        #     run_syn=True,
-        #     coarse_iterations=100,
-        #     medium_iterations=50, 
-        #     fine_iterations=25,
-        #     scaling_factor=scaling_factor,
-        #     cost_function='MutualInformation', #MutualInformation
-        #     interpolation='Linear',
-        #     regularization='High',
-        #     convergence=1e-6,
-        #     ignore_affine=ignore_affine,
-        #     ignore_orient=True, 
-        #     ignore_res=ignore_res,
-        #     save_data=True, 
-        #     overwrite=True,
-        #     output_dir=output_dir,
-        #     file_name=output_filename
-        # )
-        
-        reg = embedded_antspy_groupwise(
+        reg = nighres.registration.embedded_antspy_2d_multi(
             source_images=[full_img_name],
             target_images=[template_fname],
-            run_rigid=False,
-            run_affine=False,  # Should be False for groupwise
+            run_rigid=True,
+            rigid_iterations=5000,
+            run_affine=False,
             run_syn=True,
-            coarse_iterations=100,
-            medium_iterations=50,
-            fine_iterations=25,
-            syn_gradient_step=0.2,
-            syn_flow_sigma=10,
-            syn_total_sigma=8,
+            coarse_iterations=200,
+            medium_iterations=100, 
+            fine_iterations=10,
             scaling_factor=scaling_factor,
-            cost_function='CrossCorrelation',
+            cost_function='MutualInformation', #MutualInformation
             interpolation='Linear',
+            regularization='High',
             convergence=1e-6,
             ignore_affine=ignore_affine,
-            ignore_orient=True,
-            ignore_res=ignore_res,  # FORCE voxel space for deformation maps
-            save_data=True,
+            ignore_orient=True, 
+            ignore_res=ignore_res,
+            save_data=True, 
             overwrite=True,
             output_dir=output_dir,
             file_name=output_filename
         )
+        
+        # reg = embedded_antspy_groupwise(
+        #     source_images=[full_img_name],
+        #     target_images=[template_fname],
+        #     run_rigid=False,
+        #     run_affine=False,  # Should be False for groupwise
+        #     run_syn=True,
+        #     coarse_iterations=100,
+        #     medium_iterations=50,
+        #     fine_iterations=25,
+        #     syn_gradient_step=0.2,
+        #     syn_flow_sigma=10,
+        #     syn_total_sigma=8,
+        #     scaling_factor=scaling_factor,
+        #     cost_function='MutualInformation',
+        #     interpolation='Linear',
+        #     convergence=1e-6,
+        #     ignore_affine=ignore_affine,
+        #     ignore_orient=True,
+        #     ignore_res=ignore_res,  # FORCE voxel space for deformation maps
+        #     save_data=True,
+        #     overwrite=True,
+        #     output_dir=output_dir,
+        #     file_name=output_filename
+        # )
         
         return {
             'idx': idx,

@@ -1850,7 +1850,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
 
         # Register each slice to mean with VERY smooth constraints
         registered_images = []
-        for idx, img_name in enumerate(images_fnames):
+        for idx, full_img_name in enumerate(images_fnames):
             # img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
             
             logging.info(f"  Processing slice: {idx}/{len(images)}")
@@ -1873,10 +1873,12 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                 # )
                 
     # Call custom groupwise registration
-                output_filename = f"{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_iter{iteration}"
+                img_name = os.path.basename(full_img_name).split('.')[0]
+                output_filename = f"{img_name}_groupwise_iter{iteration}"
+                logging.warning(output_filename)
     
                 reg = embedded_antspy_groupwise(
-                    source_images=[img_name],
+                    source_images=[full_img_name],
                     target_images=[template_fname],
                     run_rigid=False,
                     run_affine=True,

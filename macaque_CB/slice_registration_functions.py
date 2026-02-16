@@ -1867,6 +1867,9 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                 
                 output_filename = f"{img_name}_groupwise_iter{iteration}"
                 
+                # run_groupwise_registration_single(idx, full_img_name, template_fname, iteration, 
+                #                      output_dir, scaling_factor, ignore_affine, ignore_res,
+                #                      output_filename):
                 future = executor.submit(
                     run_groupwise_registration_single,  # Use wrapper function
                     idx,
@@ -1876,7 +1879,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                     output_dir,
                     scaling_factor,
                     ignore_affine,
-                    ignore_res,
+                    True,
                     output_filename  # Pass the filename
                 )
                 futures[future] = idx
@@ -1904,7 +1907,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         new_images_fnames = []
         
         for result in results:
-            reg_img = ants.image_read(result['reg']['transformed_source'])
+            reg_img = nib.load(result['reg']['transformed_source'])
             registered_images.append(reg_img)
             new_images_fnames.append(result['reg']['transformed_source'])
         

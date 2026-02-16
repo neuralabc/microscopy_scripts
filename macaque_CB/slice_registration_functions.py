@@ -1957,32 +1957,33 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
                 # shutil.copytree(tmp_dir, f'/tmp/XXX_cjs_test/slice_{idx}_iter{iteration}', dirs_exist_ok=True)
                 # return None
 
-                if os.path.exists(fwd_warp):
-                    is_reasonable, stats = check_deformation_magnitude(
-                        fwd_warp, 
-                        max_displacement=max_displacement,
-                        reference_image=img
-                    )
+                ## XXX commented out all of the checking of deformations since it does not work correctly
+                # if os.path.exists(fwd_warp):
+                #     is_reasonable, stats = check_deformation_magnitude(
+                #         fwd_warp, 
+                #         max_displacement=max_displacement,
+                #         reference_image=img
+                #     )
                     
-                    # Record stats
-                    iter_deform_stats.append({
-                        'slice': idx,
-                        'iteration': iteration,
-                        'reverted': False,
-                        **stats
-                    })
+                #     # Record stats
+                #     iter_deform_stats.append({
+                #         'slice': idx,
+                #         'iteration': iteration,
+                #         'reverted': False,
+                #         **stats
+                #     })
                     
-                    # Decide whether to use this registration
-                    if not is_reasonable:
-                        logging.warning(
-                            f"⚠ Excessive deformation for slice {idx} (iteration {iteration+1}). "
-                            f"Reverting to previous version."
-                        )
-                        use_registration = False
-                        iter_deform_stats[-1]['reverted'] = True
-                else:
-                    logging.warning(f"No warp file found for slice {idx}, keeping previous version")
-                    use_registration = False
+                #     # Decide whether to use this registration
+                #     if not is_reasonable:
+                #         logging.warning(
+                #             f"⚠ Excessive deformation for slice {idx} (iteration {iteration+1}). "
+                #             f"Reverting to previous version."
+                #         )
+                #         use_registration = False
+                #         iter_deform_stats[-1]['reverted'] = True
+                # else:
+                #     logging.warning(f"No warp file found for slice {idx}, keeping previous version")
+                #     use_registration = False
                 
                 # Append image based on decision
                 if use_registration:
@@ -2048,7 +2049,7 @@ def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames,
         # Update images AND masks for next iteration
         images = registered_images
         masks = warped_masks
-        deformation_stats.extend(iter_deform_stats)
+        # deformation_stats.extend(iter_deform_stats)
         
         #XXX UNCOMMENT IF YOU GET THIS TO WORK
     #     # Log iteration summary

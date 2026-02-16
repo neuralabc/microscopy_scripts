@@ -609,7 +609,7 @@ final_rigsyn_reg_level_tag = template_tag
 
 # Use the final template from Rigid + Syn as the input for Syn only
 input_source_file_tag = final_rigsyn_reg_level_tag
-
+'''
 # After final Rigid + Syn iterations
 logging.warning("=" * 80)
 logging.warning("STARTING GROUPWISE OPTIMIZATION - This will reduce wave artifacts")
@@ -652,9 +652,9 @@ else:
 logging.warning(f"Output directory: {output_dir}")
 
 # At the end of your registration pipeline, after final SyN iterations:
-
-
 '''
+
+
 logging.warning("=" * 80)
 logging.warning("STARTING GROUPWISE OPTIMIZATION WITH BOUNDARY CONSTRAINTS")
 logging.warning("=" * 80)
@@ -672,16 +672,16 @@ groupwise_stack_optimization_v2(
     output_dir=output_dir,
     subject=subject,
     all_image_fnames=all_image_fnames,
-    reg_level_tag=input_source_file_tag + '_win12' + iter_tag,  # Your final tag
+    reg_level_tag=f'{input_source_file_tag}'+ '_groupwise_v2',
     iterations=5,
     zfill_num=zfill_num,
     restrict_boundary_deformation=True,  # Enable boundary protection
     boundary_mask_erosion=1,            # 1-pixel around the edge of the image
     mask_threshold_method='percentile',        # Auto-threshold for tissue
     mask_min_size=100,                   # Remove small noise regions
-    flow_sigma=15,                       # High smoothness
-    total_sigma=12,                      # Strong elastic constraint
-    grad_step=0.025,                     # Conservative steps
+    flow_sigma=10,                       # High smoothness
+    total_sigma=8,                      # Strong elastic constraint
+    grad_step=0.05,                     # Conservative steps
     max_displacement=max_displacement_pixels,                 # Warn if displacements exceed 20 pixels
     save_masks=True                      # Save masks for inspection
 )
@@ -691,7 +691,7 @@ logging.warning("Generating final stack from groupwise optimization...")
 template = generate_stack_and_template(
     output_dir, subject, all_image_fnames,
     zfill_num=zfill_num,
-    reg_level_tag=input_source_file_tag + '_win12' + iter_tag + '_groupwise',
+    reg_level_tag=f'{input_source_file_tag}'+ '_groupwise_v2',
     per_slice_template=False,
     across_slice_smoothing_sigma=2,  # Light smoothing now acceptable
     voxel_res=voxel_res,
@@ -704,4 +704,3 @@ logging.warning("=" * 80)
 logging.warning("PIPELINE COMPLETE")
 logging.warning(f"Final output: {template}")
 logging.warning("=" * 80)
-'''

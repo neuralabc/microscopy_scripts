@@ -1807,7 +1807,6 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
     Jointly optimize all slices together to enforce smooth transitions.
     Converts ANTs warps to nighres-compatible deformation maps.
     """
-    import ants
     import nibabel as nib
     from concurrent.futures import ProcessPoolExecutor, as_completed
     import numpy as np
@@ -1831,7 +1830,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
     for idx, img_fname in enumerate(all_image_fnames):
         img_name = os.path.basename(img_fname).split('.')[0]
         img_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_ants-def0.nii.gz"
-        images.append(ants.image_read(img_path))
+        images.append(nib.load(img_path))
         images_fnames.append(img_path)
     
     # Iteratively refine to mean template
@@ -1839,16 +1838,16 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         logging.warning(f"Groupwise iteration {iteration+1}/{iterations}")
         
         # Compute current mean template from CURRENT images
-        mean_data = np.mean([img.numpy() for img in images], axis=0)
-        mean_template = images[0].clone()
-        mean_template = mean_template.new_image_like(mean_data)
+        mean_data = np.mean([img.get_fdata() for img in images], axis=0)
+        mean_template = nib.Nifti1Image(mean_data, affine=images[0].affine, header=images[0].header)
+        
         # mean_template.set_spacing(images[0].spacing)
         # mean_template.set_origin(images[0].origin)
         # mean_template.set_direction(images[0].direction)
         
         # Save template to disk for parallel workers
         template_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_template.nii.gz")
-        ants.image_write(mean_template, template_fname)
+        mean_template.to_filename(template_fname)
         
         logging.warning(f"Registering {len(images_fnames)} slices to mean template in parallel...")
         

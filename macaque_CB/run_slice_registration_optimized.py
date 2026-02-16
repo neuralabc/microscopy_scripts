@@ -672,7 +672,7 @@ groupwise_stack_optimization_v2(
     output_dir=output_dir,
     subject=subject,
     all_image_fnames=all_image_fnames,
-    reg_level_tag=input_source_file_tag + iter_tag,  # Your final tag
+    reg_level_tag=input_source_file_tag,  # Your final tag
     iterations=5,
     zfill_num=zfill_num,
     restrict_boundary_deformation=True,  # Enable boundary protection
@@ -691,7 +691,7 @@ logging.warning("Generating final stack from groupwise optimization...")
 template = generate_stack_and_template(
     output_dir, subject, all_image_fnames,
     zfill_num=zfill_num,
-    reg_level_tag=input_source_file_tag + iter_tag + '_groupwise',  # Your final tag
+    reg_level_tag=input_source_file_tag + '_groupwise',  # Your final tag
     per_slice_template=False,
     across_slice_smoothing_sigma=2,  # Light smoothing now acceptable
     voxel_res=voxel_res,

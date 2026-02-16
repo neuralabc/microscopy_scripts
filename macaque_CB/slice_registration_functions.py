@@ -1972,7 +1972,7 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
             coarse_iterations=100,
             medium_iterations=50,
             fine_iterations=25,
-            syn_gradient_step=0.1,
+            syn_gradient_step=0.2,
             syn_flow_sigma=10,
             syn_total_sigma=8,
             scaling_factor=scaling_factor,

@@ -623,7 +623,7 @@ logging.warning("=" * 80)
 #     scaling_factor=scaling_factor,
 #     voxel_res=voxel_res
 # )
-
+logging.warning(f'scaling factor: {scaling_factor}')
 groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
                                 reg_level_tag=f'{input_source_file_tag}', iterations=5, zfill_num=4,
                                 scaling_factor=scaling_factor, 

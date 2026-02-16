@@ -471,7 +471,6 @@ def embedded_antspy_groupwise(
     
     # Load images
     source = load_volume(source_images[0])
-    logging.warning(target_images[0])
     target = load_volume(target_images[0])
     
     src_affine = source.affine
@@ -1854,7 +1853,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
             # img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
             
             logging.info(f"  Processing slice: {idx}/{len(images)}")
-            logging.warning(f'             Image: {img_name}') #turn back to info XXX: TODO
+            logging.info(f'             Image: {img_name}') #turn back to info XXX: TODO
             # Create temporary directory for this registration
             with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_iter{iteration}_") as tmp_dir:
                 output_prefix = os.path.join(tmp_dir, "reg")
@@ -1875,7 +1874,6 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
     # Call custom groupwise registration
                 img_name = os.path.basename(full_img_name).split('.')[0]
                 output_filename = f"{img_name}_groupwise_iter{iteration}"
-                logging.warning(output_filename)
     
                 reg = embedded_antspy_groupwise(
                     source_images=[full_img_name],

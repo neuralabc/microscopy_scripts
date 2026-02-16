@@ -1799,6 +1799,7 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
     logging.warning("=" * 80)
     
     return images
+
 def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
                                 reg_level_tag, iterations=5, zfill_num=4,
                                 scaling_factor=64, use_resolution_in_registration=True, max_workers=1):
@@ -1839,10 +1840,11 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         
         # Compute current mean template from CURRENT images
         mean_data = np.mean([img.numpy() for img in images], axis=0)
-        mean_template = ants.from_numpy(mean_data)
-        mean_template.set_spacing(images[0].spacing)
-        mean_template.set_origin(images[0].origin)
-        mean_template.set_direction(images[0].direction)
+        mean_template = images[0].clone()
+        mean_template = mean_template.new_image_like(mean_data)
+        # mean_template.set_spacing(images[0].spacing)
+        # mean_template.set_origin(images[0].origin)
+        # mean_template.set_direction(images[0].direction)
         
         # Save template to disk for parallel workers
         template_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_template.nii.gz")
@@ -1887,10 +1889,10 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                 results[idx] = result
                 
                 if result['success']:
-                    logging.info(f"✓ Slice {idx} registered")
-                    logging.warning('Slice {idx} registration successful')
+                    # logging.info(f"✓ Slice {idx} registered")
+                    logging.warning(f'Slice {idx} registration successful')
                 else:
-                    logging.error(f"✗ Slice {idx} failed: {result['error']}")
+                    logging.warning(f"Slice {idx} failed: {result['error']}")
         
         # Check for failures
         failed = [r['idx'] for r in results if not r['success']]

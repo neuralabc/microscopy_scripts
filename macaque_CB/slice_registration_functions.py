@@ -1843,8 +1843,11 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         mean_template.set_spacing(images[0].spacing)
         mean_template.set_origin(images[0].origin)
         mean_template.set_direction(images[0].direction)
-        mean_template = mean_template.to_nibabel() 
-        
+        nib_template = nib.Nifti1Image(mean_template.numpy(),affine=mean_template.numpy_to_nifti_affine(),header=None)  # header should be auto-generated
+
+        # ants.image_write(mean_template, final_output_def)
+        # mean_template = mean_template.to_nibabel() 
+
         # Register each slice to mean with VERY smooth constraints
         registered_images = []
         for idx, img_name in enumerate(images_fnames):
@@ -1874,7 +1877,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
     
                 reg = embedded_antspy_groupwise(
                     source_images=[img_name],
-                    target_images=[mean_template],
+                    target_images=[nib_template],
                     run_rigid=False,
                     run_affine=True,
                     run_syn=True,

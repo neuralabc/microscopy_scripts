@@ -623,37 +623,42 @@ logging.warning("=" * 80)
 #     scaling_factor=scaling_factor,
 #     voxel_res=voxel_res
 # )
+groupwise_iterations = 10
 logging.warning(f'scaling factor: {scaling_factor}')
-groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
-                                reg_level_tag=f'{input_source_file_tag}', iterations=5, zfill_num=4,
+groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fnames, 
+                                reg_level_tag=f'{input_source_file_tag}',
+                                iterations=groupwise_iterations,
+                                zfill_num=4,
                                 scaling_factor=scaling_factor, 
-                                use_resolution_in_registration=use_resolution_in_registration,max_workers=max_workers)
+                                use_resolution_in_registration=use_resolution_in_registration,
+                                max_workers=max_workers)
 
 logging.warning('\t\tGenerating new template')
-if 'nonlin' in slice_template_type:
-    template, template_nonlin = generate_stack_and_template(
-        output_dir, subject, all_image_fnames,
-        zfill_num=zfill_num,
-        reg_level_tag=f'{input_source_file_tag}'+ '_groupwise',
-        per_slice_template=per_slice_template,
-        missing_idxs_to_fill=missing_idxs_to_fill,
-        slice_template_type=slice_template_type,
-        scaling_factor=scaling_factor,
-        nonlin_interp_max_workers=nonlin_interp_max_workers,
-        voxel_res=voxel_res
-    )
-else:
-    template = generate_stack_and_template(
-        output_dir, subject, all_image_fnames,
-        zfill_num=zfill_num,
-        reg_level_tag=f'{input_source_file_tag}'+ '_groupwise',
-        per_slice_template=per_slice_template,
-        missing_idxs_to_fill=missing_idxs_to_fill,
-        slice_template_type=slice_template_type,
-        scaling_factor=scaling_factor,
-        nonlin_interp_max_workers=nonlin_interp_max_workers,
-        voxel_res=voxel_res
-    )
+for iter in range(groupwise_iterations):
+    if 'nonlin' in slice_template_type:
+        template, template_nonlin = generate_stack_and_template(
+            output_dir, subject, all_image_fnames,
+            zfill_num=zfill_num,
+            reg_level_tag=f'{input_source_file_tag}'+ f'_groupwise_iter{iter}',
+            per_slice_template=False, #we do not need output templates
+            missing_idxs_to_fill=missing_idxs_to_fill,
+            slice_template_type=slice_template_type,
+            scaling_factor=scaling_factor,
+            nonlin_interp_max_workers=nonlin_interp_max_workers,
+            voxel_res=voxel_res
+        )
+    else:
+        template = generate_stack_and_template(
+            output_dir, subject, all_image_fnames,
+            zfill_num=zfill_num,
+            reg_level_tag=f'{input_source_file_tag}'+ f'_groupwise_iter{iter}',
+            per_slice_template=False, #we do not need output templates
+            missing_idxs_to_fill=missing_idxs_to_fill,
+            slice_template_type=slice_template_type,
+            scaling_factor=scaling_factor,
+            nonlin_interp_max_workers=nonlin_interp_max_workers,
+            voxel_res=voxel_res
+        )
 
 logging.warning(f"Output directory: {output_dir}")
 

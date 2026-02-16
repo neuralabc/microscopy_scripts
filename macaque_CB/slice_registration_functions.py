@@ -18,8 +18,7 @@ from skimage.exposure import match_histograms
 import math
 from nighres.io import load_volume, save_volume
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
-import tempfile
+from embedded_antspy_smthMod import embedded_antspy_2d_multi
 
 # code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
 ## Potential list of todo's
@@ -1633,7 +1632,9 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
             img_data = nighres.io.load_volume(img_fname).get_fdata()
             post_slices.append(img_data)
         post_slices = numpy.stack(post_slices, axis=-1)
-            
+
+        missing_slices_interpolated = (pre_slices + post_slices) / 2
+
     elif method == 'intermediate_nonlin_mean':
         futures = []
         the_idxs = []
@@ -1807,6 +1808,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
     Jointly optimize all slices together to enforce smooth transitions.
     Converts ANTs warps to nighres-compatible deformation maps.
     """
+    import copy
     import nibabel as nib
     from concurrent.futures import ProcessPoolExecutor, as_completed
     import numpy as np
@@ -1833,17 +1835,14 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         images.append(nib.load(img_path))
         images_fnames.append(img_path)
     
+    orig_images_fnames = copy.deepcopy(images_fnames)
     # Iteratively refine to mean template
-    for iteration in range(iterations):
+    for iteration in range(iterations): 
         logging.warning(f"Groupwise iteration {iteration+1}/{iterations}")
         
         # Compute current mean template from CURRENT images
         mean_data = np.mean([img.get_fdata() for img in images], axis=0)
         mean_template = nib.Nifti1Image(mean_data, affine=images[0].affine, header=images[0].header)
-        
-        # mean_template.set_spacing(images[0].spacing)
-        # mean_template.set_origin(images[0].origin)
-        # mean_template.set_direction(images[0].direction)
         
         # Save template to disk for parallel workers
         template_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_template.nii.gz")
@@ -1857,19 +1856,17 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {}
             
-            # Submit all groupwise registrations in parallel
-            for idx, full_img_name in enumerate(images_fnames):
+            # Submit all groupwise registrations in parallel,
+            for idx, full_img_name in enumerate(orig_images_fnames):
                 # Extract img_name for THIS slice
                 img_name = os.path.basename(full_img_name).split('.')[0]
                 # Remove any previous suffixes to avoid super long names
-                for suffix in ['_ants-def0', '_groupwise_iter0', '_groupwise_iter1', '_groupwise_iter2', '_groupwise_iter3', '_groupwise_iter4']:
+                # XXX TODO: this is a bit hacky, can we do this more robustly? XXX
+                for suffix in ['_ants-def0', '_groupwise_iter0', '_groupwise_iter1', '_groupwise_iter2', '_groupwise_iter3', '_groupwise_iter4', '_groupwise_iter5', '_groupwise_iter6', '_groupwise_iter7', '_groupwise_iter8', '_groupwise_iter9', '_groupwise_iter10']:
                     img_name = img_name.replace(suffix, '')
                 
                 output_filename = f"{img_name}_groupwise_iter{iteration}"
                 
-                # run_groupwise_registration_single(idx, full_img_name, template_fname, iteration, 
-                #                      output_dir, scaling_factor, ignore_affine, ignore_res,
-                #                      output_filename):
                 future = executor.submit(
                     run_groupwise_registration_single,  # Use wrapper function
                     idx,
@@ -1934,25 +1931,27 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
     """
     import logging
     import os
-    
+
     try:
         logging.info(f"  Processing slice: {idx}")
         logging.info(f'             Image: {full_img_name}')
         
-        reg = nighres.registration.embedded_antspy_2d_multi(
+        # reg = nighres.registration.embedded_antspy_2d_multi(
+        
+        reg = embedded_antspy_2d_multi(
             source_images=[full_img_name],
             target_images=[template_fname],
-            run_rigid=True,
+            run_rigid=False,
             rigid_iterations=5000,
             run_affine=False,
             run_syn=True,
-            coarse_iterations=200,
-            medium_iterations=100, 
+            coarse_iterations=40,
+            medium_iterations=20,
             fine_iterations=10,
             scaling_factor=scaling_factor,
             cost_function='MutualInformation', #MutualInformation
             interpolation='Linear',
-            regularization='High',
+            regularization='VeryHigh', #new for our version
             convergence=1e-6,
             ignore_affine=ignore_affine,
             ignore_orient=True, 
@@ -2788,16 +2787,26 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 img_name = os.path.basename(img_name).split('.')[0]
                 reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
                 missing_fnames_current.append(reg)
-
-            missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
-                                                                  missing_fnames_post,
-                                                                  method='intermediate_nonlin_mean',
-                                                                  nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                  scaling_factor=scaling_factor,mask_zero=mask_zero,
-                                                                  sigma_multiplier=sigma_multiplier, 
-                                                                  strength_multiplier=strength_multiplier,
-                                                                  voxel_res=voxel_res)
-
+            try:
+                missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
+                                                                    missing_fnames_post,
+                                                                    method='intermediate_nonlin_mean',
+                                                                    nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                                    scaling_factor=scaling_factor,mask_zero=mask_zero,
+                                                                    sigma_multiplier=sigma_multiplier, 
+                                                                    strength_multiplier=strength_multiplier,
+                                                                    voxel_res=voxel_res)
+            except Exception as e:
+                logging.warning(f"Error during interpolation of missing slices: {e}")
+                logging.warning("  --> Falling back to simple mean interpolation for missing slices.")
+                missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
+                                                                    missing_fnames_post,
+                                                                    method='mean',
+                                                                    nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                                    scaling_factor=scaling_factor,mask_zero=mask_zero,
+                                                                    sigma_multiplier=sigma_multiplier, 
+                                                                    strength_multiplier=strength_multiplier,
+                                                                    voxel_res=voxel_res)
             
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):

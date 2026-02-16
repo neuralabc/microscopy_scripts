@@ -1843,6 +1843,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         mean_template.set_spacing(images[0].spacing)
         mean_template.set_origin(images[0].origin)
         mean_template.set_direction(images[0].direction)
+        mean_template = mean_template.to_nibabel() 
         
         # Register each slice to mean with VERY smooth constraints
         registered_images = []

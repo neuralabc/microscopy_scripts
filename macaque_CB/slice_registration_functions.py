@@ -1888,6 +1888,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                 
                 if result['success']:
                     logging.info(f"✓ Slice {idx} registered")
+                    logging.warning('Slice {idx} registration successful')
                 else:
                     logging.error(f"✗ Slice {idx} failed: {result['error']}")
         

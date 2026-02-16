@@ -1942,15 +1942,15 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
         reg = nighres.registration.embedded_antspy_2d_multi(
             source_images=[full_img_name],
             target_images=[template_fname],
-            run_rigid=False,
+            run_rigid=True,
             rigid_iterations=5000,
             run_affine=False,
             run_syn=True,
             coarse_iterations=100,
             medium_iterations=50, 
-            fine_iterations=25,  #500 was a bit too aagro
+            fine_iterations=25,
             scaling_factor=scaling_factor,
-            cost_function='Mattes', #MutualInformation
+            cost_function='MutualInformation', #MutualInformation
             interpolation='Linear',
             regularization='High',
             convergence=1e-6,
@@ -1966,7 +1966,7 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
         # reg = embedded_antspy_groupwise(
         #     source_images=[full_img_name],
         #     target_images=[template_fname],
-        #     run_rigid=False,
+        #     run_rigid=True,
         #     run_affine=False,  # Should be False for groupwise
         #     run_syn=True,
         #     coarse_iterations=100,

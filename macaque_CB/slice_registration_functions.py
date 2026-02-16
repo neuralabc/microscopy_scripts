@@ -470,6 +470,7 @@ def embedded_antspy_groupwise(
             }
     
     # Load images
+    logging.warning(source_images[0])
     source = load_volume(source_images[0])
     target = load_volume(target_images[0])
     
@@ -1871,8 +1872,8 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                 output_filename = f"{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_iter{iteration}"
     
                 reg = embedded_antspy_groupwise(
-                    source_images=img_name,
-                    target_images=mean_template,
+                    source_images=[img_name],
+                    target_images=[mean_template],
                     run_rigid=False,
                     run_affine=True,
                     run_syn=True,

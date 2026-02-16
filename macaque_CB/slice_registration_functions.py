@@ -471,6 +471,7 @@ def embedded_antspy_groupwise(
     
     # Load images
     source = load_volume(source_images[0])
+    logging.warning(target_images[0])
     target = load_volume(target_images[0])
     
     src_affine = source.affine

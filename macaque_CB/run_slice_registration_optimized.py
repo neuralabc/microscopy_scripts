@@ -344,12 +344,13 @@ if template_not_generated:
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
-num_reg_iterations = 5
+num_reg_iterations = 2
 run_rigid = True
 run_syn = True
 regularization ='Medium'
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
+# did this below in the groupwise reg, which decreased high frequency drift at the expense of low
 
 ## TODO: nonlin slice templates not working from cascade as of yet?
 template_not_generated = True #keeps track of if we generated a template or not at this stage so that we can generate one if we stopped the registration at some point
@@ -609,7 +610,7 @@ final_rigsyn_reg_level_tag = template_tag
 
 # Use the final template from Rigid + Syn as the input for Syn only
 input_source_file_tag = final_rigsyn_reg_level_tag
-'''
+
 # After final Rigid + Syn iterations
 logging.warning("=" * 80)
 logging.warning("STARTING GROUPWISE OPTIMIZATION - This will reduce wave artifacts")
@@ -651,10 +652,7 @@ else:
 
 logging.warning(f"Output directory: {output_dir}")
 
-# At the end of your registration pipeline, after final SyN iterations:
 '''
-
-
 logging.warning("=" * 80)
 logging.warning("STARTING GROUPWISE OPTIMIZATION WITH BOUNDARY CONSTRAINTS")
 logging.warning("=" * 80)
@@ -704,3 +702,4 @@ logging.warning("=" * 80)
 logging.warning("PIPELINE COMPLETE")
 logging.warning(f"Final output: {template}")
 logging.warning("=" * 80)
+'''

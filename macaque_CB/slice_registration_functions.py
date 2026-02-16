@@ -1800,6 +1800,195 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
     
     return images
 
+def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
+                                reg_level_tag, iterations=5, zfill_num=4,
+                                scaling_factor=64, use_resolution_in_registration=False):
+    """
+    Jointly optimize all slices together to enforce smooth transitions.
+    Converts ANTs warps to nighres-compatible deformation maps.
+    """
+    import ants
+    import nibabel as nib
+    
+    logging.warning("=" * 80)
+    logging.warning("Starting groupwise optimization")
+    logging.warning("=" * 80)
+    
+    # Determine ignore parameters based on use_resolution_in_registration
+    if use_resolution_in_registration:
+        ignore_res = False
+        ignore_affine = False  # Must respect affines when using resolution
+    else:
+        ignore_res = True  # Default: work in voxel space
+        ignore_affine = False  # Still respect affines for resolution metadata
+        
+
+    # Load all registered slices
+    images = []
+    for idx, img_fname in enumerate(all_image_fnames):
+        img_name = os.path.basename(img_fname).split('.')[0]
+        img_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_ants-def0.nii.gz"
+        images.append(ants.image_read(img_path))
+    
+    # Iteratively refine to mean template
+    for iteration in range(iterations):
+        logging.warning(f"Groupwise iteration {iteration+1}/{iterations}")
+        
+        # Compute current mean template
+        mean_data = np.mean([img.numpy() for img in images], axis=0)
+        mean_template = ants.from_numpy(mean_data)
+        mean_template.set_spacing(images[0].spacing)
+        mean_template.set_origin(images[0].origin)
+        mean_template.set_direction(images[0].direction)
+        
+        # Register each slice to mean with VERY smooth constraints
+        registered_images = []
+        for idx, img in enumerate(images):
+            img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
+            
+            logging.info(f"  Processing slice {idx}/{len(images)}")
+            
+            # Create temporary directory for this registration
+            with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_iter{iteration}_") as tmp_dir:
+                output_prefix = os.path.join(tmp_dir, "reg")
+                
+                # Registration with high smoothness
+
+                # reg = ants.registration(
+                #     fixed=mean_template,
+                #     moving=img,
+                #     type_of_transform='SyNOnly',
+                #     flow_sigma=10,
+                #     total_sigma=8,
+                #     grad_step=0.05,
+                #     reg_iterations=(100, 50, 25),
+                #     outprefix=output_prefix
+                # )
+                
+    # Call custom groupwise registration
+                output_filename = f"{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_iter{iteration}"
+    
+                reg = embedded_antspy_groupwise(
+                    source_images=[img],
+                    target_images=[mean_template],
+                    run_rigid=False,
+                    run_affine=True,
+                    run_syn=True,
+                    coarse_iterations=100,
+                    medium_iterations=50,
+                    fine_iterations=25,
+                    syn_gradient_step=.05,
+                    syn_flow_sigma=10,
+                    syn_total_sigma=8,
+                    scaling_factor=scaling_factor,
+                    cost_function='MutualInformation',
+                    interpolation='Linear',
+                    convergence=1e-6,
+                    ignore_affine=ignore_affine,
+                    ignore_orient=True,
+                    ignore_res=ignore_res,
+                    save_data=True,
+                    overwrite=True,
+                    output_dir=output_dir,
+                    file_name=output_filename
+                )
+        ## from coreg_single_slice                
+        # with working_directory(tmp_output_dir):
+        #     # Configure registration based on use_resolution_in_registration setting
+        #     coreg_output = nighres.registration.embedded_antspy_2d_multi(
+        #         source_images=sources,
+        #         target_images=targets,
+        #         image_weights=image_weights_ordered,
+        #         run_rigid=run_rigid,
+        #         rigid_iterations=5000,
+        #         run_affine=False,
+        #         run_syn=run_syn,
+        #         coarse_iterations=2000,
+        #         medium_iterations=1000, 
+        #         fine_iterations=200,  #500 was a bit too aagro
+        #         scaling_factor=scaling_factor,
+        #         cost_function='Mattes', #MutualInformation
+        #         interpolation='Linear',
+        #         regularization=regularization,
+        #         convergence=1e-6,
+        #         mask_zero=mask_zero,
+        #         ignore_affine=ignore_affine,
+        #         ignore_orient=True, 
+        #         ignore_res=ignore_res,
+        #         save_data=True, 
+        #         overwrite=False,
+        #         file_n
+
+                # Load transformed image
+                registered_images.append(ants.image_read(reg['transformed_source']))
+                
+
+
+                
+                # # On the LAST iteration, save and convert the transforms
+                # if iteration == iterations - 1:
+                #     # Define final output names
+                #     final_output_def = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-def0.nii.gz"
+                #     final_output_map = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-map.nii.gz"
+                #     final_output_invmap = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-invmap.nii.gz"
+                    
+                #     # Save the warped image
+                #     ants.image_write(reg['warpedmovout'], final_output_def)
+                    
+                #     # # Convert ANTs displacement field to deformation field
+                #     # fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
+                #     # inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
+                    
+                #     ## XXX CURRENTLY WE DO NOT do anything to these transforms. XXX TODO: fix to deal w/ transforms?
+
+                #     # # Get warp files from registration output (filter out affine .mat files)
+                #     # fwd_warp = None
+                #     # inv_warp = None
+
+                #     # if 'fwdtransforms' in reg and reg['fwdtransforms']:
+                #     #     # Find the warp file (not .mat files)
+                #     #     for tf in reversed(reg['fwdtransforms']):  # Start from end
+                #     #         if tf.endswith('.nii.gz') or tf.endswith('.nii'):
+                #     #             fwd_warp = tf
+                #     #             logging.debug(f"Forward warp: {os.path.basename(fwd_warp)}")
+                #     #             break
+                        
+                #     #     if not fwd_warp:
+                #     #         logging.warning(f"No .nii.gz warp found in fwdtransforms: {reg['fwdtransforms']}")
+
+                #     # if 'invtransforms' in reg and reg['invtransforms']:
+                #     #     # Find the inverse warp file (not .mat files)
+                #     #     for tf in reg['invtransforms']:  # Start from beginning for inverse
+                #     #         if tf.endswith('.nii.gz') or tf.endswith('.nii'):
+                #     #             inv_warp = tf
+                #     #             logging.debug(f"Inverse warp: {os.path.basename(inv_warp)}")
+                #     #             break
+                        
+                #     #     if not inv_warp:
+                #     #         logging.warning(f"No .nii.gz warp found in invtransforms: {reg['invtransforms']}")
+                    
+
+                #     # if os.path.exists(fwd_warp):
+                #     #     convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
+                #     # else:
+                #     #     logging.warning(f"Forward warp not found for slice {idx}")
+                    
+                #     # if os.path.exists(inv_warp):
+                #     #     convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
+                #     # else:
+                #     #     logging.warning(f"Inverse warp not found for slice {idx}")
+        
+        # Update images for next iteration
+        images = registered_images
+        logging.warning(f"Completed groupwise iteration {iteration+1}/{iterations}")
+    
+    logging.warning("=" * 80)
+    logging.warning("Groupwise optimization complete")
+    logging.warning(f"Saved {len(all_image_fnames)} deformation maps")
+    logging.warning("=" * 80)
+    
+    return images
+
 def groupwise_stack_optimization_v2(output_dir, subject, all_image_fnames, 
                                 reg_level_tag, iterations=5, zfill_num=4,
                                 restrict_boundary_deformation=True,

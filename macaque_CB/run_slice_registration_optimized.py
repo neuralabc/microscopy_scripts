@@ -344,7 +344,7 @@ if template_not_generated:
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
-num_reg_iterations = 2
+num_reg_iterations = 5
 run_rigid = True
 run_syn = True
 regularization ='Medium'

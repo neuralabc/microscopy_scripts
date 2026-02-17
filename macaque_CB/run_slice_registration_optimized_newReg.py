@@ -603,31 +603,18 @@ groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fname
 # - smooth transitions without much/any shape change
 # we output the template with 'nochange' to simply stack the def0 files without modification
 
-logging.warning('\t\tGenerating new template')
+logging.warning('\t\tGenerating new stacks after groupwise optimization')
 for iter in range(groupwise_iterations):
-    if 'nonlin' in slice_template_type:
-        template, template_nonlin = generate_stack_and_template(
-            output_dir, subject, all_image_fnames,
-            zfill_num=zfill_num,
-            reg_level_tag=f'{input_source_file_tag}'+ f'_groupwise_iter{iter}',
-            per_slice_template=False, #we do not need output templates
-            missing_idxs_to_fill=missing_idxs_to_fill,
-            slice_template_type='nochange',
-            scaling_factor=scaling_factor,
-            nonlin_interp_max_workers=nonlin_interp_max_workers,
-            voxel_res=voxel_res
-        )
-    else:
-        template = generate_stack_and_template(
-            output_dir, subject, all_image_fnames,
-            zfill_num=zfill_num,
-            reg_level_tag=f'{input_source_file_tag}'+ f'_groupwise_iter{iter}',
-            per_slice_template=False, #we do not need output templates
-            missing_idxs_to_fill=missing_idxs_to_fill,
-            slice_template_type='nochange',
-            scaling_factor=scaling_factor,
-            nonlin_interp_max_workers=nonlin_interp_max_workers,
-            voxel_res=voxel_res
-        )
+    template = generate_stack_and_template(
+        output_dir, subject, all_image_fnames,
+        zfill_num=zfill_num,
+        reg_level_tag=f'{input_source_file_tag}'+ f'_groupwise_iter{iter}',
+        per_slice_template=False, #we do not need output templates
+        missing_idxs_to_fill=missing_idxs_to_fill,
+        slice_template_type='nochange',
+        scaling_factor=scaling_factor,
+        nonlin_interp_max_workers=nonlin_interp_max_workers,
+        voxel_res=voxel_res
+    )
 
 logging.warning(f"Output directory: {output_dir}")

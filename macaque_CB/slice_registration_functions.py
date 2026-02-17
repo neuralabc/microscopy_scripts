@@ -2219,7 +2219,7 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         # Keep if: using deformed source OR this is the last iteration
         using_deformed_source = (use_deformed_source_after_iteration is not None and 
                                   iteration >= use_deformed_source_after_iteration)
-        is_last_iteration = (iteration == iterations - 1)
+        is_last_iteration = (iteration == iterations - 2) # keep the maps for the last iteration before we switch to using the deformed
         keep_maps = using_deformed_source or is_last_iteration
         
         if not keep_maps:

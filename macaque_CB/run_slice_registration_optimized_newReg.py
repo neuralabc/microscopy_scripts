@@ -406,25 +406,11 @@ for iter in range(num_reg_iterations):
         template_not_generated = False
         logging.warning(f'\t\tLoaded existing template(s)')
     else:
-        # missing_idxs_to_fill = None #XXX FOR TESTING!!! TOTEST: ONLY FILL IN MISSING SLICES prior to this.
-
-        # if True: #we run this only once to get the initial quick alignment
-        ## removed this because the next stage w/ the larger windows uses the outputs from this step
-        ## THIS MEANS THAT the larger windowing stage has more warping going on, which may not be 
-        ## what you should be doing here. Think about this, otherwise just take the std rigsyn output!
-        ## rather than the win12 output
-        # slice_offset_list_forward = [-1,-2,-3]
-        # slice_offset_list_reverse = [1,2,3]
-        # image_weights = generate_gaussian_weights([0,1,2,3],gauss_std=3) #symmetric gaussian, so the same on both sides
 
         slice_offset_list_forward = [-3,-2,-1,] #weighted back
         slice_offset_list_reverse = [1,2,3] #weighted forward
         image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=3) #symmetric gaussian, so the same on both sides
         image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=3)
-        # # XXX removes image weights
-        # image_weights = numpy.ones(len(slice_offset_list_forward)+1)
-        ## TODO: YOU NEED TO REMOVE previous_target_tag from everything <---------------------------------------
-        ## IT IS COMPLETELY REDUNDANT and confusing... factor it out.
 
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_forward, 
@@ -487,23 +473,6 @@ for iter in range(num_reg_iterations):
 
 
         template_tag = 'coreg12nl'+iter_tag
-        
-
-        ## No diff between these two approaches
-        # slice_offset_list_forward = [-3,-2,-1,1,2] #weighted back, but also forward
-        # slice_offset_list_reverse = [-2,-1,1,2,3] #weighted forward, but also back
-        # same as above
-        # slice_offset_list_forward = [-3,-2,-1,1] #weighted back, but also forward
-        # slice_offset_list_reverse = [-1,1,2,3] #weighted forward, but also back
-        # below is worse
-        #slice_offset_list_forward = [-1,-2,-3,-4,-5] 
-        #slice_offset_list_reverse = [1,2,3,4,5] 
-
-        #not much change, likely worse    
-        # slice_offset_list_forward = [-1] 
-        # slice_offset_list_reverse = [1] 
-
-        #increasing the gaussian weigting also results in worse (3-> 5)
 
         # her we include neigbouring slices and increase the sharpness of the gaussian
         slice_offset_list_forward = [-6,-5,-4,-3,-2,-1,1,2,3] #weighted back, but also forward
@@ -512,15 +481,7 @@ for iter in range(num_reg_iterations):
         
         image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=4) #symmetric gaussian, so the same on both sides
         image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=4)
-        # # XXX removed image weights
-        # image_weights_win1 = numpy.ones(len(slice_offset_list_forward)+1)
-        # image_weights_win2 = numpy.ones(len(slice_offset_list_forward)+1)
 
-        ##
-        ## including `previous_target_tag` is overriding input_source_file_tag and causing 
-        ## registrations to stack, which may aid convergence but not exactly what we want here
-        ## means that the previous output `rigsyn` is the only one directly registered from coreg0nl
-        ##
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 
@@ -638,6 +599,8 @@ groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fname
                                 local_template_window=5)
 
 
+#we generate all the stacks at the end, since we will need to identify which is potentially the best 
+# - smooth transitions without much/any shape change
 logging.warning('\t\tGenerating new template')
 for iter in range(groupwise_iterations):
     if 'nonlin' in slice_template_type:
@@ -666,55 +629,3 @@ for iter in range(groupwise_iterations):
         )
 
 logging.warning(f"Output directory: {output_dir}")
-
-'''
-logging.warning("=" * 80)
-logging.warning("STARTING GROUPWISE OPTIMIZATION WITH BOUNDARY CONSTRAINTS")
-logging.warning("=" * 80)
-
-
-# If using physical space (0.4×0.4×0.05 mm):
-# 20 pixels × 0.4 mm/pixel = 8 mm displacement
-max_displacement_pixels = 20  # Still 20 pixels
-# # OR specify in mm and convert:
-# max_displacement_mm = 8.0
-# max_displacement_pixels = max_displacement_mm / 0.4  # = 20 pixels
-
-# Run groupwise optimization with boundary constraints
-groupwise_stack_optimization_v2(
-    output_dir=output_dir,
-    subject=subject,
-    all_image_fnames=all_image_fnames,
-    reg_level_tag=input_source_file_tag,  # Your final tag
-    iterations=5,
-    zfill_num=zfill_num,
-    restrict_boundary_deformation=True,  # Enable boundary protection
-    boundary_mask_erosion=1,            # 1-pixel around the edge of the image
-    mask_threshold_method='percentile',        # Auto-threshold for tissue
-    mask_min_size=100,                   # Remove small noise regions
-    flow_sigma=10,                       # High smoothness
-    total_sigma=8,                      # Strong elastic constraint
-    grad_step=0.05,                     # Conservative steps
-    max_displacement=max_displacement_pixels,                 # Warn if displacements exceed 20 pixels
-    save_masks=True                      # Save masks for inspection
-)
-
-# Generate final stack from groupwise results
-logging.warning("Generating final stack from groupwise optimization...")
-template = generate_stack_and_template(
-    output_dir, subject, all_image_fnames,
-    zfill_num=zfill_num,
-    reg_level_tag=input_source_file_tag + '_groupwise',  # Your final tag
-    per_slice_template=False,
-    across_slice_smoothing_sigma=2,  # Light smoothing now acceptable
-    voxel_res=voxel_res,
-    missing_idxs_to_fill=None,  # Already handled
-    scaling_factor=scaling_factor,
-    mask_zero=mask_zero
-)
-
-logging.warning("=" * 80)
-logging.warning("PIPELINE COMPLETE")
-logging.warning(f"Final output: {template}")
-logging.warning("=" * 80)
-'''

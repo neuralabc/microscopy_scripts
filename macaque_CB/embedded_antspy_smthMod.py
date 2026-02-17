@@ -1,3 +1,7 @@
+# Functions for working with and running ANTsPy registration 
+# Modified from nighres to add 'VeryHigh' regularization
+# original code: github.com/nighres by Pierre-Louis Bazin
+
 # basic dependencies
 import os
 import sys

@@ -601,6 +601,8 @@ groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fname
 
 #we generate all the stacks at the end, since we will need to identify which is potentially the best 
 # - smooth transitions without much/any shape change
+# we output the template with 'nochange' to simply stack the def0 files without modification
+
 logging.warning('\t\tGenerating new template')
 for iter in range(groupwise_iterations):
     if 'nonlin' in slice_template_type:
@@ -610,7 +612,7 @@ for iter in range(groupwise_iterations):
             reg_level_tag=f'{input_source_file_tag}'+ f'_groupwise_iter{iter}',
             per_slice_template=False, #we do not need output templates
             missing_idxs_to_fill=missing_idxs_to_fill,
-            slice_template_type=slice_template_type,
+            slice_template_type='nochange',
             scaling_factor=scaling_factor,
             nonlin_interp_max_workers=nonlin_interp_max_workers,
             voxel_res=voxel_res
@@ -622,7 +624,7 @@ for iter in range(groupwise_iterations):
             reg_level_tag=f'{input_source_file_tag}'+ f'_groupwise_iter{iter}',
             per_slice_template=False, #we do not need output templates
             missing_idxs_to_fill=missing_idxs_to_fill,
-            slice_template_type=slice_template_type,
+            slice_template_type='nochange',
             scaling_factor=scaling_factor,
             nonlin_interp_max_workers=nonlin_interp_max_workers,
             voxel_res=voxel_res

@@ -1994,35 +1994,86 @@ def compute_signed_distance_weight(mask, sigma=15.0):
     return weights
     
 def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
-                                reg_level_tag, iterations=5, idxs_to_compute_mean='all', zfill_num=4,
-                                scaling_factor=64, use_resolution_in_registration=True, max_workers=1,
+                                reg_level_tag, iterations=10, idxs_to_compute_mean='all', zfill_num=4,
+                                scaling_factor=64, use_resolution_in_registration=True, max_workers=50,
                                 weighted_mask_template=True, distance_sigma=3,
-                                use_deformed_source_after_iteration=3,
-                                local_template_window=3, use_local_template_after_iteration=2):
+                                use_deformed_source_after_iteration=4,
+                                local_template_window=5, use_local_template_after_iteration=3):
     """
-    Jointly optimize all slices together to enforce smooth transitions.
-    Converts ANTs warps to nighres-compatible deformation maps.
+    Iteratively register all slices to a mean template using nighres/ANTsPy SyN registration.
     
-    Parameters:
-    -----------
-    use_deformed_source_after_iteration : int or None
-        If None (default), always use original images as registration source.
-        If an integer N, use original images for iterations 0 to N-1, then switch
-        to using the previously deformed images for iterations N and beyond.
-        This allows large initial corrections followed by gentle refinement.
-        Example: use_deformed_source_after_iteration=2 means iterations 0,1 use
-        originals, iterations 2+ use deformed files from previous iteration.
-    local_template_window : int or None
-        If None (default), use global mean template for all slices.
-        If an integer k, each slice gets its own local template computed from
-        neighboring slices within ±k positions (Gaussian weighted by distance).
-        This promotes smoother transitions between adjacent slices.
-    use_local_template_after_iteration : int or None
-        If None, use local templates from the start (when local_template_window is set).
-        If an integer N, use global template for iterations 0 to N-1, then switch
-        to local templates for iterations N and beyond.
-        Example: use_local_template_after_iteration=2 means iterations 0,1 use
-        global template, iterations 2+ use local templates.
+    This function performs groupwise optimization to enforce smooth slice-to-slice transitions.
+    Each iteration: (1) computes a weighted mean template, (2) registers all slices to it in 
+    parallel, and (3) updates images for the next iteration. Supports local per-slice templates
+    for smoother results and switching from original to deformed source images mid-optimization.
+    
+    Transform Chain Logic:
+        - Iterations 0 to (use_deformed_source_after_iteration-1): Register orig → template
+          (maps not needed except the last one before switching)
+        - Iterations use_deformed_source_after_iteration onward: Chain transforms
+          (all maps retained to compose: orig → iterN-1 → iterN → ... → final)
+    
+    Parameters
+    ----------
+    output_dir : str
+        Directory for output files (deformed images, maps, templates, stacks).
+    subject : str
+        Subject identifier prefix for output filenames.
+    all_image_fnames : list of str
+        Original image filenames (used to derive output naming).
+    reg_level_tag : str
+        Tag identifying input registration level (e.g., 'coreg12nl_win12_rigsyn_4').
+        Input files expected at: {output_dir}{subject}_{idx}_{img_name}_{reg_level_tag}_ants-def0.nii.gz
+    iterations : int, default=5
+        Number of groupwise optimization iterations.
+    idxs_to_compute_mean : 'all', int, list of int, or None, default='all'
+        Which iterations recompute the mean template. 'all' = every iteration,
+        None = only iteration 0, int/list = specific iterations (0 always included).
+    zfill_num : int, default=4
+        Zero-padding width for slice indices in filenames.
+    scaling_factor : int, default=64
+        Scaling factor passed to nighres registration.
+    use_resolution_in_registration : bool, default=True
+        If True, use physical resolution (ignore_res=False). If False, work in voxel space.
+    max_workers : int, default=1
+        Number of parallel workers for slice registration.
+    weighted_mask_template : bool, default=True
+        If True, weight template contributions by signed distance from tissue boundary
+        (reduces edge artifacts). If False, use simple mean.
+    distance_sigma : float, default=3
+        Sigma for signed distance weighting (pixels). Controls boundary transition softness.
+    use_deformed_source_after_iteration : int or None, default=3
+        If None, always register from original images. If int N, switch to using
+        deformed images as source starting at iteration N. Maps are retained from
+        iteration (N-1) onward to enable transform composition.
+    local_template_window : int or None, default=3
+        If None, use global mean template for all slices. If int k, compute per-slice
+        templates from ±k neighboring slices with Gaussian distance weighting.
+    use_local_template_after_iteration : int or None, default=2
+        If None, use local templates from iteration 0. If int N, use global template
+        for iterations 0 to N-1, then switch to local templates.
+    
+    Returns
+    -------
+    list of nibabel.Nifti1Image
+        Final registered images after all iterations.
+    
+    Output Files
+    ------------
+    Per iteration:
+        - groupwise_iter{N}_template.nii.gz : Global mean template
+        - groupwise_iter{N}_weights.nii.gz : Sum of distance weights (if weighted_mask_template)
+        - groupwise_iter{N}_local_template_slice{idx}.nii.gz : Per-slice templates (if local)
+    Per slice per iteration:
+        - {img_name}_groupwise_iter{N}_ants-def0.nii.gz : Deformed image
+        - {img_name}_groupwise_iter{N}_ants-map.nii.gz : Forward deformation map (if retained)
+        - {img_name}_groupwise_iter{N}_ants-invmap.nii.gz : Inverse map (if retained)
+    
+    Notes
+    -----
+    - Uses 'VeryHigh' regularization in embedded_antspy_2d_multi for smooth deformations.
+    - Maps are only retained for iterations where chaining is needed (1 previous to and all deformed source iterations)
+      or the final iteration, to save disk space.
     """
     import copy
     import nibabel as nib
@@ -2218,8 +2269,8 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         # Determine if we should keep map/invmap files for this iteration
         # Keep if: using deformed source OR this is the last iteration
         using_deformed_source = (use_deformed_source_after_iteration is not None and 
-                                  iteration >= use_deformed_source_after_iteration)
-        is_last_iteration = (iteration == iterations - 2) # keep the maps for the last iteration before we switch to using the deformed
+                                  iteration >= use_deformed_source_after_iteration - 1) # We want to keep maps for the iteration just before we switch to deformed source, since those maps will be needed for the next iteration's registration
+        is_last_iteration = (iteration == iterations - 1) # keep the maps for the last iteration, no matter what
         keep_maps = using_deformed_source or is_last_iteration
         
         if not keep_maps:

@@ -2504,31 +2504,6 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
                     file_name=output_filename
                 )
                 
-                # reg = embedded_antspy_groupwise(
-                #     source_images=[full_img_name],
-                #     target_images=[template_fname],
-                #     run_rigid=False,
-                #     run_affine=False,  # Should be False for groupwise
-                #     run_syn=True,
-                #     coarse_iterations=100,
-                #     medium_iterations=50,
-                #     fine_iterations=25,
-                #     syn_gradient_step=0.2,
-                #     syn_flow_sigma=10,
-                #     syn_total_sigma=8,
-                #     scaling_factor=scaling_factor,
-                #     cost_function='MutualInformation',
-                #     interpolation='Linear',
-                #     convergence=1e-6,
-                #     ignore_affine=ignore_affine,
-                #     ignore_orient=True,
-                #     ignore_res=ignore_res,  # FORCE voxel space for deformation maps
-                #     save_data=True,
-                #     overwrite=True,
-                #     output_dir=output_dir,
-                #     file_name=output_filename
-                # )
-                
                 return {
                     'idx': idx,
                     'reg': reg,

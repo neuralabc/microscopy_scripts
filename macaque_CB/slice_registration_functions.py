@@ -982,7 +982,57 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
                                   mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
-
+    """
+    Cascading slice-based registration using ANTsPy directly (v2).
+    
+    Registers slices outward from an anchor slice, using each newly registered slice
+    as the target for the next. This creates smooth transitions without blocky artifacts.
+    Uses do_reg_ants() which performs rigid registration followed by optional SyN.
+    
+    Parameters
+    ----------
+    output_dir : str
+        Directory to save registered output files.
+    subject : str
+        Subject identifier for output filenames.
+    all_image_fnames : list of str
+        List of file paths to the original stack of 2D image slices.
+    anchor_slice_idx : int, optional
+        Index of the central slice to start registration from. If None, defaults to 
+        the middle slice of the stack.
+    missing_idxs_to_fill : list of int, optional
+        Slice indices that are missing/invalid, excluded from anchor selection.
+    zfill_num : int, default=4
+        Zero-padding width for slice indices in filenames (e.g., 0001, 0002).
+    input_source_file_tag : str, default='coreg0nl'
+        Tag identifying input files from a previous registration step.
+    reg_level_tag : str, default='coreg1nl'
+        Tag for output files from this registration step.
+    previous_target_tag : str, optional
+        Tag for previously registered targets. If None, uses input_source_file_tag.
+    run_syn : bool, default=True
+        Whether to run SyN non-linear registration after rigid.
+    scaling_factor : int, default=64
+        Multi-scale downsampling factor for registration.
+    mask_zero : bool, default=False
+        If True, mask zero-valued regions during registration.
+    voxel_res : tuple, optional
+        Voxel resolution in [x, y, z] format in microns.
+    use_resolution_in_registration : bool, default=False
+        Currently unused; kept for API compatibility.
+    
+    Returns
+    -------
+    None
+        Registered slices are saved as .nii.gz files in output_dir.
+    
+    Notes
+    -----
+    - Rigid registration is always performed (run_rigid=True in do_reg_ants).
+    - SyN registration is controlled by the run_syn parameter.
+    - Intermediate files are cleaned up via temporary directories.
+    - Registration cascades bidirectionally from anchor: rightward then leftward.
+    """
     #TODO: some filenames are messed up due to ants automatic filenaming of outputs
 
     if previous_target_tag is not None:
@@ -1007,13 +1057,13 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
     all_image_fnames_new = []
     for idx in numpy.arange(len(all_image_fnames)):
         img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
-        all_image_fnames_new.append(f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}_ants-def0.nii.gz")
+        all_image_fnames_new.append(os.path.join(output_dir, f"{subject}_{str(idx).zfill(zfill_num)}_{img_basename}_{reg_level_tag}_ants-def0.nii.gz"))
 
     #list of what our .nii inputs should be
     all_image_fnames_nii = []
     for idx in numpy.arange(len(all_image_fnames)):
         img_basename = os.path.basename(all_image_fnames[idx]).split('.')[0]
-        all_image_fnames_nii.append(f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{previous_tail}")
+        all_image_fnames_nii.append(os.path.join(output_dir, f"{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{previous_tail}"))
 
     #load and then save the central slice with the new tag, no change since this is the space we want to align to
     save_volume(all_image_fnames_new[anchor_slice_idx],load_volume(all_image_fnames_nii[anchor_slice_idx]))

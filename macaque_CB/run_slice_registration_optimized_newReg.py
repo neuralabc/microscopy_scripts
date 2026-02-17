@@ -616,13 +616,14 @@ logging.warning("=" * 80)
 logging.warning("STARTING GROUPWISE OPTIMIZATION - This will reduce wave artifacts")
 logging.warning("=" * 80)
 
-# groupwise_stack_optimization(
+# optmized_stack = groupwise_stack_optimization(
 #     output_dir, subject, all_image_fnames,
 #     reg_level_tag=f'{input_source_file_tag}',
 #     iterations=5,
 #     scaling_factor=scaling_factor,
 #     voxel_res=voxel_res
 # )
+
 groupwise_iterations = 10
 logging.warning(f'scaling factor: {scaling_factor}')
 groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fnames, 
@@ -632,6 +633,7 @@ groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fname
                                 scaling_factor=scaling_factor, 
                                 use_resolution_in_registration=use_resolution_in_registration,
                                 max_workers=max_workers)
+
 
 logging.warning('\t\tGenerating new template')
 for iter in range(groupwise_iterations):

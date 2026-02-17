@@ -3,6 +3,7 @@ import time
 import shutil
 import logging
 import sys
+import tempfile
 from datetime import datetime
 import nighres
 import numpy
@@ -1682,24 +1683,62 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
 
 def groupwise_stack_optimization(output_dir, subject, all_image_fnames, 
                                 reg_level_tag, iterations=5, zfill_num=4,
-                                scaling_factor=64, voxel_res=None):
+                                scaling_factor=64, voxel_res=None, max_workers=50,
+                                flow_sigma=10, total_sigma=8, grad_step=0.05):
     """
     Jointly optimize all slices together to enforce smooth transitions.
     Converts ANTs warps to nighres-compatible deformation maps.
+    
+    Parameters:
+    -----------
+    output_dir : str
+        Directory to save output files
+    subject : str
+        Subject identifier
+    all_image_fnames : list
+        List of all image filenames
+    reg_level_tag : str
+        Registration level tag
+    iterations : int
+        Number of optimization iterations
+    zfill_num : int
+        Zero-padding for slice indices
+    scaling_factor : int
+        Scaling factor (unused, kept for compatibility)
+    voxel_res : tuple
+        Voxel resolution (unused, kept for compatibility)
+    max_workers : int
+        Maximum number of parallel workers for registration
+    flow_sigma : float
+        Flow smoothness parameter for SyN registration (default: 10)
+    total_sigma : float
+        Total smoothness parameter for SyN registration (default: 8)
+    grad_step : float
+        Gradient step size for SyN registration (default: 0.05)
     """
     import ants
     import nibabel as nib
+    from concurrent.futures import ProcessPoolExecutor, as_completed
     
     logging.warning("=" * 80)
     logging.warning("Starting groupwise optimization")
     logging.warning("=" * 80)
     
-    # Load all registered slices
+    # Load all registered slices and save paths
     images = []
+    images_paths = []
+    img_names = []
     for idx, img_fname in enumerate(all_image_fnames):
         img_name = os.path.basename(img_fname).split('.')[0]
         img_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_ants-def0.nii.gz"
         images.append(ants.image_read(img_path))
+        images_paths.append(img_path)
+        img_names.append(img_name)
+    
+    # Store reference image properties for reconstruction
+    ref_spacing = images[0].spacing
+    ref_origin = images[0].origin
+    ref_direction = images[0].direction
     
     # Iteratively refine to mean template
     for iteration in range(iterations):
@@ -1708,87 +1747,79 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
         # Compute current mean template
         mean_data = np.mean([img.numpy() for img in images], axis=0)
         mean_template = ants.from_numpy(mean_data)
-        mean_template.set_spacing(images[0].spacing)
-        mean_template.set_origin(images[0].origin)
-        mean_template.set_direction(images[0].direction)
+        mean_template.set_spacing(ref_spacing)
+        mean_template.set_origin(ref_origin)
+        mean_template.set_direction(ref_direction)
         
-        # Register each slice to mean with VERY smooth constraints
-        registered_images = []
-        for idx, img in enumerate(images):
-            img_name = os.path.basename(all_image_fnames[idx]).split('.')[0]
+        # Save template to disk for parallel workers
+        template_path = os.path.join(output_dir, f"groupwise_iter{iteration}_template.nii.gz")
+        ants.image_write(mean_template, template_path)
+        
+        # Save current images to disk for workers to read (if using parallel)
+        if max_workers > 1:
+            for idx, img in enumerate(images):
+                iter_img_path = os.path.join(output_dir, f"groupwise_iter{iteration}_slice{str(idx).zfill(zfill_num)}_tmp.nii.gz")
+                ants.image_write(img, iter_img_path)
+                images_paths[idx] = iter_img_path
+        
+        logging.warning(f"Registering {len(images)} slices to mean template in parallel (max_workers={max_workers})...")
+        
+        # Parallel registration of all slices
+        results = [None] * len(images)
+        
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = {}
             
-            logging.info(f"  Processing slice {idx}/{len(images)}")
-            
-            # Create temporary directory for this registration
-            with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_iter{iteration}_") as tmp_dir:
-                output_prefix = os.path.join(tmp_dir, "reg")
-                
-                # Registration with high smoothness
-                reg = ants.registration(
-                    fixed=mean_template,
-                    moving=img,
-                    type_of_transform='SyNOnly',
-                    flow_sigma=10,
-                    total_sigma=8,
-                    grad_step=0.05,
-                    reg_iterations=(100, 50, 25),
-                    outprefix=output_prefix
+            for idx in range(len(images)):
+                future = executor.submit(
+                    run_groupwise_registration_ants_single,
+                    idx,
+                    images_paths[idx],
+                    template_path,
+                    iteration,
+                    iterations,
+                    output_dir,
+                    subject,
+                    img_names[idx],
+                    zfill_num,
+                    reg_level_tag,
+                    flow_sigma,
+                    total_sigma,
+                    grad_step
                 )
+                futures[future] = idx
+            
+            # Collect results as they complete
+            for future in as_completed(futures):
+                result = future.result()
+                idx = result['idx']
+                results[idx] = result
                 
-                registered_images.append(reg['warpedmovout'])
-                
-                # On the LAST iteration, save and convert the transforms
-                if iteration == iterations - 1:
-                    # Define final output names
-                    final_output_def = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-def0.nii.gz"
-                    final_output_map = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-map.nii.gz"
-                    final_output_invmap = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-invmap.nii.gz"
-                    
-                    # Save the warped image
-                    ants.image_write(reg['warpedmovout'], final_output_def)
-                    
-                    # # Convert ANTs displacement field to deformation field
-                    # fwd_warp = os.path.join(tmp_dir, "reg0Warp.nii.gz")
-                    # inv_warp = os.path.join(tmp_dir, "reg0InverseWarp.nii.gz")
-                    
-                    ## XXX CURRENTLY WE DO NOT do anything to these transforms. XXX TODO: fix to deal w/ transforms?
-
-                    # # Get warp files from registration output (filter out affine .mat files)
-                    # fwd_warp = None
-                    # inv_warp = None
-
-                    # if 'fwdtransforms' in reg and reg['fwdtransforms']:
-                    #     # Find the warp file (not .mat files)
-                    #     for tf in reversed(reg['fwdtransforms']):  # Start from end
-                    #         if tf.endswith('.nii.gz') or tf.endswith('.nii'):
-                    #             fwd_warp = tf
-                    #             logging.debug(f"Forward warp: {os.path.basename(fwd_warp)}")
-                    #             break
-                        
-                    #     if not fwd_warp:
-                    #         logging.warning(f"No .nii.gz warp found in fwdtransforms: {reg['fwdtransforms']}")
-
-                    # if 'invtransforms' in reg and reg['invtransforms']:
-                    #     # Find the inverse warp file (not .mat files)
-                    #     for tf in reg['invtransforms']:  # Start from beginning for inverse
-                    #         if tf.endswith('.nii.gz') or tf.endswith('.nii'):
-                    #             inv_warp = tf
-                    #             logging.debug(f"Inverse warp: {os.path.basename(inv_warp)}")
-                    #             break
-                        
-                    #     if not inv_warp:
-                    #         logging.warning(f"No .nii.gz warp found in invtransforms: {reg['invtransforms']}")
-                    
-
-                    # if os.path.exists(fwd_warp):
-                    #     convert_ants_warp_to_deformation(fwd_warp, final_output_map, img)
-                    # else:
-                    #     logging.warning(f"Forward warp not found for slice {idx}")
-                    
-                    # if os.path.exists(inv_warp):
-                    #     convert_ants_warp_to_deformation(inv_warp, final_output_invmap, mean_template)
-                    # else:
-                    #     logging.warning(f"Inverse warp not found for slice {idx}")
+                if result['success']:
+                    logging.warning(f'Slice {idx} registration successful')
+                else:
+                    logging.warning(f"Slice {idx} failed: {result['error']}")
+        
+        # Check for failures
+        failed = [r['idx'] for r in results if not r['success']]
+        if failed:
+            raise RuntimeError(f"Registration failed for slices: {failed}")
+        
+        # Reconstruct ANTs images from results
+        registered_images = []
+        for result in results:
+            reg_img = ants.from_numpy(result['warped_data'])
+            reg_img.set_spacing(ref_spacing)
+            reg_img.set_origin(ref_origin)
+            reg_img.set_direction(ref_direction)
+            registered_images.append(reg_img)
+        
+        # Save stack at this iteration
+        stack_data = np.stack([img.numpy() for img in registered_images], axis=-1)
+        stack_nib = nib.Nifti1Image(stack_data, affine=np.eye(4))
+        stack_fname = os.path.join(output_dir, f"groupwise_orig_iter{iteration}_stack.nii.gz")
+        nib.save(stack_nib, stack_fname)
+        logging.warning(f"  Saved stack to {stack_fname}")
         
         # Update images for next iteration
         images = registered_images
@@ -1802,33 +1833,196 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
     return images
 
 
+def run_groupwise_registration_ants_single(idx, img_path, template_path, iteration, iterations,
+                                           output_dir, subject, img_name, zfill_num, reg_level_tag,
+                                           flow_sigma=10, total_sigma=8, grad_step=0.05):
+    """
+    Wrapper function for single-slice groupwise registration using ANTs.
+    Designed for use with ProcessPoolExecutor.
+    
+    Parameters:
+    -----------
+    idx : int
+        Slice index
+    img_path : str
+        Path to the source image file
+    template_path : str
+        Path to the template image file
+    iteration : int
+        Current iteration number
+    iterations : int
+        Total number of iterations
+    output_dir : str
+        Output directory path
+    subject : str
+        Subject identifier
+    img_name : str
+        Image name (without extension)
+    zfill_num : int
+        Zero-padding for slice numbers
+    reg_level_tag : str
+        Registration level tag
+    flow_sigma : float
+        Flow smoothness parameter for SyN
+    total_sigma : float
+        Total smoothness parameter for SyN
+    grad_step : float
+        Gradient step size for SyN
+    
+    Returns:
+    --------
+    dict with keys:
+        'idx': slice index
+        'success': bool
+        'warped_path': path to warped image (if last iteration)
+        'warped_data': numpy array of warped image data
+        'spacing': tuple of image spacing
+        'origin': tuple of image origin
+        'direction': numpy array of image direction
+        'error': error message if failed
+    """
+    import ants
+    import tempfile
+    import os
+    
+    try:
+        # Load images
+        img = ants.image_read(img_path)
+        mean_template = ants.image_read(template_path)
+        
+        # Create temporary directory for this registration
+        with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_iter{iteration}_") as tmp_dir:
+            output_prefix = os.path.join(tmp_dir, "reg")
+            
+            # Registration with high smoothness
+            reg = ants.registration(
+                fixed=mean_template,
+                moving=img,
+                type_of_transform='SyNOnly',
+                flow_sigma=flow_sigma,
+                total_sigma=total_sigma,
+                grad_step=grad_step,
+                reg_iterations=(100, 50, 25),
+                outprefix=output_prefix
+            )
+            
+            warped_path = None
+            
+            # On the LAST iteration, save the transforms
+            if iteration == iterations - 1:
+                # Define final output names
+                final_output_def = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_groupwise_ants-def0.nii.gz"
+                
+                # Save the warped image
+                ants.image_write(reg['warpedmovout'], final_output_def)
+                warped_path = final_output_def
+            
+            return {
+                'idx': idx,
+                'success': True,
+                'warped_path': warped_path,
+                'warped_data': reg['warpedmovout'].numpy(),
+                'spacing': img.spacing,
+                'origin': img.origin,
+                'direction': img.direction,
+                'error': None
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            'idx': idx,
+            'success': False,
+            'warped_path': None,
+            'warped_data': None,
+            'spacing': None,
+            'origin': None,
+            'direction': None,
+            'error': f"{str(e)}\n{traceback.format_exc()}"
+        }
+
+
 def compute_signed_distance_weight(mask, sigma=15.0):
     """
+    Compute distance-based weights for weighted averaging.
+    Weights are ~1 at center of tissue, ~0.5 at boundary, ~0 outside.
+    
+    Parameters:
+    -----------
     mask : binary array (1 inside tissue, 0 outside)
-    sigma : controls softness of boundary transition
+        Can be 2D (H, W) or 3D with singleton z (H, W, 1)
+    sigma : float
+        Controls softness of boundary transition (in pixels)
+    
+    Returns:
+    --------
+    weights : array same shape as input mask
     """
-
     from scipy.ndimage import distance_transform_edt
-    # Distance inside mask
-    dist_inside = distance_transform_edt(mask)
+    
+    # Handle 3D arrays with singleton z-dimension
+    original_shape = mask.shape
+    squeeze_back = False
+    if len(mask.shape) == 3 and mask.shape[2] == 1:
+        mask = mask[:, :, 0]
+        squeeze_back = True
+    
+    # Ensure boolean type for proper bitwise NOT operation
+    mask_bool = mask.astype(bool)
+    
+    # Distance inside mask (distance to nearest background pixel)
+    # Inside tissue: positive values increasing toward center
+    # Outside tissue: 0
+    dist_inside = distance_transform_edt(mask_bool)
 
-    # Distance outside mask
-    dist_outside = distance_transform_edt(~mask)
+    # Distance outside mask (distance to nearest tissue pixel)
+    # Outside tissue: positive values increasing away from tissue
+    # Inside tissue: 0
+    dist_outside = distance_transform_edt(~mask_bool)
 
-    # Signed distance
+    # Signed distance: positive inside, negative outside, ~0 at boundary
     signed_dist = dist_inside - dist_outside
 
     # Convert to smooth weight (sigmoid)
+    # Center of tissue → ~1, boundary → 0.5, far outside → ~0
     weights = 1.0 / (1.0 + np.exp(-signed_dist / sigma))
+    
+    # Restore original shape if needed
+    if squeeze_back:
+        weights = weights[:, :, np.newaxis]
 
     return weights
     
 def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
-                                reg_level_tag, iterations=5, zfill_num=4,
-                                scaling_factor=64, use_resolution_in_registration=True, max_workers=1):
+                                reg_level_tag, iterations=5, idxs_to_compute_mean='all', zfill_num=4,
+                                scaling_factor=64, use_resolution_in_registration=True, max_workers=1,
+                                weighted_mask_template=True, distance_sigma=3,
+                                use_deformed_source_after_iteration=3,
+                                local_template_window=3, use_local_template_after_iteration=2):
     """
     Jointly optimize all slices together to enforce smooth transitions.
     Converts ANTs warps to nighres-compatible deformation maps.
+    
+    Parameters:
+    -----------
+    use_deformed_source_after_iteration : int or None
+        If None (default), always use original images as registration source.
+        If an integer N, use original images for iterations 0 to N-1, then switch
+        to using the previously deformed images for iterations N and beyond.
+        This allows large initial corrections followed by gentle refinement.
+        Example: use_deformed_source_after_iteration=2 means iterations 0,1 use
+        originals, iterations 2+ use deformed files from previous iteration.
+    local_template_window : int or None
+        If None (default), use global mean template for all slices.
+        If an integer k, each slice gets its own local template computed from
+        neighboring slices within ±k positions (Gaussian weighted by distance).
+        This promotes smoother transitions between adjacent slices.
+    use_local_template_after_iteration : int or None
+        If None, use local templates from the start (when local_template_window is set).
+        If an integer N, use global template for iterations 0 to N-1, then switch
+        to local templates for iterations N and beyond.
+        Example: use_local_template_after_iteration=2 means iterations 0,1 use
+        global template, iterations 2+ use local templates.
     """
     import copy
     import nibabel as nib
@@ -1840,6 +2034,260 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
     logging.warning("Starting groupwise optimization")
     logging.warning("=" * 80)
     
+    if idxs_to_compute_mean is None:
+        idxs_to_compute_mean = [0]
+    elif idxs_to_compute_mean == 'all':
+        idxs_to_compute_mean = list(range(iterations))
+    else:
+        if isinstance(idxs_to_compute_mean, int):
+            idxs_to_compute_mean = [idxs_to_compute_mean]
+        if 0 not in idxs_to_compute_mean:
+            idxs_to_compute_mean.append(0)
+            
+    # Determine ignore parameters based on use_resolution_in_registration
+    if use_resolution_in_registration:
+        ignore_res = False
+        ignore_affine = False  # Must respect affines when using resolution
+    else:
+        ignore_res = True  # Default: work in voxel space
+        ignore_affine = False  # Still respect affines for resolution metadata
+    
+    # Load all registered slices
+    images = []
+    images_fnames = []
+    for idx, img_fname in enumerate(all_image_fnames):
+        img_name = os.path.basename(img_fname).split('.')[0]
+        img_path = f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{img_name}_{reg_level_tag}_ants-def0.nii.gz"
+        images.append(nib.load(img_path))
+        images_fnames.append(img_path)
+
+    orig_images_fnames = copy.deepcopy(images_fnames)
+    # Iteratively refine to mean template
+
+    for iteration in range(iterations): 
+        logging.warning(f"Groupwise iteration {iteration+1}/{iterations}")
+        
+        # Determine if we should use local templates this iteration
+        
+        use_local_this_iter = (local_template_window is not None and 
+                               (use_local_template_after_iteration is None or 
+                                iteration >= use_local_template_after_iteration))
+        
+        # Compute current mean template from CURRENT images
+        # we need to weight inside the loop for each img
+        # 
+        
+        # compute a shared mask to restrict registration to the tissue-containing areas, this can help with convergence and reduce expansion/contraction
+        if iteration in idxs_to_compute_mean:
+            logging.warning("  Computing mean template with weighted mask...")
+            if weighted_mask_template:
+                mean_data = np.zeros_like(images[0].get_fdata())
+                sum_weights = np.zeros_like(images[0].get_fdata())
+                for _img in images:
+                    data = _img.get_fdata()
+                    mask = generate_tissue_mask(data)
+                    w_mask = compute_signed_distance_weight(mask, sigma=distance_sigma)
+                    mean_data += w_mask * data
+                    sum_weights += w_mask
+                    
+                mean_data = np.divide(mean_data, sum_weights, where=sum_weights > 1e-6, out=mean_data)
+                weights_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_weights.nii.gz")
+                weights_template = nib.Nifti1Image(sum_weights, affine=images[0].affine, header=images[0].header)
+                weights_template.to_filename(weights_fname)
+            else:
+                mean_data = np.mean([img.get_fdata() for img in images], axis=0)
+
+            mean_template = nib.Nifti1Image(mean_data, affine=images[0].affine, header=images[0].header)
+
+        # Save global template to disk (used for diagnostics and when not using local templates)
+        template_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_template.nii.gz")
+        mean_template.to_filename(template_fname)
+        
+        # Compute local templates if needed
+        template_fnames = []  # Will store per-slice template filenames
+        if use_local_this_iter:
+            logging.warning(f"  Computing LOCAL templates with window ±{local_template_window} slices...")
+            n_slices = len(images)
+            
+            for slice_idx in range(n_slices):
+                # Compute Gaussian weights for neighboring slices
+                local_mean_data = np.zeros_like(images[0].get_fdata())
+                local_sum_weights = np.zeros_like(images[0].get_fdata())
+                
+                # Define neighborhood range
+                start_idx = max(0, slice_idx - local_template_window)
+                end_idx = min(n_slices, slice_idx + local_template_window + 1)
+                
+                # Gaussian weighting based on slice distance (sigma = window/2 for smooth falloff)
+                slice_sigma = local_template_window / 2.0
+                
+                for neighbor_idx in range(start_idx, end_idx):
+                    # Gaussian weight based on distance from current slice
+                    slice_distance = abs(neighbor_idx - slice_idx)
+                    slice_weight = np.exp(-0.5 * (slice_distance / slice_sigma) ** 2)
+                    
+                    neighbor_data = images[neighbor_idx].get_fdata()
+                    
+                    if weighted_mask_template:
+                        mask = generate_tissue_mask(neighbor_data)
+                        spatial_weight = compute_signed_distance_weight(mask, sigma=distance_sigma)
+                        combined_weight = slice_weight * spatial_weight
+                    else:
+                        combined_weight = slice_weight
+                    
+                    local_mean_data += combined_weight * neighbor_data
+                    local_sum_weights += combined_weight
+                
+                # Normalize
+                local_mean_data = np.divide(local_mean_data, local_sum_weights, 
+                                           where=local_sum_weights > 1e-6, out=local_mean_data)
+                
+                # Save local template for this slice
+                local_template_fname = os.path.join(output_dir, 
+                    f"groupwise_iter{iteration}_local_template_slice{str(slice_idx).zfill(4)}.nii.gz")
+                local_template = nib.Nifti1Image(local_mean_data, affine=images[0].affine, header=images[0].header)
+                local_template.to_filename(local_template_fname)
+                template_fnames.append(local_template_fname)
+            
+            logging.warning(f"  Created {len(template_fnames)} local templates")
+        else:
+            # Use global template for all slices
+            template_fnames = [template_fname] * len(images)
+        
+        logging.warning(f"Registering {len(images_fnames)} slices to {'local' if use_local_this_iter else 'global'} template in parallel...")
+        
+        # Parallel registration of all slices
+        results = [None] * len(images_fnames)
+        
+        # Determine which source files to use for this iteration
+        if use_deformed_source_after_iteration is None or iteration < use_deformed_source_after_iteration:
+            source_fnames = orig_images_fnames
+            logging.warning(f"  Using ORIGINAL images as registration source")
+        else:
+            source_fnames = images_fnames
+            logging.warning(f"  Using DEFORMED images from previous iteration as registration source")
+        
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = {}
+            
+            # Submit all groupwise registrations in parallel,
+            for idx, full_img_name in enumerate(source_fnames):
+                # Extract img_name for THIS slice
+                img_name = os.path.basename(full_img_name).split('.')[0]
+                # Remove any previous suffixes to avoid super long names
+                # XXX TODO: this is a bit hacky, can we do this more robustly? XXX
+                for suffix in ['_ants-def0', '_groupwise_iter0', '_groupwise_iter1', '_groupwise_iter2', '_groupwise_iter3', '_groupwise_iter4', '_groupwise_iter5', '_groupwise_iter6', '_groupwise_iter7', '_groupwise_iter8', '_groupwise_iter9', '_groupwise_iter10']:
+                    img_name = img_name.replace(suffix, '')
+                
+                output_filename = f"{img_name}_groupwise_iter{iteration}"
+                
+                # Get the appropriate template for this slice (local or global)
+                slice_template_fname = template_fnames[idx]
+                
+                future = executor.submit(
+                    run_groupwise_registration_single,  # Use wrapper function
+                    idx,
+                    full_img_name,
+                    slice_template_fname,  # Per-slice template (local or global)
+                    iteration,
+                    output_dir,
+                    scaling_factor,
+                    ignore_affine,
+                    ignore_res,
+                    output_filename  # Pass the filename
+                )
+                futures[future] = idx
+            
+            # Collect results as they complete
+            for future in as_completed(futures):
+                result = future.result()
+                idx = result['idx']
+                results[idx] = result
+                
+                if result['success']:
+                    # logging.info(f"✓ Slice {idx} registered")
+                    logging.warning(f'Slice {idx} registration successful')
+                else:
+                    logging.warning(f"Slice {idx} failed: {result['error']}")
+        
+        # Check for failures
+        failed = [r['idx'] for r in results if not r['success']]
+        if failed:
+            raise RuntimeError(f"Registration failed for slices: {failed}")
+        
+        # Load newly registered images IN ORDER
+        logging.warning("Loading registered images for next iteration...")
+        registered_images = []
+        new_images_fnames = []
+        
+        for result in results:
+            reg_img = nib.load(result['reg']['transformed_source'])
+            registered_images.append(reg_img)
+            new_images_fnames.append(result['reg']['transformed_source'])
+        
+        # CRITICAL: Update images and filenames for next iteration
+        images = registered_images
+        images_fnames = new_images_fnames
+        
+        logging.warning(f"Completed groupwise iteration {iteration+1}/{iterations}")
+        logging.warning(f"  Mean template variation: {mean_data.std():.3f}")
+        
+        # Diagnostic: compute template difference from previous iteration
+        if iteration > 0:
+            prev_template_fname = os.path.join(output_dir, f"groupwise_iter{iteration-1}_template.nii.gz")
+            if os.path.exists(prev_template_fname):
+                prev_template = nib.load(prev_template_fname).get_fdata()
+                template_diff = np.abs(mean_data - prev_template).mean()
+                template_max_diff = np.abs(mean_data - prev_template).max()
+                logging.warning(f"  Template change from iter {iteration-1}: mean={template_diff:.4f}, max={template_max_diff:.4f}")
+    
+    logging.warning("=" * 80)
+    logging.warning("Groupwise optimization complete")
+    logging.warning(f"Saved {len(all_image_fnames)} deformation maps")
+    logging.warning("=" * 80)
+    
+    return images
+
+
+def groupwise_stack_optimization_embedded_antspy_ORIG(output_dir, subject, all_image_fnames, 
+                                reg_level_tag, iterations=5, idxs_to_compute_mean='all', zfill_num=4,
+                                scaling_factor=64, use_resolution_in_registration=True, max_workers=1,
+                                weighted_mask_template=True, distance_sigma=5,
+                                use_deformed_source_after_iteration=2):
+    """
+    Jointly optimize all slices together to enforce smooth transitions.
+    Converts ANTs warps to nighres-compatible deformation maps.
+    
+    Parameters:
+    -----------
+    use_deformed_source_after_iteration : int or None
+        If None (default), always use original images as registration source.
+        If an integer N, use original images for iterations 0 to N-1, then switch
+        to using the previously deformed images for iterations N and beyond.
+        This allows large initial corrections followed by gentle refinement.
+        Example: use_deformed_source_after_iteration=2 means iterations 0,1 use
+        originals, iterations 2+ use deformed files from previous iteration.
+    """
+    import copy
+    import nibabel as nib
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    import numpy as np
+    import os
+    
+    logging.warning("=" * 80)
+    logging.warning("Starting groupwise optimization")
+    logging.warning("=" * 80)
+    
+    if idxs_to_compute_mean is None:
+        idxs_to_compute_mean = [0]
+    elif idxs_to_compute_mean == 'all':
+        idxs_to_compute_mean = list(range(iterations))
+    else:
+        if isinstance(idxs_to_compute_mean, int):
+            idxs_to_compute_mean = [idxs_to_compute_mean]
+        if 0 not in idxs_to_compute_mean:
+            idxs_to_compute_mean.append(0)
+            
     # Determine ignore parameters based on use_resolution_in_registration
     if use_resolution_in_registration:
         ignore_res = False
@@ -1869,20 +2317,29 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         
         # Compute current mean template from CURRENT images
         # we need to weight inside the loop for each img
-        mean_data = np.mean([img.get_fdata() for img in images], axis=0)
-        mean_template = nib.Nifti1Image(mean_data, affine=images[0].affine, header=images[0].header)
+        # 
         
         # compute a shared mask to restrict registration to the tissue-containing areas, this can help with convergence and reduce expansion/contraction
-        # masks = []
-        # for _img in images:
-        #     data = _img.get_fdata()
-        #     mask = generate_tissue_mask(data)
-        #     masks.append(mask)
-        
-        # # Compute intersection of all masks (areas that are tissue in ALL images)
-        # common_mask = np.logical_and.reduce(masks)
+        if iteration in idxs_to_compute_mean:
+            logging.warning("  Computing mean template with weighted mask...")
+            if weighted_mask_template:
+                mean_data = np.zeros_like(images[0].get_fdata())
+                sum_weights = np.zeros_like(images[0].get_fdata())
+                for _img in images:
+                    data = _img.get_fdata()
+                    mask = generate_tissue_mask(data)
+                    w_mask = compute_signed_distance_weight(mask, sigma=distance_sigma)
+                    mean_data += w_mask * data
+                    sum_weights += w_mask
+                    
+                mean_data = np.divide(mean_data, sum_weights, where=sum_weights > 1e-6, out=mean_data)
+                weights_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_weights.nii.gz")
+                weights_template = nib.Nifti1Image(sum_weights, affine=images[0].affine, header=images[0].header)
+                weights_template.to_filename(weights_fname)
+            else:
+                mean_data = np.mean([img.get_fdata() for img in images], axis=0)
 
-        # mask_weighting = compute_signed_distance_weight(common_mask, sigma=15.0)
+            mean_template = nib.Nifti1Image(mean_data, affine=images[0].affine, header=images[0].header)
 
         # Save template to disk for parallel workers
         template_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_template.nii.gz")
@@ -1893,11 +2350,19 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         # Parallel registration of all slices
         results = [None] * len(images_fnames)
         
+        # Determine which source files to use for this iteration
+        if use_deformed_source_after_iteration is None or iteration < use_deformed_source_after_iteration:
+            source_fnames = orig_images_fnames
+            logging.warning(f"  Using ORIGINAL images as registration source")
+        else:
+            source_fnames = images_fnames
+            logging.warning(f"  Using DEFORMED images from previous iteration as registration source")
+        
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {}
             
             # Submit all groupwise registrations in parallel,
-            for idx, full_img_name in enumerate(orig_images_fnames):
+            for idx, full_img_name in enumerate(source_fnames):
                 # Extract img_name for THIS slice
                 img_name = os.path.basename(full_img_name).split('.')[0]
                 # Remove any previous suffixes to avoid super long names
@@ -1954,6 +2419,15 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         
         logging.warning(f"Completed groupwise iteration {iteration+1}/{iterations}")
         logging.warning(f"  Mean template variation: {mean_data.std():.3f}")
+        
+        # Diagnostic: compute template difference from previous iteration
+        if iteration > 0:
+            prev_template_fname = os.path.join(output_dir, f"groupwise_iter{iteration-1}_template.nii.gz")
+            if os.path.exists(prev_template_fname):
+                prev_template = nib.load(prev_template_fname).get_fdata()
+                template_diff = np.abs(mean_data - prev_template).mean()
+                template_max_diff = np.abs(mean_data - prev_template).max()
+                logging.warning(f"  Template change from iter {iteration-1}: mean={template_diff:.4f}, max={template_max_diff:.4f}")
     
     logging.warning("=" * 80)
     logging.warning("Groupwise optimization complete")
@@ -1961,7 +2435,6 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
     logging.warning("=" * 80)
     
     return images
-
 
 def run_groupwise_registration_single(idx, full_img_name, template_fname, iteration, 
                                      output_dir, scaling_factor, ignore_affine, ignore_res,
@@ -1978,61 +2451,65 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
         
         # reg = nighres.registration.embedded_antspy_2d_multi(
         
-        reg = embedded_antspy_2d_multi(
-            source_images=[full_img_name],
-            target_images=[template_fname],
-            run_rigid=False,
-            rigid_iterations=5000,
-            run_affine=False,
-            run_syn=True,
-            coarse_iterations=40,
-            medium_iterations=20,
-            fine_iterations=10,
-            scaling_factor=scaling_factor,
-            cost_function='MutualInformation', #MutualInformation
-            interpolation='Linear',
-            regularization='VeryHigh', #new for our version
-            convergence=1e-6,
-            ignore_affine=ignore_affine,
-            ignore_orient=True, 
-            ignore_res=ignore_res,
-            save_data=True, 
-            overwrite=True,
-            output_dir=output_dir,
-            file_name=output_filename
-        )
+        with tempfile.TemporaryDirectory(prefix=f"groupwise_slice_{idx}_") as tmp_output_dir:
         
-        # reg = embedded_antspy_groupwise(
-        #     source_images=[full_img_name],
-        #     target_images=[template_fname],
-        #     run_rigid=False,
-        #     run_affine=False,  # Should be False for groupwise
-        #     run_syn=True,
-        #     coarse_iterations=100,
-        #     medium_iterations=50,
-        #     fine_iterations=25,
-        #     syn_gradient_step=0.2,
-        #     syn_flow_sigma=10,
-        #     syn_total_sigma=8,
-        #     scaling_factor=scaling_factor,
-        #     cost_function='MutualInformation',
-        #     interpolation='Linear',
-        #     convergence=1e-6,
-        #     ignore_affine=ignore_affine,
-        #     ignore_orient=True,
-        #     ignore_res=ignore_res,  # FORCE voxel space for deformation maps
-        #     save_data=True,
-        #     overwrite=True,
-        #     output_dir=output_dir,
-        #     file_name=output_filename
-        # )
-        
-        return {
-            'idx': idx,
-            'reg': reg,
-            'success': True,
-            'error': None
-        }
+            with working_directory(tmp_output_dir):
+
+                reg = embedded_antspy_2d_multi(
+                    source_images=[full_img_name],
+                    target_images=[template_fname],
+                    run_rigid=False,
+                    rigid_iterations=5000,
+                    run_affine=False,
+                    run_syn=True,
+                    coarse_iterations=100,
+                    medium_iterations=50,
+                    fine_iterations=25,
+                    scaling_factor=scaling_factor,
+                    cost_function='MutualInformation', #MutualInformation
+                    interpolation='Linear',
+                    regularization='VeryHigh', #new 'VeryHigh' for our version
+                    convergence=1e-6,
+                    ignore_affine=ignore_affine,
+                    ignore_orient=True, 
+                    ignore_res=ignore_res,
+                    save_data=True, 
+                    overwrite=True,
+                    output_dir=output_dir,
+                    file_name=output_filename
+                )
+                
+                # reg = embedded_antspy_groupwise(
+                #     source_images=[full_img_name],
+                #     target_images=[template_fname],
+                #     run_rigid=False,
+                #     run_affine=False,  # Should be False for groupwise
+                #     run_syn=True,
+                #     coarse_iterations=100,
+                #     medium_iterations=50,
+                #     fine_iterations=25,
+                #     syn_gradient_step=0.2,
+                #     syn_flow_sigma=10,
+                #     syn_total_sigma=8,
+                #     scaling_factor=scaling_factor,
+                #     cost_function='MutualInformation',
+                #     interpolation='Linear',
+                #     convergence=1e-6,
+                #     ignore_affine=ignore_affine,
+                #     ignore_orient=True,
+                #     ignore_res=ignore_res,  # FORCE voxel space for deformation maps
+                #     save_data=True,
+                #     overwrite=True,
+                #     output_dir=output_dir,
+                #     file_name=output_filename
+                # )
+                
+                return {
+                    'idx': idx,
+                    'reg': reg,
+                    'success': True,
+                    'error': None
+                }
         
     except Exception as e:
         logging.error(f"Failed processing slice {idx}: {e}")

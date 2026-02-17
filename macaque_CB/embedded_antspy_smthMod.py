@@ -693,7 +693,7 @@ def embedded_antspy_2d_multi(source_images, target_images, image_weights=None,
         if regularization == 'Low': syn_param = [0.2, 1.0, 0.0]
         elif regularization == 'Medium': syn_param = [0.2, 3.0, 0.0]
         elif regularization == 'High': syn_param = [0.2, 4.0, 3.0]
-        elif regularization == 'VeryHigh': syn_param = [0.03, 15.0, 12.0]
+        elif regularization == 'VeryHigh': syn_param = [0.03, 10.0, 8.0] #step size, flow_sigma, total_sigma
         else: syn_param = [0.2, 3.0, 0.0]
 
         args.append('--transform')

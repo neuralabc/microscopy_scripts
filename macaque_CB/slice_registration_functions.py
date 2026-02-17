@@ -2215,6 +2215,31 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         if failed:
             raise RuntimeError(f"Registration failed for slices: {failed}")
         
+        # Determine if we should keep map/invmap files for this iteration
+        # Keep if: using deformed source OR this is the last iteration
+        using_deformed_source = (use_deformed_source_after_iteration is not None and 
+                                  iteration >= use_deformed_source_after_iteration)
+        is_last_iteration = (iteration == iterations - 1)
+        keep_maps = using_deformed_source or is_last_iteration
+        
+        if not keep_maps:
+            # Delete map and invmap files for this iteration (intermediate original-source iterations)
+            logging.warning(f"  Cleaning up intermediate map/invmap files for iteration {iteration}...")
+            for result in results:
+                if result['success'] and result['reg'] is not None:
+                    # Get the base path from transformed_source and derive map/invmap paths
+                    transformed_path = result['reg']['transformed_source']
+                    base_path = transformed_path.replace('_ants-def0.nii.gz', '')
+                    map_path = f"{base_path}_ants-map.nii.gz"
+                    invmap_path = f"{base_path}_ants-invmap.nii.gz"
+                    
+                    for fpath in [map_path, invmap_path]:
+                        if os.path.exists(fpath):
+                            os.remove(fpath)
+                            logging.info(f"    Removed: {os.path.basename(fpath)}")
+        else:
+            logging.warning(f"  Retaining map/invmap files for iteration {iteration} (deformed_source={using_deformed_source}, last_iter={is_last_iteration})")
+        
         # Load newly registered images IN ORDER
         logging.warning("Loading registered images for next iteration...")
         registered_images = []

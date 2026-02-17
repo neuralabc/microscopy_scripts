@@ -1801,6 +1801,28 @@ def groupwise_stack_optimization(output_dir, subject, all_image_fnames,
     
     return images
 
+
+def compute_signed_distance_weight(mask, sigma=15.0):
+    """
+    mask : binary array (1 inside tissue, 0 outside)
+    sigma : controls softness of boundary transition
+    """
+
+    from scipy.ndimage import distance_transform_edt
+    # Distance inside mask
+    dist_inside = distance_transform_edt(mask)
+
+    # Distance outside mask
+    dist_outside = distance_transform_edt(~mask)
+
+    # Signed distance
+    signed_dist = dist_inside - dist_outside
+
+    # Convert to smooth weight (sigmoid)
+    weights = 1.0 / (1.0 + np.exp(-signed_dist / sigma))
+
+    return weights
+    
 def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_fnames, 
                                 reg_level_tag, iterations=5, zfill_num=4,
                                 scaling_factor=64, use_resolution_in_registration=True, max_workers=1):
@@ -1835,15 +1857,33 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
         images.append(nib.load(img_path))
         images_fnames.append(img_path)
     
+
+
+
+
     orig_images_fnames = copy.deepcopy(images_fnames)
     # Iteratively refine to mean template
+
     for iteration in range(iterations): 
         logging.warning(f"Groupwise iteration {iteration+1}/{iterations}")
         
         # Compute current mean template from CURRENT images
+        # we need to weight inside the loop for each img
         mean_data = np.mean([img.get_fdata() for img in images], axis=0)
         mean_template = nib.Nifti1Image(mean_data, affine=images[0].affine, header=images[0].header)
         
+        # compute a shared mask to restrict registration to the tissue-containing areas, this can help with convergence and reduce expansion/contraction
+        # masks = []
+        # for _img in images:
+        #     data = _img.get_fdata()
+        #     mask = generate_tissue_mask(data)
+        #     masks.append(mask)
+        
+        # # Compute intersection of all masks (areas that are tissue in ALL images)
+        # common_mask = np.logical_and.reduce(masks)
+
+        # mask_weighting = compute_signed_distance_weight(common_mask, sigma=15.0)
+
         # Save template to disk for parallel workers
         template_fname = os.path.join(output_dir, f"groupwise_iter{iteration}_template.nii.gz")
         mean_template.to_filename(template_fname)

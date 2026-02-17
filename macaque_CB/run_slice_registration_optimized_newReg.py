@@ -632,7 +632,10 @@ groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fname
                                 zfill_num=4,
                                 scaling_factor=scaling_factor, 
                                 use_resolution_in_registration=use_resolution_in_registration,
-                                max_workers=max_workers)
+                                max_workers=max_workers,
+                                use_deformed_source_after_iteration=4,
+                                use_local_template_after_iteration=3,
+                                local_template_window=5)
 
 
 logging.warning('\t\tGenerating new template')

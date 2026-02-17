@@ -4,15 +4,13 @@ from slice_registration_functions import *
 # file parameters
 subject = 'zefir'
 
-#TODO: potentially carry this through to the nibabel images so that the header and affines are correct
-# tried this quickly and it messed everything up...
+# set the resolution of the input images
 in_plane_res_x = 10 #10 microns per pixel
 in_plane_res_y = 10 #10 microns per pixel
 in_plane_res_z = 50 #slice thickness of 50 microns
 
-zfill_num = 4
+zfill_num = 4 #number of digits to use for zero-filling in file names, e.g. 4 means that slice the first slice will be 0000
 per_slice_template = True #use a median of the slice and adjacent slices to create a slice-specific template for anchoring the registration
-
 use_nonlin_slice_templates = False #use interpolated slices (from registrations of neighbouring 2 slices) as templates for registration, otherwise median
                                     # nonlinear slice templates take a long time and result in very jagged registrations, but may end up being useful for bring slices that are very far out of alignment back in
                                     # currently BROKEN
@@ -30,6 +28,7 @@ mask_zero = False #mask zeros for nighres registrations
 # True: Registration uses physical resolution (ignore_res=False), more physically accurate
 use_resolution_in_registration = True
 
+# scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 # rescale=40
 # rescale=10
@@ -45,14 +44,11 @@ actual_voxel_res = [rescaled_in_plane_res_x, rescaled_in_plane_res_y, in_plane_r
 #if we don't want to set the voxel resolution, we can set it to None and it will be 1x1x1
 voxel_res = actual_voxel_res # defines voxel resolution for output template in microns # registration itself performs much better when we do not specify the res
 
-downsample_parallel = False #True means that we invoke Parallel, but can be much faster when set to False since it skips the Parallel overhead
+downsample_parallel = False #True means that we invoke Parallel, but can be much faster on HPC when set to False since it skips the Parallel overhead
 max_workers = 50 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
 nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice interpolation when use_nonlin_slice_templates = True
 
-# max_workers = 10 #number of parallel workers to run for registration -> registration is slow but not CPU bound on an HPC (192 cores could take ??)
-
-
-
+# setup the output directory for use
 output_dir = f'/tmp/{subject}_sliceReg_optimized_v2_rescale_{rescale}/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with coreg of neighbours
@@ -64,9 +60,9 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 # missing_idxs_to_fill = None
 all_image_fnames = list(_df['file_name'].values)
 
-## for testing XXX
-all_image_fnames = all_image_fnames[0:35] #for testing
-missing_idxs_to_fill = [missing_idxs_to_fill[0]]
+# ## for testing XXX
+# all_image_fnames = all_image_fnames[0:35] #for testing
+# missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -586,7 +582,7 @@ logging.warning("=" * 80)
 # )
 
 groupwise_iterations = 10
-logging.warning(f'scaling factor: {scaling_factor}')
+logging.warning(f'Scaling factor: {scaling_factor}')
 groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fnames, 
                                 reg_level_tag=f'{input_source_file_tag}',
                                 iterations=groupwise_iterations,

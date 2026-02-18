@@ -211,7 +211,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                        run_syn=True, run_rigid=True, previous_target_tag=None, 
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
                        mask_zero=False, include_stack_template=True,regularization='Medium',
-                       voxel_res=None, use_resolution_in_registration=False):
+                       voxel_res=None, use_resolution_in_registration=False,
+                       cost_function='Mattes'):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -317,7 +318,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                 medium_iterations=1000, 
                 fine_iterations=200,  #500 was a bit too aagro
                 scaling_factor=scaling_factor,
-                cost_function='Mattes', #MutualInformation
+                cost_function=cost_function,
                 interpolation='Linear',
                 regularization=regularization,
                 convergence=1e-6,
@@ -767,7 +768,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   target_slice_offset_list=[-1,-2,-3], zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
-                                  regularization='Medium', voxel_res=None, use_resolution_in_registration=False):
+                                  regularization='Medium', voxel_res=None, use_resolution_in_registration=False,
+                                  cost_function='Mattes'):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -805,7 +807,8 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 scaling_factor=scaling_factor, image_weights=image_weights,
                                 retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero, 
                                 regularization=regularization, voxel_res=voxel_res,
-                                use_resolution_in_registration=use_resolution_in_registration)
+                                use_resolution_in_registration=use_resolution_in_registration,
+                                cost_function=cost_function)
             )
         for future in as_completed(futures):
             try:
@@ -1279,7 +1282,7 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 # same, with temporary files
-def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False, cost_function='MutualInformation'):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
             course_iterations=100,
@@ -1292,6 +1295,8 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
         use_resolution_in_registration (bool, optional): If True, registration uses physical resolution (ignore_res=False).
             If False (default), registration works in voxel space (ignore_res=True) for better empirical performance.
             When True, ignore_affine is also set to False to respect affine transformations.
+        cost_function (str, optional): Cost function for registration. Options: 'MutualInformation', 'CrossCorrelation', 'Mattes'.
+            Default is 'MutualInformation'.
     """
     # Determine ignore parameters based on use_resolution_in_registration
     if use_resolution_in_registration:
@@ -1310,7 +1315,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             run_affine=False,
             run_syn=run_syn,
             scaling_factor=scaling_factor,
-            cost_function='MutualInformation',
+            cost_function=cost_function,
             interpolation='Linear',
             regularization='High',
             convergence=1e-6,
@@ -1420,7 +1425,7 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
             }
 
     
-def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
+def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False, cost_function='MutualInformation'):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     
@@ -1428,6 +1433,8 @@ def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX',
         voxel_res (tuple, optional): Voxel resolution in [x, y, z] format (default is None).
         use_resolution_in_registration (bool, optional): If True, registration uses physical resolution (ignore_res=False).
             If False (default), registration works in voxel space for better empirical performance.
+        cost_function (str, optional): Cost function for registration. Options: 'MutualInformation', 'CrossCorrelation', 'Mattes'.
+            Default is 'MutualInformation'.
     Doing only the initial translation step
     """
     #with tempfile.TemporaryDirectory(prefix=f"init_translation_slice_{idx}_") as tmp_output_dir:
@@ -1437,7 +1444,7 @@ def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX',
     #with working_directory(initial_output_dir):
     reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=clean_file_name, 
                  output_dir=initial_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res,
-                 use_resolution_in_registration=use_resolution_in_registration)
+                 use_resolution_in_registration=use_resolution_in_registration, cost_function=cost_function)
                 
                 ## this is what we were doing previously
                 #  nighres.registration.embedded_antspy_2d_multi,source_images=sources, 
@@ -2048,7 +2055,8 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                                 scaling_factor=64, use_resolution_in_registration=True, max_workers=50,
                                 weighted_mask_template=True, distance_sigma=3,
                                 use_deformed_source_after_iteration=4,
-                                local_template_window=5, use_local_template_after_iteration=3):
+                                local_template_window=5, use_local_template_after_iteration=3,
+                                cost_function='MutualInformation'):
     """
     Iteratively register all slices to a mean template using nighres/ANTsPy SyN registration.
     
@@ -2295,7 +2303,8 @@ def groupwise_stack_optimization_embedded_antspy(output_dir, subject, all_image_
                     scaling_factor,
                     ignore_affine,
                     ignore_res,
-                    output_filename  # Pass the filename
+                    output_filename,  # Pass the filename
+                    cost_function
                 )
                 futures[future] = idx
             
@@ -2379,7 +2388,8 @@ def groupwise_stack_optimization_embedded_antspy_ORIG(output_dir, subject, all_i
                                 reg_level_tag, iterations=5, idxs_to_compute_mean='all', zfill_num=4,
                                 scaling_factor=64, use_resolution_in_registration=True, max_workers=1,
                                 weighted_mask_template=True, distance_sigma=5,
-                                use_deformed_source_after_iteration=2):
+                                use_deformed_source_after_iteration=2,
+                                cost_function='MutualInformation'):
     """
     Jointly optimize all slices together to enforce smooth transitions.
     Converts ANTs warps to nighres-compatible deformation maps.
@@ -2508,7 +2518,8 @@ def groupwise_stack_optimization_embedded_antspy_ORIG(output_dir, subject, all_i
                     scaling_factor,
                     ignore_affine,
                     ignore_res,
-                    output_filename  # Pass the filename
+                    output_filename,  # Pass the filename
+                    cost_function
                 )
                 futures[future] = idx
             
@@ -2564,9 +2575,13 @@ def groupwise_stack_optimization_embedded_antspy_ORIG(output_dir, subject, all_i
 
 def run_groupwise_registration_single(idx, full_img_name, template_fname, iteration, 
                                      output_dir, scaling_factor, ignore_affine, ignore_res,
-                                     output_filename):
+                                     output_filename, cost_function='MutualInformation'):
     """
     Worker function to run groupwise registration for a single slice.
+    
+    Parameters:
+        cost_function (str, optional): Cost function for registration. Options: 'MutualInformation', 'CrossCorrelation', 'Mattes'.
+            Default is 'MutualInformation'.
     """
     import logging
     import os
@@ -2592,7 +2607,7 @@ def run_groupwise_registration_single(idx, full_img_name, template_fname, iterat
                     medium_iterations=50,
                     fine_iterations=25,
                     scaling_factor=scaling_factor,
-                    cost_function='MutualInformation', #MutualInformation
+                    cost_function=cost_function,
                     interpolation='Linear',
                     regularization='VeryHigh', #new 'VeryHigh' for our version
                     convergence=1e-6,
@@ -3277,7 +3292,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                                 per_slice_template=False,missing_idxs_to_fill=None, slice_template_type='median'
                                 ,nonlin_interp_max_workers=1,scaling_factor=64,voxel_res=None,mask_zero=False,
                                 sigma_multiplier=None, strength_multiplier=None, across_slice_smoothing_sigma=0,
-                                match_histograms_to_slice=None): #XXX change back to 185 when ready
+                                match_histograms_to_slice=None, missing_slice_interp_method='intermediate_nonlin_mean'): #XXX change back to 185 when ready
     """
     TODO: update with better version of ChatGPT! 
     Generate a stack of registered slices and create either a single median template or template image for each slice.
@@ -3405,27 +3420,40 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
                 img_name = os.path.basename(img_name).split('.')[0]
                 reg = output_dir+subject+'_'+str(img_idx).zfill(zfill_num)+'_'+img_name+img_tail
                 missing_fnames_current.append(reg)
-            try:
+            if missing_slice_interp_method == 'intermediate_nonlin_mean':
+                try:
+                    missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
+                                                                        missing_fnames_post,
+                                                                        method='intermediate_nonlin_mean',
+                                                                        nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                                        scaling_factor=scaling_factor,mask_zero=mask_zero,
+                                                                        sigma_multiplier=sigma_multiplier, 
+                                                                        strength_multiplier=strength_multiplier,
+                                                                        voxel_res=voxel_res)
+                except Exception as e:
+                    logging.warning(f"Error during interpolation of missing slices: {e}")
+                    logging.warning("  --> Falling back to simple mean interpolation for missing slices.")
+                    missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
+                                                                        missing_fnames_post,
+                                                                        method='mean',
+                                                                        nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                                        scaling_factor=scaling_factor,mask_zero=mask_zero,
+                                                                        sigma_multiplier=sigma_multiplier, 
+                                                                        strength_multiplier=strength_multiplier,
+                                                                        voxel_res=voxel_res)
+            elif missing_slice_interp_method == 'mean':
                 missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
-                                                                    missing_fnames_post,
-                                                                    method='intermediate_nonlin_mean',
-                                                                    nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                    scaling_factor=scaling_factor,mask_zero=mask_zero,
-                                                                    sigma_multiplier=sigma_multiplier, 
-                                                                    strength_multiplier=strength_multiplier,
-                                                                    voxel_res=voxel_res)
-            except Exception as e:
-                logging.warning(f"Error during interpolation of missing slices: {e}")
-                logging.warning("  --> Falling back to simple mean interpolation for missing slices.")
-                missing_slices_interpolated = generate_missing_slices(missing_fnames_pre,
-                                                                    missing_fnames_post,
-                                                                    method='mean',
-                                                                    nonlin_interp_max_workers=nonlin_interp_max_workers,
-                                                                    scaling_factor=scaling_factor,mask_zero=mask_zero,
-                                                                    sigma_multiplier=sigma_multiplier, 
-                                                                    strength_multiplier=strength_multiplier,
-                                                                    voxel_res=voxel_res)
-            
+                                                    missing_fnames_post,
+                                                    method='mean',
+                                                    nonlin_interp_max_workers=nonlin_interp_max_workers,
+                                                    scaling_factor=scaling_factor,mask_zero=mask_zero,
+                                                    sigma_multiplier=sigma_multiplier, 
+                                                    strength_multiplier=strength_multiplier,
+                                                    voxel_res=voxel_res)
+            else:
+                logging.warning(f"Unknown missing slice interpolation method: {missing_slice_interp_method}. Skipping interpolation of missing slices.")
+                #XXX this breaks
+
             #now we can fill the slices with the interpolated value
             for idx,missing_idx in enumerate(missing_idxs_to_fill):
                 if not os.path.exists(output_dir + "missing_slices/"):

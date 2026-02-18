@@ -45,7 +45,7 @@ def compute_signed_distance_weight(img, img_smth_gauss=1, pctl_cut=90, closing_r
     passed_nbimage = False
     if isinstance(img,str):
         passed_nbimage = True
-        img = np.load(img)
+        img = nb.load(img)
         affine = img.affine
         header = img.header
         d = img.get_fdata()

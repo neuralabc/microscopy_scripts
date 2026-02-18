@@ -33,7 +33,7 @@ def signed_distance(mask):
     
     return sdf
 
-def compute_signed_distance_weight(img, img_smth_gauss=1, pctl_cut=90, closing_radius=5, smooth_weights_sigma=15, min_object_size=100):
+def compute_signed_distance_weight(img, img_smth_gauss=1, pctl_cut=90, closing_radius=5, smooth_weights_sigma=15, min_object_size=100, clip=10):
     """
     Docstring for compute_signed_distance_weight
     
@@ -41,7 +41,12 @@ def compute_signed_distance_weight(img, img_smth_gauss=1, pctl_cut=90, closing_r
     :param img_smth_gauss: Description
     :param pctl_cut: Description
     :param closing_radius: Description
+    :param smooth_weights_sigma: Description
+    :param min_object_size: Description
+    :param clip: Clip the final weights to this value (both positive and negative), or None to no clip
+                 ONLY applies when no smoothing of weights is applied (smooth_weights_sigma is None)
     """
+
     passed_nbimage = False
     if isinstance(img,str):
         passed_nbimage = True
@@ -79,6 +84,8 @@ def compute_signed_distance_weight(img, img_smth_gauss=1, pctl_cut=90, closing_r
         weights = 1.0 / (1.0 + np.exp(-sdf / smooth_weights_sigma))
     else:
         weights = sdf
+        if clip is not None:
+            weights = np.clip(weights, -clip, clip)
     
     #convert back to a nifti image if the input was a nifti image
     if passed_nbimage:

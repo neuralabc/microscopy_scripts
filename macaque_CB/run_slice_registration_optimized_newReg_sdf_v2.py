@@ -1,5 +1,6 @@
 """Application script for running 2D slice registration on specific dataset."""
 from slice_registration_functions import *
+from slice_structure_identification_functions import compute_signed_distance_weight
 
 # file parameters
 subject = 'zefir'
@@ -27,6 +28,7 @@ mask_zero = False #mask zeros for nighres registrations
 #                  Output images will have the specified voxel resolution in their headers, but registration itself does not use this information
 # True: Registration uses physical resolution (ignore_res=False), more physically accurate
 use_resolution_in_registration = True
+use_signed_distance_weighting_for_registration = True #compute signed distance function from the images and use this image for registration
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
@@ -49,8 +51,16 @@ max_workers = 50 #number of parallel workers to run for registration -> registra
 nonlin_interp_max_workers = 50 #number of workers to use for nonlinear slice interpolation when use_nonlin_slice_templates = True
 
 # setup the output directory for use
-output_dir = f'/tmp/{subject}_sliceReg_optimized_v2_rescale_{rescale}_sdf/'
+if use_signed_distance_weighting_for_registration:
+    sdf_tag = '_sdf'
+    cost_function = 'CrossCorrelation'
+else:
+    sdf_tag = ''
+    cost_function = 'MutualInformation'
+
+output_dir = f'/tmp/{subject}_sliceReg_optimized_v2_rescale_{rescale}{sdf_tag}/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
+
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with coreg of neighbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
 ## _df = pd.read_csv('/data/data_drive/Macaque_CB/processing/results_from_cell_counts/all_TP_image_idxs_file_lookup.csv')
@@ -152,11 +162,20 @@ for idx,img_orig in enumerate(all_image_fnames):
              
             nifti = nibabel.Nifti1Image(slice_img,affine=affine,header=header)
             nifti.update_header()
+
+            if use_signed_distance_weighting_for_registration:
+                # we want a "raw" SDF , then we need to turn off the sigma weights and clip the values to focus on the boundary
+                # we also need to change the similarity metric, since we have directionality
+                if rescale == 5:
+                    sdf = compute_signed_distance_weight(nifti, img_smth_gauss=1,pctl_cut=95, closing_radius=2, smooth_weights_sigma=None, min_object_size=100, clip=10)
+                elif rescale == 40:
+                    sdf = compute_signed_distance_weight(nifti, img_smth_gauss=0,pctl_cut=95, closing_radius=0, smooth_weights_sigma=None, min_object_size=5, clip=10)
+                nift = sdf
             save_volume(output,nifti)
 
         else:
             print('\tfile '+slice_name+' not found')
-            
+
 # 1. Find largeest image as baseline
 print('1. Identifying the largest image to set image size')
 logger.warning('1. Identifying the largest image to set image size')
@@ -228,24 +247,22 @@ image_list = []
 for idx,img_name in enumerate(all_image_fnames):
     img_name = os.path.basename(img_name).split('.')[0]
     #TODO: changed for SDF
-    # image_list.append(output_dir+f'/init_translation_slice_{str(idx).zfill(zfill_num)}/'+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+'_coreg0nl_ants-def0.nii.gz')
-    image_list.append(output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+'_coreg0nl_sdf_ants-def0.nii.gz')
-
+    image_list.append(output_dir+f'/init_translation_slice_{str(idx).zfill(zfill_num)}/'+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+'_coreg0nl_ants-def0.nii.gz')
+    
 #compute the scaling factors for sharpening from the entire dataset
 sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_dataset(image_list)
 
 # deformation files are expected to be in the root output dir directly, so lets copy them here
-#TODO: removed for SDF
-# for _file in image_list:
-#     # _def_file = os.path.basename(_file)
-#     shutil.copy2(_file,output_dir)
+for _file in image_list:
+    # _def_file = os.path.basename(_file)
+    shutil.copy2(_file,output_dir)
 
 
 expected_stack_name = f'{subject}_coreg0nl_stack.nii.gz'
 if os.path.isfile(os.path.join(output_dir,expected_stack_name)):
     logging.warning(f'Initial stack exists, skipping the first generate_stack_and_template \n{expected_stack_name}')
 else:
-    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl_sdf',
+    template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag='coreg0nl',
                                            missing_idxs_to_fill=missing_idxs_to_fill,
                                            scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
                                            sigma_multiplier=sigma_multiplier,strength_multiplier=strength_multiplier,
@@ -263,7 +280,7 @@ anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterati
 anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
 for iter in range(num_cascade_iterations):
     if iter == 0:
-        input_source_file_tag = 'coreg0nl_sdf'
+        input_source_file_tag = 'coreg0nl'
         apply_smoothing_kernel = 0
 
     else:
@@ -399,7 +416,7 @@ for iter in range(num_reg_iterations):
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 
-                                    input_source_file_tag='coreg0nl_sdf', 
+                                    input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg1nl'+iter_tag,
                                     image_weights=image_weights_win1,
                                     run_syn=run_syn,
@@ -412,7 +429,7 @@ for iter in range(num_reg_iterations):
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
-                                    input_source_file_tag='coreg0nl_sdf', 
+                                    input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg2nl'+iter_tag,
                                     image_weights=image_weights_win2,
                                     run_syn=run_syn,
@@ -469,7 +486,7 @@ for iter in range(num_reg_iterations):
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 
-                                    input_source_file_tag='coreg0nl_sdf', 
+                                    input_source_file_tag='coreg0nl', 
                                     previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win1'+iter_tag,
                                     image_weights=image_weights_win1,
@@ -485,7 +502,7 @@ for iter in range(num_reg_iterations):
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
-                                    input_source_file_tag='coreg0nl_sdf',
+                                    input_source_file_tag='coreg0nl',
                                     previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win2'+iter_tag,
                                     image_weights=image_weights_win2,

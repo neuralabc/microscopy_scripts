@@ -3911,7 +3911,7 @@ def downsample_image_ORIG(image, rescale, prop_pad=.2):
         downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)
         return downsampled_image
 
-def downsample_image(image, rescale, prop_pad=0.2):
+def downsample_image(image, rescale, prop_pad=0.2, pad_value=0):
     """
     Downsamples a 2D image by summing over rescale x rescale blocks. Pad by prop_pad 
     before downsampling to ensure all data is within the final registered image(s).
@@ -3920,6 +3920,7 @@ def downsample_image(image, rescale, prop_pad=0.2):
     - image (numpy.ndarray): Input 2D image to downsample.
     - rescale (int): Factor by which to downsample.
     - prop_pad (float): Proportion of padding to add to each border of the image before downsampling.
+    - pad_value (float): Value to use for padding (default 0).
 
     Returns:
     - numpy.ndarray: Downsampled image with summed values in blocks.
@@ -3938,7 +3939,7 @@ def downsample_image(image, rescale, prop_pad=0.2):
 
         # Pad each side equally
         total_pad_width = ((pad0, pad0), (pad1, pad1))
-        padded_image = numpy.pad(image, pad_width=total_pad_width, mode='constant', constant_values=0)
+        padded_image = numpy.pad(image, pad_width=total_pad_width, mode='constant', constant_values=pad_value)
 
         # Adjust padding to ensure divisibility by rescale
         padded_size0, padded_size1 = padded_image.shape
@@ -3947,7 +3948,7 @@ def downsample_image(image, rescale, prop_pad=0.2):
 
         padded_image = numpy.pad(padded_image, 
                             ((0, extra_pad_width[0]), (0, extra_pad_width[1])),
-                            mode='constant', constant_values=0)
+                            mode='constant', constant_values=pad_value)
 
         # Downsample by block summing
         downsampled_image = block_reduce(padded_image, block_size=(rescale, rescale), func=numpy.sum)

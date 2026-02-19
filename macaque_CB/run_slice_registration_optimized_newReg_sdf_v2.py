@@ -1,6 +1,6 @@
 """Application script for running 2D slice registration on specific dataset."""
 from slice_registration_functions import *
-from slice_structure_identification_functions import compute_signed_distance_weight
+from slice_structure_identification_functions import compute_signed_distance_weight_filled
 
 # file parameters
 subject = 'zefir'
@@ -55,10 +55,14 @@ if use_signed_distance_weighting_for_registration:
     sdf_tag = '_sdf'
     cost_function = 'CrossCorrelation'
     missing_slice_interp_method = 'mean'
+    sdf_clip_val = 10
+    cortical_detail_weight = .3 #.5 equally balances cortical ribbon with inside definition of structure (.5 is equal weighting, .3 is good for stability I think!), smaller values preserve more of the interior holes but may lose some cortical detail, larger values preserve more of the cortical detail but may lose definition in the interior (since it will blend with the filled SDF)
 else:
     sdf_tag = ''
     cost_function = 'MutualInformation'
     missing_slice_interp_method = 'intermediate_nonlin_mean'
+    sdf_clip_val = 0
+    cortical_detail_weight = None #not used when not SDF
 
 output_dir = f'/tmp/{subject}_sliceReg_optimized_v2_rescale_{rescale}{sdf_tag}/'
 _df = pd.read_csv('/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
@@ -73,8 +77,8 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 all_image_fnames = list(_df['file_name'].values)
 
 # ## for testing XXX
-# all_image_fnames = all_image_fnames[0:35] #for testing
-# missing_idxs_to_fill = [missing_idxs_to_fill[0]]
+all_image_fnames = all_image_fnames[0:35] #for testing
+missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -144,7 +148,7 @@ for idx,img_orig in enumerate(all_image_fnames):
             if downsample_parallel:
                 slice_img = downsample_image_parallel(slice_img, rescale, n_jobs=-1)
             else:
-                slice_img = downsample_image(slice_img, rescale)
+                slice_img = downsample_image(slice_img, rescale, pad_value=-1*sdf_clip_val) #this sets the pad value to be a negative value outside of the range of the data, which is important for the SDF computation later, since we want to make sure that the padding does not create artificial boundaries that will impact the SDF computation (since it will create a boundary between the data and the padding)
 
             ## original approach, below, was v. slow
             ## alternative using 2d convolution to preserve cell counts (meaning is still the same here)
@@ -170,9 +174,13 @@ for idx,img_orig in enumerate(all_image_fnames):
                 # we also need to change the similarity metric, since we have directionality
                 logging.warning(f'Computing SDF for registration: {output}')
                 if rescale == 5:
-                    sdf = compute_signed_distance_weight(nifti, img_smth_gauss=1,pctl_cut=95, closing_radius=2, smooth_weights_sigma=None, min_object_size=100, clip=10)
+                    sdf = compute_signed_distance_weight_filled(nifti, img_smth_gauss=1,pctl_cut=95, closing_radius=2, 
+                                                         smooth_weights_sigma=None, min_object_size=100, clip=sdf_clip_val,
+                                                         cortical_detail_weight=cortical_detail_weight)
                 elif rescale == 40:
-                    sdf = compute_signed_distance_weight(nifti, img_smth_gauss=0,pctl_cut=95, closing_radius=0, smooth_weights_sigma=None, min_object_size=5, clip=10)
+                    sdf = compute_signed_distance_weight_filled(nifti, img_smth_gauss=0,pctl_cut=95, closing_radius=0, 
+                                                         smooth_weights_sigma=None, min_object_size=5, clip=sdf_clip_val,
+                                                         cortical_detail_weight=cortical_detail_weight)
                 save_volume(output.replace('.nii.gz','_orig.nii.gz'),nifti)    #save the original as _orig
                 nifti = sdf #save the sdf
             save_volume(output,nifti)
@@ -354,7 +362,7 @@ if template_not_generated:
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
-num_reg_iterations = 5
+num_reg_iterations = 2 
 run_rigid = True
 run_syn = True
 regularization ='Medium'

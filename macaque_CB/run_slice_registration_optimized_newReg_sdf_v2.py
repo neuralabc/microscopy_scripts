@@ -250,7 +250,7 @@ else:
             
             futures.append(
                 executor.submit(
-                    do_initial_translation_reg, sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res, use_resolution_in_registration=use_resolution_in_registration, cost_function=cost_function
+                    do_initial_translation_reg, sources, targets, root_dir=output_dir, file_name=output, slice_idx_str=str(idx).zfill(zfill_num), scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res, use_resolution_in_registration=use_resolution_in_registration, cost_function=cost_function, default_value=-1*sdf_clip_val
                 )    
             )
 
@@ -339,7 +339,8 @@ for iter in range(num_cascade_iterations):
                                     zfill_num=zfill_num, input_source_file_tag=input_source_file_tag, 
                                     reg_level_tag=iter_tag, previous_target_tag=None, run_syn=True,
                                     scaling_factor=scaling_factor, voxel_res=voxel_res,
-                                    use_resolution_in_registration=use_resolution_in_registration) #,mask_zero=mask_zero)
+                                    use_resolution_in_registration=use_resolution_in_registration,
+                                    default_value=-1*sdf_clip_val) #,mask_zero=mask_zero)
 
         #we generate the template even if we do not run the registration, since we need to have a template for the next iteration
         template = generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=zfill_num,reg_level_tag=iter_tag,
@@ -443,7 +444,8 @@ for iter in range(num_reg_iterations):
                                     retain_reg_mappings=retain_reg_mappings,
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
-                                    cost_function=cost_function)
+                                    cost_function=cost_function,
+                                    default_value=-1*sdf_clip_val)
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
@@ -457,7 +459,8 @@ for iter in range(num_reg_iterations):
                                     retain_reg_mappings=retain_reg_mappings,
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
-                                    cost_function=cost_function)
+                                    cost_function=cost_function,
+                                    default_value=-1*sdf_clip_val)
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -517,7 +520,8 @@ for iter in range(num_reg_iterations):
                                     retain_reg_mappings=retain_reg_mappings,
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
-                                    cost_function=cost_function)
+                                    cost_function=cost_function,
+                                    default_value=-1*sdf_clip_val)
         
         run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
@@ -534,7 +538,8 @@ for iter in range(num_reg_iterations):
                                     retain_reg_mappings=retain_reg_mappings,
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
-                                    cost_function=cost_function)
+                                    cost_function=cost_function,
+                                    default_value=-1*sdf_clip_val)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         

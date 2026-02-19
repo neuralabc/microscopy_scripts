@@ -770,7 +770,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                   reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None, 
                                   scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
                                   regularization='Medium', voxel_res=None, use_resolution_in_registration=False,
-                                  cost_function='Mattes'):
+                                  cost_function='Mattes', default_value=0):
     """
     Perform parallel registration for a stack of slices by iteratively aligning each slice with its neighbors.
 
@@ -809,7 +809,7 @@ def run_parallel_coregistrations(output_dir, subject, all_image_fnames, template
                                 retain_reg_mappings=retain_reg_mappings,mask_zero=mask_zero, 
                                 regularization=regularization, voxel_res=voxel_res,
                                 use_resolution_in_registration=use_resolution_in_registration,
-                                cost_function=cost_function)
+                                cost_function=cost_function, default_value=default_value)
             )
         for future in as_completed(futures):
             try:
@@ -985,7 +985,8 @@ def run_cascading_coregistrations(output_dir, subject, all_image_fnames, anchor_
 def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anchor_slice_idx = None,
                                   missing_idxs_to_fill = None, zfill_num=4, input_source_file_tag='coreg0nl', 
                                   reg_level_tag='coreg1nl', previous_target_tag=None, run_syn=True, scaling_factor=64,
-                                  mask_zero=False, voxel_res=None, use_resolution_in_registration=False):
+                                  mask_zero=False, voxel_res=None, use_resolution_in_registration=False,
+                                  default_value=0):
     """
     Cascading slice-based registration using ANTsPy directly (v2).
     
@@ -1099,7 +1100,8 @@ def run_cascading_coregistrations_v2(output_dir, subject, all_image_fnames, anch
             output = all_image_fnames_new[moving_idx]
             # previously was just do_reg()
             reg_aligned = do_reg_ants([source], [target], file_name=output, output_dir=temp_out_dir, run_syn=run_syn, 
-                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res)
+                                scaling_factor=scaling_factor,mask_zero=mask_zero, voxel_res=voxel_res,
+                                default_value=default_value)
             save_volume(output, load_volume(reg_aligned['transformed_source']) ,overwrite_file=True)
             logging.warning(f"\t\tCascade registration version 2 completed for slice {src_idxs[idx]}.")
 
@@ -1337,7 +1339,8 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
 
 def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
                 file_name='reg', output_dir='./', scaling_factor=64,
-                mask_zero=False, syn_flow_sigma=3, syn_total_sigma=0, voxel_res=None):
+                mask_zero=False, syn_flow_sigma=3, syn_total_sigma=0, voxel_res=None,
+                default_value=0):
 
     """
     Perform registration between source and target images using ANTsPy,
@@ -1390,7 +1393,8 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
             transformed_source = ants.apply_transforms(
                 fixed=target_img,
                 moving=source_img,
-                transformlist=rigid_transform
+                transformlist=rigid_transform,
+                defaultvalue=default_value
             )
         else:
             logging.info("Skipping rigid registration.")
@@ -1407,7 +1411,12 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
                 outprefix=file_name + '_syn_'
             )
             syn_transform = syn_reg['fwdtransforms']
-            transformed_source = syn_reg['warpedmovout']
+            transformed_source = ants.apply_transforms(
+                fixed=target_img,
+                moving=transformed_source,
+                transformlist=syn_transform,
+                defaultvalue=default_value
+            )
         else:
             logging.info("Skipping SyN registration.")
 

@@ -4055,6 +4055,517 @@ def generate_slice_mask(img_data, threshold_pct = 5):
     mask[img_data>=cut] = True
     return mask.astype(int)
 
+## =====================================================================================
+## Transform composition and application utilities for nighres-style coordinate mappings
+## =====================================================================================
+
+def compose_coordinate_mappings_2d(mapping1, mapping2):
+    """
+    Compose two 2D pull-style coordinate mappings into a single mapping.
+    
+    Given two nighres-style coordinate mappings (absolute voxel coordinate maps):
+      - mapping1: A→B  (for each pixel in B, stores (x,y) coordinates in A)
+      - mapping2: B→C  (for each pixel in C, stores (x,y) coordinates in B)
+    
+    Returns composed mapping A→C: for each pixel in C, stores (x,y) coordinates in A.
+    
+    The composition samples mapping1 at the coordinates specified by mapping2:
+        M_composed[x,y] = M1( M2[x,y] )
+    
+    This interpolates the (smooth) coordinate fields, NOT the image. The image is only
+    ever sampled once when the final composed mapping is applied.
+    
+    Parameters
+    ----------
+    mapping1 : nibabel.Nifti1Image
+        First coordinate mapping (A→B). Shape (nx, ny, 2) where last dim is [X, Y].
+    mapping2 : nibabel.Nifti1Image
+        Second coordinate mapping (B→C). Shape (mx, my, 2) where last dim is [X, Y].
+    
+    Returns
+    -------
+    nibabel.Nifti1Image
+        Composed coordinate mapping (A→C). Shape (mx, my, 2), uses mapping2's affine/header.
+    """
+    from scipy.ndimage import map_coordinates
+    
+    m1_data = mapping1.get_fdata()  # shape (nx, ny, 2)
+    m2_data = mapping2.get_fdata()  # shape (mx, my, 2)
+    
+    # M2 gives us coordinates in B-space (the domain of M1)
+    # We need to sample M1's X-channel and Y-channel at those B-space coordinates
+    b_coords_x = m2_data[:, :, 0]  # shape (mx, my) — row indices into M1
+    b_coords_y = m2_data[:, :, 1]  # shape (mx, my) — col indices into M1
+    
+    # Use 'nearest' mode to clamp out-of-bounds coordinates (matches nighres 'closest' padding)
+    composed_x = map_coordinates(m1_data[:, :, 0], [b_coords_x, b_coords_y], 
+                                  order=1, mode='nearest')
+    composed_y = map_coordinates(m1_data[:, :, 1], [b_coords_x, b_coords_y], 
+                                  order=1, mode='nearest')
+    
+    composed = numpy.stack((composed_x, composed_y), axis=-1)
+    return nibabel.Nifti1Image(composed, mapping2.affine, mapping2.header)
+
+
+def compose_mapping_chain_2d(mapping_files):
+    """
+    Compose a chain of 2D coordinate mappings into a single mapping.
+    
+    Given an ordered list of mapping files [M1, M2, ..., Mn] where:
+      - M1: A→B
+      - M2: B→C
+      - ...
+      - Mn: (N-1)→N
+    
+    Returns composed mapping A→N.
+    
+    Mappings are composed left-to-right: M_composed = M1 ∘ M2 ∘ ... ∘ Mn
+    (read as "first apply Mn to get coordinates, then look up in Mn-1, ..., then M1").
+    
+    Parameters
+    ----------
+    mapping_files : list of str
+        Ordered list of paths to coordinate mapping NIfTI files.
+    
+    Returns
+    -------
+    nibabel.Nifti1Image
+        Single composed coordinate mapping from source of M1 to target of Mn.
+    """
+    if len(mapping_files) == 0:
+        raise ValueError("At least one mapping file is required.")
+    
+    composed = load_volume(mapping_files[0])
+    
+    for i in range(1, len(mapping_files)):
+        next_map = load_volume(mapping_files[i])
+        composed = compose_coordinate_mappings_2d(composed, next_map)
+    
+    return composed
+
+
+def apply_coordinate_mapping_2d(source_image, mapping, interpolation='linear', 
+                                 fill_value=0):
+    """
+    Apply a 2D pull-style coordinate mapping to an image.
+    
+    For each pixel (x,y) in the output space, samples the source image at the
+    coordinates stored in mapping[x,y,:]. The image is sampled exactly once,
+    avoiding multiple-interpolation artifacts.
+    
+    Parameters
+    ----------
+    source_image : nibabel.Nifti1Image
+        Image to transform. Shape (nx, ny) or (nx, ny, 1).
+    mapping : nibabel.Nifti1Image
+        Coordinate mapping. Shape (mx, my, 2) where last dim is [X, Y].
+        Stores absolute voxel coordinates in the source image.
+    interpolation : {'linear', 'nearest'}
+        Interpolation method (default 'linear').
+    fill_value : float
+        Value for out-of-bounds pixels (default 0).
+    
+    Returns
+    -------
+    nibabel.Nifti1Image
+        Transformed image in the target space. Shape (mx, my) or (mx, my, 1).
+        Uses mapping's affine/header.
+    """
+    from scipy.ndimage import map_coordinates
+    
+    src_data = source_image.get_fdata()
+    map_data = mapping.get_fdata()
+    
+    # Handle singleton z-dimension
+    squeeze_z = False
+    if src_data.ndim == 3 and src_data.shape[2] == 1:
+        src_data = src_data[:, :, 0]
+        squeeze_z = True
+    
+    order = 1 if interpolation == 'linear' else 0
+    
+    coords_x = map_data[:, :, 0]
+    coords_y = map_data[:, :, 1]
+    
+    result = map_coordinates(src_data, [coords_x, coords_y], 
+                              order=order, mode='constant', cval=fill_value)
+    
+    if squeeze_z:
+        result = result[:, :, numpy.newaxis]
+    
+    return nibabel.Nifti1Image(result, mapping.affine, mapping.header)
+
+
+def get_transform_chain_for_level(fwd_maps_df, target_level, 
+                                   groupwise_first_chained_iter=3):
+    """
+    Determine the ordered chain of mapping columns needed to bring an image
+    from original space to the specified target registration level.
+    
+    The pipeline structure is:
+      - coreg0nl: original → template-aligned (always the first step)
+      - rigsyn levels: coreg0nl → rigsyn (single mapping, since parallel coregs 
+        always register FROM coreg0nl)
+      - groupwise levels: coreg0nl → final_rigsyn → groupwise_iter3 → iter4 → ... → iterN
+        (groupwise iters 0-2 have maps deleted; iter3 maps from final_rigsyn;
+         iter4+ chain incrementally)
+    
+    Parameters
+    ----------
+    fwd_maps_df : pd.DataFrame
+        Forward maps dataframe (from the CSV). Columns include 'slice_idx', 
+        'slice_name', and transform-level columns containing mapping file paths.
+    target_level : str
+        Target column name from the CSV (e.g., 'coreg0nl', 'rigsyn_iter1_win12',
+        'groupwise_iter9').
+    groupwise_first_chained_iter : int, default=3
+        First groupwise iteration that has retained maps (matching 
+        use_deformed_source_after_iteration - 1 from the registration).
+    
+    Returns
+    -------
+    list of str
+        Ordered list of column names to chain.
+    
+    Raises
+    ------
+    ValueError
+        If the target level is not found or required intermediate levels are missing.
+    """
+    import re
+    
+    all_cols = [c for c in fwd_maps_df.columns if c not in ['slice_idx', 'slice_name']]
+    
+    if target_level not in all_cols:
+        raise ValueError(f"Target level '{target_level}' not found in forward maps CSV. "
+                         f"Available levels: {sorted(all_cols)}")
+    
+    if target_level == 'coreg0nl':
+        return ['coreg0nl']
+    
+    elif target_level.startswith('groupwise_iter'):
+        # Extract target iteration number
+        match = re.search(r'groupwise_iter(\d+)', target_level)
+        if not match:
+            raise ValueError(f"Cannot parse groupwise iteration from '{target_level}'")
+        target_iter = int(match.group(1))
+        
+        if target_iter < groupwise_first_chained_iter:
+            raise ValueError(
+                f"Groupwise iteration {target_iter} does not have retained maps. "
+                f"First available chained iteration is {groupwise_first_chained_iter}."
+            )
+        
+        # Find the final rigsyn column (highest iteration win12)
+        rigsyn_win12_cols = [c for c in all_cols 
+                             if 'rigsyn' in c and 'win12' in c and 'groupwise' not in c]
+        if not rigsyn_win12_cols:
+            # Fall back to any rigsyn column
+            rigsyn_cols = [c for c in all_cols 
+                           if 'rigsyn' in c and 'groupwise' not in c]
+            if not rigsyn_cols:
+                raise ValueError("No rigsyn columns found in forward maps CSV.")
+            final_rigsyn_col = sorted(rigsyn_cols)[-1]
+        else:
+            final_rigsyn_col = sorted(rigsyn_win12_cols)[-1]
+        
+        chain = ['coreg0nl', final_rigsyn_col]
+        
+        # Add groupwise iterations from first chained to target
+        for i in range(groupwise_first_chained_iter, target_iter + 1):
+            col = f'groupwise_iter{i}'
+            if col not in all_cols:
+                raise ValueError(
+                    f"Required groupwise column '{col}' not found. "
+                    f"Available: {[c for c in all_cols if 'groupwise' in c]}"
+                )
+            chain.append(col)
+        
+        return chain
+    
+    else:
+        # rigsyn-level target: chain is [coreg0nl, target]
+        return ['coreg0nl', target_level]
+
+
+def _apply_transforms_single_slice(idx, orig_file, mapping_files, output_file, 
+                                    interpolation='linear', fill_value=0,
+                                    save_composed_mapping=False):
+    """
+    Worker function: compose mappings and apply to a single original slice.
+    
+    Parameters
+    ----------
+    idx : int
+        Slice index (for progress tracking).
+    orig_file : str
+        Path to the _orig.nii.gz file.
+    mapping_files : list of str
+        Ordered list of mapping file paths to compose.
+    output_file : str
+        Path for the output deformed image.
+    interpolation : str
+        Interpolation method ('linear' or 'nearest').
+    fill_value : float
+        Value for out-of-bounds pixels.
+    save_composed_mapping : bool
+        If True, also save the composed mapping as a NIfTI.
+    
+    Returns
+    -------
+    dict
+        Result dictionary with 'idx', 'success', 'output_file', 'error'.
+    """
+    try:
+        # Load original image
+        orig = load_volume(orig_file)
+        
+        # Compose the mapping chain
+        composed_map = compose_mapping_chain_2d(mapping_files)
+        
+        # Apply to original image
+        deformed = apply_coordinate_mapping_2d(orig, composed_map, 
+                                                interpolation=interpolation,
+                                                fill_value=fill_value)
+        
+        # Save
+        save_volume(output_file, deformed, overwrite_file=True)
+        
+        if save_composed_mapping:
+            map_output = output_file.replace('.nii.gz', '_composed-map.nii.gz')
+            save_volume(map_output, composed_map, overwrite_file=True)
+        
+        logging.warning(f"    Slice {idx}: transforms applied successfully → {os.path.basename(output_file)}")
+        return {'idx': idx, 'success': True, 'output_file': output_file, 'error': None}
+    
+    except Exception as e:
+        logging.error(f"    Slice {idx}: transform application failed: {e}")
+        return {'idx': idx, 'success': False, 'output_file': None, 'error': str(e)}
+
+
+def apply_transforms_to_original_slices(output_dir, subject, all_image_fnames,
+                                         forward_maps_csv, target_level,
+                                         zfill_num=4, max_workers=10,
+                                         interpolation='linear', fill_value=0,
+                                         keep_deformed_slices=True,
+                                         generate_stack=True,
+                                         save_composed_mappings=False,
+                                         groupwise_first_chained_iter=3,
+                                         orig_suffix='_orig',
+                                         voxel_res=None,
+                                         missing_idxs_to_fill=None):
+    """
+    Apply the full registration transform chain to original (non-SDF) slice images.
+    
+    Reads the forward maps CSV, determines the transform chain for the requested
+    target level, composes all mappings into a single mapping per slice, and applies
+    it to the _orig.nii.gz images. This warps the original tissue images into any
+    registered space with a single interpolation step.
+    
+    Parameters
+    ----------
+    output_dir : str
+        Registration output directory.
+    subject : str
+        Subject identifier.
+    all_image_fnames : list of str
+        Original image filenames (same list used in registration).
+    forward_maps_csv : str
+        Path to the forward maps CSV file.
+    target_level : str
+        Target registration level column name from the forward maps CSV
+        (e.g., 'coreg0nl', 'rigsyn_iter1_win12', 'groupwise_iter9').
+    zfill_num : int, default=4
+        Zero-padding width for slice indices.
+    max_workers : int, default=10
+        Number of parallel workers.
+    interpolation : {'linear', 'nearest'}
+        Interpolation method for the final image sampling (default 'linear').
+    fill_value : float, default=0
+        Value for out-of-bounds pixels.
+    keep_deformed_slices : bool, default=True
+        If True, save individual deformed slice NIfTI files.
+    generate_stack : bool, default=True
+        If True, generate a 3D stack of all deformed slices.
+    save_composed_mappings : bool, default=False
+        If True, save the composed mapping for each slice.
+    groupwise_first_chained_iter : int, default=3
+        First groupwise iteration with retained maps.
+    orig_suffix : str, default='_orig'
+        Suffix identifying the original (non-SDF) files (before .nii.gz).
+    voxel_res : list or None
+        Voxel resolution for the output stack affine.
+    missing_idxs_to_fill : list of int or None
+        Slice indices with missing data (excluded from stack generation).
+    
+    Returns
+    -------
+    str or None
+        Path to the 3D stack file if generate_stack=True, else None.
+    """
+    import re
+    
+    logging.warning("=" * 80)
+    logging.warning(f"APPLYING TRANSFORMS TO ORIGINAL IMAGES → target: {target_level}")
+    logging.warning("=" * 80)
+    
+    # Read forward maps CSV
+    fwd_df = pd.read_csv(forward_maps_csv)
+    
+    # Determine the transform chain
+    chain_cols = get_transform_chain_for_level(fwd_df, target_level, 
+                                                groupwise_first_chained_iter)
+    logging.warning(f"  Transform chain: {' → '.join(chain_cols)}")
+    
+    # Build output subdirectory
+    orig_output_dir = os.path.join(output_dir, f'orig_in_{target_level}')
+    os.makedirs(orig_output_dir, exist_ok=True)
+    
+    # Prepare per-slice jobs
+    jobs = []
+    for idx, img_name in enumerate(all_image_fnames):
+        img_basename = os.path.basename(img_name).split('.')[0]
+        
+        # Find the _orig.nii.gz file
+        orig_file = os.path.join(output_dir, 
+                                  f"{subject}_{str(idx).zfill(zfill_num)}_{img_basename}{orig_suffix}.nii.gz")
+        
+        if not os.path.isfile(orig_file):
+            logging.warning(f"  Slice {idx}: orig file not found: {orig_file}, skipping")
+            continue
+        
+        # Collect mapping files for this slice from the CSV
+        slice_row = fwd_df[fwd_df['slice_idx'] == idx]
+        if slice_row.empty:
+            logging.warning(f"  Slice {idx}: not found in forward maps CSV, skipping")
+            continue
+        
+        mapping_files = []
+        skip_slice = False
+        for col in chain_cols:
+            map_file = slice_row[col].values[0]
+            if pd.isna(map_file) or not os.path.isfile(str(map_file)):
+                logging.warning(f"  Slice {idx}: missing mapping for '{col}' "
+                              f"(file: {map_file}), skipping this slice")
+                skip_slice = True
+                break
+            mapping_files.append(str(map_file))
+        
+        if skip_slice:
+            continue
+        
+        output_file = os.path.join(orig_output_dir, 
+                                    f"{subject}_{str(idx).zfill(zfill_num)}_{img_basename}"
+                                    f"{orig_suffix}_in_{target_level}.nii.gz")
+        
+        jobs.append({
+            'idx': idx,
+            'orig_file': orig_file,
+            'mapping_files': mapping_files,
+            'output_file': output_file,
+        })
+    
+    logging.warning(f"  Processing {len(jobs)} slices with {len(chain_cols)} transforms each")
+    
+    # Run in parallel
+    results = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {}
+        for job in jobs:
+            future = executor.submit(
+                _apply_transforms_single_slice,
+                job['idx'], job['orig_file'], job['mapping_files'], job['output_file'],
+                interpolation=interpolation, fill_value=fill_value,
+                save_composed_mapping=save_composed_mappings
+            )
+            futures[future] = job['idx']
+        
+        for future in as_completed(futures):
+            results.append(future.result())
+    
+    # Report results
+    successes = [r for r in results if r['success']]
+    failures = [r for r in results if not r['success']]
+    logging.warning(f"  Completed: {len(successes)} succeeded, {len(failures)} failed")
+    if failures:
+        for f in failures:
+            logging.warning(f"    FAILED slice {f['idx']}: {f['error']}")
+    
+    # Optionally generate a 3D stack
+    stack_file = None
+    if generate_stack and len(successes) > 0:
+        logging.warning("  Generating 3D stack from deformed original images...")
+        
+        # Sort results by index
+        successes_sorted = sorted(successes, key=lambda r: r['idx'])
+        
+        # Load first image to get dimensions
+        first_img = load_volume(successes_sorted[0]['output_file'])
+        shape_2d = first_img.get_fdata().shape[:2]
+        n_slices = len(all_image_fnames)
+        
+        stack_data = numpy.zeros((shape_2d[0], shape_2d[1], n_slices), dtype=numpy.float32)
+        
+        # Fill in available slices
+        success_idxs = {r['idx'] for r in successes_sorted}
+        for result in successes_sorted:
+            img = load_volume(result['output_file'])
+            img_data = img.get_fdata()
+            if img_data.ndim == 3:
+                img_data = img_data[:, :, 0]
+            stack_data[:, :, result['idx']] = img_data
+        
+        # Handle missing slices by interpolation (mean of neighbors)
+        all_missing = set(range(n_slices)) - success_idxs
+        if missing_idxs_to_fill is not None:
+            all_missing = all_missing | set(missing_idxs_to_fill)
+        
+        for miss_idx in sorted(all_missing):
+            # Find nearest valid neighbors
+            prev_idx = miss_idx - 1
+            next_idx = miss_idx + 1
+            while prev_idx >= 0 and prev_idx not in success_idxs:
+                prev_idx -= 1
+            while next_idx < n_slices and next_idx not in success_idxs:
+                next_idx += 1
+            
+            if prev_idx >= 0 and next_idx < n_slices:
+                stack_data[:, :, miss_idx] = (stack_data[:, :, prev_idx] + 
+                                               stack_data[:, :, next_idx]) / 2.0
+            elif prev_idx >= 0:
+                stack_data[:, :, miss_idx] = stack_data[:, :, prev_idx]
+            elif next_idx < n_slices:
+                stack_data[:, :, miss_idx] = stack_data[:, :, next_idx]
+        
+        # Create stack NIfTI with proper affine
+        if voxel_res is not None:
+            affine = create_affine(stack_data.shape, voxel_res=voxel_res)
+        else:
+            affine = first_img.affine
+        
+        stack_img = nibabel.Nifti1Image(stack_data, affine)
+        stack_file = os.path.join(orig_output_dir, 
+                                   f"{subject}{orig_suffix}_in_{target_level}_stack.nii.gz")
+        save_volume(stack_file, stack_img, overwrite_file=True)
+        logging.warning(f"  Stack saved: {stack_file}")
+    
+    # Optionally clean up individual slice files
+    if not keep_deformed_slices and generate_stack:
+        logging.warning("  Cleaning up individual deformed slice files...")
+        for result in successes:
+            if os.path.exists(result['output_file']):
+                os.remove(result['output_file'])
+            composed_map_file = result['output_file'].replace('.nii.gz', '_composed-map.nii.gz')
+            if os.path.exists(composed_map_file):
+                os.remove(composed_map_file)
+    
+    logging.warning("=" * 80)
+    logging.warning(f"Transform application complete: {target_level}")
+    logging.warning("=" * 80)
+    
+    return stack_file
+
+
 ## output logger
 class StreamToLogger:
     """Redirect `print` statements to the logger."""

@@ -77,8 +77,8 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 all_image_fnames = list(_df['file_name'].values)
 
 # ## for testing XXX
-all_image_fnames = all_image_fnames[0:35] #for testing
-missing_idxs_to_fill = [missing_idxs_to_fill[0]]
+# all_image_fnames = all_image_fnames[0:35] #for testing
+# missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
 print(f'Output directory: {output_dir}')
@@ -808,3 +808,53 @@ if num_fwd_maps != num_inv_maps:
         logging.warning(f"    Columns with forward maps only (no inverse column): {fwd_only_cols}")
     if inv_only_cols:
         logging.warning(f"    Columns with inverse maps only (no forward column): {inv_only_cols}")
+
+
+# ==================================================================================
+# STEP: Apply transforms to original (non-SDF) images
+# ==================================================================================
+# This section projects the _orig.nii.gz files (raw tissue images before SDF conversion)
+# into the final registered spaces by composing and applying the forward coordinate mappings.
+# The image is only interpolated once regardless of how many transforms are chained.
+#
+# User-configurable parameters:
+#   - apply_transforms_to_orig: enable/disable this step
+#   - orig_target_levels: list of target registration levels to project into
+#   - keep_deformed_orig_slices: whether to keep individual deformed slice files
+#   - generate_orig_stack: whether to generate a 3D stack of the deformed originals
+#   - orig_interpolation: interpolation method ('linear' or 'nearest')
+#   - orig_fill_value: fill value for out-of-bounds pixels
+#   - save_composed_orig_mappings: whether to save the composed mapping per slice
+
+apply_transforms_to_orig = True and use_signed_distance_weighting_for_registration  # only makes sense when SDF was used (otherwise _orig == registered images)
+orig_target_levels = [f'groupwise_iter{groupwise_iterations-1}']  # project into the final groupwise space; add more levels to project into multiple spaces
+keep_deformed_orig_slices = False      # True: keep individual slice files, False: only keep the stack
+generate_orig_stack = True             # True: generate a 3D stack NIfTI
+orig_interpolation = 'linear'          # 'linear' or 'nearest'
+orig_fill_value = 0                    # fill value for out-of-bounds pixels
+save_composed_orig_mappings = False    # True: save the single composed mapping per slice (useful for debugging)
+groupwise_first_chained_iter = 3       # must match use_deformed_source_after_iteration - 1 from groupwise registration
+
+if apply_transforms_to_orig:
+    for target_level in orig_target_levels:
+        logging.warning(f"Projecting original images into '{target_level}' space")
+        stack_file = apply_transforms_to_original_slices(
+            output_dir=output_dir,
+            subject=subject,
+            all_image_fnames=all_image_fnames,
+            forward_maps_csv=fwd_csv_path,
+            target_level=target_level,
+            zfill_num=zfill_num,
+            max_workers=max_workers,
+            interpolation=orig_interpolation,
+            fill_value=orig_fill_value,
+            keep_deformed_slices=keep_deformed_orig_slices,
+            generate_stack=generate_orig_stack,
+            save_composed_mappings=save_composed_orig_mappings,
+            groupwise_first_chained_iter=groupwise_first_chained_iter,
+            orig_suffix='_orig',
+            voxel_res=voxel_res,
+            missing_idxs_to_fill=missing_idxs_to_fill,
+        )
+        if stack_file:
+            logging.warning(f"Original image stack in '{target_level}' space: {stack_file}")

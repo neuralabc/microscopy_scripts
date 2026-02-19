@@ -17,9 +17,41 @@ from scipy.ndimage import gaussian_filter, laplace
 from scipy.stats import trim_mean
 from skimage.exposure import match_histograms
 import math
-from nighres.io import load_volume, save_volume
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from embedded_antspy_smthMod import embedded_antspy_2d_multi
+
+
+def load_volume(volume):
+    """Lightweight replacement for `nighres.io.load_volume` using nibabel.
+
+    Accepts a filename or a nibabel SpatialImage and returns a nibabel image.
+    """
+    if isinstance(volume, nibabel.spatialimages.SpatialImage):
+        return volume
+    if isinstance(volume, str):
+        return nibabel.load(volume)
+    raise TypeError(f"Unsupported volume type for load_volume: {type(volume)}")
+
+
+def save_volume(filename, volume, overwrite_file=True):
+    """Lightweight replacement for `nighres.io.save_volume` using nibabel.
+
+    Parameters:
+        filename (str): Output NIfTI path.
+        volume: nibabel image or filename to load.
+        overwrite_file (bool): If False and file exists, does nothing.
+    """
+    out_dir = os.path.dirname(filename)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+    if (not overwrite_file) and os.path.isfile(filename):
+        return filename
+    if isinstance(volume, str):
+        volume = nibabel.load(volume)
+    if not isinstance(volume, nibabel.spatialimages.SpatialImage):
+        raise TypeError(f"Unsupported volume type for save_volume: {type(volume)}")
+    nibabel.save(volume, filename)
+    return filename
 
 # code by @pilou, using nighres; adapted, modularized, extended, and parallelized registrations by @csteele
 ## Potential list of todo's
@@ -441,7 +473,6 @@ def embedded_antspy_groupwise(
     import os
     import math
     from glob import glob
-    from nighres.io import load_volume, save_volume
     
     print('\nCustom Embedded ANTs Groupwise Registration')
     print(f'  SyN parameters: gradient_step={syn_gradient_step}, flow_sigma={syn_flow_sigma}, total_sigma={syn_total_sigma}')
@@ -1698,13 +1729,13 @@ def generate_missing_slices(missing_fnames_pre,missing_fnames_post,current_fname
         # Load pre and post images
         pre_slices = []
         for img_fname in missing_fnames_pre:
-            img_data = nighres.io.load_volume(img_fname).get_fdata()
+            img_data = load_volume(img_fname).get_fdata()
             pre_slices.append(img_data)
         pre_slices = numpy.stack(pre_slices, axis=-1)
 
         post_slices = []
         for img_fname in missing_fnames_post:
-            img_data = nighres.io.load_volume(img_fname).get_fdata()
+            img_data = load_volume(img_fname).get_fdata()
             post_slices.append(img_data)
         post_slices = numpy.stack(post_slices, axis=-1)
 
@@ -3400,7 +3431,7 @@ def generate_stack_and_template(output_dir,subject,all_image_fnames,zfill_num=4,
         for idx,img_name in enumerate(all_image_fnames):
             img_name = os.path.basename(img_name).split('.')[0]
             reg = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+img_tail
-            stack.append(nighres.io.load_volume(reg).get_fdata())
+            stack.append(load_volume(reg).get_fdata())
 
         img = numpy.stack(stack,axis=-1)
 
@@ -3676,9 +3707,9 @@ def compute_MI_for_slice(idx, img_name, output_dir, subject, template_tail, out_
     slice1_path = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag1_tail + '_ants-def0.nii.gz'
     slice2_path = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag2_tail + '_ants-def0.nii.gz'
     
-    curr1 = nighres.io.load_volume(slice1_path).get_fdata()
-    curr2 = nighres.io.load_volume(slice2_path).get_fdata()
-    curr = nighres.io.load_volume(template_path).get_fdata()
+    curr1 = load_volume(slice1_path).get_fdata()
+    curr2 = load_volume(slice2_path).get_fdata()
+    curr = load_volume(template_path).get_fdata()
     
     # Flatten the images
     curr1_flat = curr1.flatten()
@@ -3804,9 +3835,9 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, te
             slice1 = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag1_tail+'_ants-def0.nii.gz'
             slice2 = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag2_tail+'_ants-def0.nii.gz'
         
-            curr1 = nighres.io.load_volume(slice1).get_fdata()
-            curr2 = nighres.io.load_volume(slice2).get_fdata()
-            curr = nighres.io.load_volume(template).get_fdata()
+            curr1 = load_volume(slice1).get_fdata()
+            curr2 = load_volume(slice2).get_fdata()
+            curr = load_volume(template).get_fdata()
             
             # p1,v1 = numpy.histogram(curr1.flatten(), bins=100, density=True)
             # p2,v2 = numpy.histogram(curr2.flatten(), bins=100, density=True)

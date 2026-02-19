@@ -166,7 +166,7 @@ size= 0
 for idx,img in enumerate(all_image_fnames):
     img = os.path.basename(img).split('.')[0]
     nifti = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img+'.nii.gz'
-    shape = nighres.io.load_volume(nifti).header.get_data_shape()
+    shape = nibabel.load(nifti).header.get_data_shape()
     
     if shape[0]*shape[1]>size:
         size = shape[0]*shape[1]
@@ -181,7 +181,7 @@ print(f"\tUsing the following image as the template for size: {template}")
 #we back-compute this from nighres approach, use a factor of 5 (vox_2_factor_multiplier) to relate resolution to shrinks (nd at least 5 datapoints per dimension)
 vox_2_factor_multiplier = 5
 initial_scaling_factor = 128
-shape = nighres.io.load_volume(template).header.get_data_shape()
+shape = nibabel.load(template).header.get_data_shape()
 shape_min = min(shape)
 n_scales = math.ceil(math.log(initial_scaling_factor)/math.log(2.0)) #initially set this v. large, then we choose the ones that will fit
 smooth=[]

@@ -827,7 +827,7 @@ if num_fwd_maps != num_inv_maps:
 #   - save_composed_orig_mappings: whether to save the composed mapping per slice
 
 apply_transforms_to_orig = True and use_signed_distance_weighting_for_registration  # only makes sense when SDF was used (otherwise _orig == registered images)
-orig_target_levels = [f'groupwise_iter{groupwise_iterations-1}']  # project into the final groupwise space; add more levels to project into multiple spaces
+orig_target_levels = [f'rigsyn_iter1_win12'] #,f'groupwise_iter{groupwise_iterations-1}']  # project into the final groupwise space; add more levels to project into multiple spaces
 keep_deformed_orig_slices = False      # True: keep individual slice files, False: only keep the stack
 generate_orig_stack = True             # True: generate a 3D stack NIfTI
 orig_interpolation = 'linear'          # 'linear' or 'nearest'

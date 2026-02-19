@@ -261,7 +261,8 @@ def embedded_antspy_2d_multi(source_images, target_images, image_weights=None,
 					mask_zero=False,
 					ignore_affine=False, ignore_orient=False, ignore_res=False,
                     save_data=False, overwrite=False, output_dir=None,
-                    file_name=None):
+                    file_name=None,
+                    default_value=0):
     """ Embedded ANTSpy Registration 2D Multi-contrasts
 
     Runs the rigid and/or Symmetric Normalization (SyN) algorithm of ANTs and
@@ -791,6 +792,8 @@ def embedded_antspy_2d_multi(source_images, target_images, image_weights=None,
         at.append(targets[idx].get_filename())
         at.append('--interpolation')
         at.append(interpolation)
+        at.append('--default-value')
+        at.append(str(default_value))
         for idx2,transform in enumerate(forward):
             if flag[idx2]:
                 at.append('--transform')

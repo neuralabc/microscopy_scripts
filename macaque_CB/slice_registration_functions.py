@@ -212,7 +212,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                        scaling_factor=64, image_weights=None, retain_reg_mappings=False,
                        mask_zero=False, include_stack_template=True,regularization='Medium',
                        voxel_res=None, use_resolution_in_registration=False,
-                       cost_function='Mattes'):
+                       cost_function='Mattes', default_value=0):
     """
     Register a single slice in a stack to its neighboring slices based on specified offsets.
 
@@ -306,7 +306,7 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
         
         with working_directory(tmp_output_dir):
             # Configure registration based on use_resolution_in_registration setting
-            coreg_output = nighres.registration.embedded_antspy_2d_multi(
+            coreg_output = embedded_antspy_2d_multi(
                 source_images=sources,
                 target_images=targets,
                 image_weights=image_weights_ordered,
@@ -328,7 +328,8 @@ def coreg_single_slice_orig(idx, output_dir, subject, img, all_image_fnames, tem
                 ignore_res=ignore_res,
                 save_data=True, 
                 overwrite=False,
-                file_name=output
+                file_name=output,
+                default_value=default_value
             )
     
     # Clean up unnecessary files
@@ -1282,7 +1283,7 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 # same, with temporary files
-def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False, cost_function='MutualInformation'):
+def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', output_dir='./', scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False, cost_function='MutualInformation', default_value=0):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
             course_iterations=100,
@@ -1297,6 +1298,8 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             When True, ignore_affine is also set to False to respect affine transformations.
         cost_function (str, optional): Cost function for registration. Options: 'MutualInformation', 'CrossCorrelation', 'Mattes'.
             Default is 'MutualInformation'.
+        default_value (float, optional): Value to fill background regions where transformed image
+            has no data (default is 0). For SDF images, use -clip_value (e.g., -10).
     """
     # Determine ignore parameters based on use_resolution_in_registration
     if use_resolution_in_registration:
@@ -1308,7 +1311,7 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
     
     with working_directory(output_dir):
         # Configure registration based on use_resolution_in_registration setting
-        reg = nighres.registration.embedded_antspy_2d_multi(
+        reg = embedded_antspy_2d_multi(
             source_images=sources,
             target_images=targets,
             run_rigid=run_rigid,
@@ -1326,7 +1329,8 @@ def do_reg(sources, targets, run_rigid=True, run_syn=False, file_name='XXX', out
             save_data=True, 
             overwrite=True,
             file_name=file_name, 
-            output_dir=output_dir
+            output_dir=output_dir,
+            default_value=default_value
         )
     return reg
 
@@ -1425,7 +1429,8 @@ def do_reg_ants(sources, targets, run_rigid=True, run_syn=False,
             }
 
     
-def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, voxel_res=None, use_resolution_in_registration=False, cost_function='MutualInformation'):
+def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX', slice_idx_str=None, scaling_factor=64, mask_zero=False, voxel_res=None, 
+                               use_resolution_in_registration=False, cost_function='MutualInformation', default_value=0):
     """
     Helper function to perform registration between source and target images using ANTsPy w/ nighres
     
@@ -1435,6 +1440,8 @@ def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX',
             If False (default), registration works in voxel space for better empirical performance.
         cost_function (str, optional): Cost function for registration. Options: 'MutualInformation', 'CrossCorrelation', 'Mattes'.
             Default is 'MutualInformation'.
+        default_value (float, optional): Value to fill background regions where transformed image
+            has no data (default is 0). For SDF images, use -clip_value (e.g., -10).
     Doing only the initial translation step
     """
     #with tempfile.TemporaryDirectory(prefix=f"init_translation_slice_{idx}_") as tmp_output_dir:
@@ -1444,7 +1451,8 @@ def do_initial_translation_reg(sources, targets, root_dir=None, file_name='XXX',
     #with working_directory(initial_output_dir):
     reg = do_reg(sources, targets, run_rigid=False, run_syn=False, file_name=clean_file_name, 
                  output_dir=initial_output_dir, scaling_factor=scaling_factor, mask_zero=mask_zero, voxel_res=voxel_res,
-                 use_resolution_in_registration=use_resolution_in_registration, cost_function=cost_function)
+                 use_resolution_in_registration=use_resolution_in_registration, cost_function=cost_function,
+                 default_value=default_value)
                 
                 ## this is what we were doing previously
                 #  nighres.registration.embedded_antspy_2d_multi,source_images=sources, 

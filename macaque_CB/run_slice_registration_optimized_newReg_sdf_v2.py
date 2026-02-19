@@ -255,11 +255,9 @@ else:
             )
 
 #generate a list of the current images that are now in the same space
-## TODO: BEFORE HERE DOES NOT HAVE ALL THE FIXES FOR SDF
 image_list = []
 for idx,img_name in enumerate(all_image_fnames):
     img_name = os.path.basename(img_name).split('.')[0]
-    #TODO: changed for SDF
     image_list.append(output_dir+f'/init_translation_slice_{str(idx).zfill(zfill_num)}/'+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+'_coreg0nl_ants-def0.nii.gz')
     
 #compute the scaling factors for sharpening from the entire dataset

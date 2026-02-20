@@ -28,11 +28,11 @@ mask_zero = False #mask zeros for nighres registrations
 #                  Output images will have the specified voxel resolution in their headers, but registration itself does not use this information
 # True: Registration uses physical resolution (ignore_res=False), more physically accurate
 use_resolution_in_registration = True
-use_signed_distance_weighting_for_registration = True #compute signed distance function from the images and use this image for registration
+use_signed_distance_weighting_for_registration = False #compute signed distance function from the images and use this image for registration
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-rescale=40
+# rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
@@ -361,7 +361,7 @@ if template_not_generated:
 
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
-num_reg_iterations = 2 
+num_reg_iterations = 5
 run_rigid = True
 run_syn = True
 regularization ='Medium'
@@ -652,162 +652,166 @@ for iter in range(groupwise_iterations):
 logging.warning(f"Output directory: {output_dir}")
 
 # Generate CSV files with all map.nii.gz files for each slice (separate files for forward and inverse maps)
-logging.warning('\t\tGenerating CSV files with deformation map file paths')
 
-import re  # for parsing iteration numbers from filenames
-fwd_map_data = {}  # forward maps
-inv_map_data = {}  # inverse maps
-
-for idx, img_name in enumerate(all_image_fnames):
-    img_basename = os.path.basename(img_name).split('.')[0]
-    slice_prefix = f"{subject}_{str(idx).zfill(zfill_num)}_{img_basename}"
-    
-    # Find all map files for this slice (handle case where none exist)
-    try:
-        map_files = glob.glob(os.path.join(output_dir, f"**/*{slice_prefix}*map*.nii.gz"), recursive=True)
-        map_files += glob.glob(os.path.join(output_dir, f"{slice_prefix}*map*.nii.gz"))
-        map_files = list(set(map_files))  # Remove duplicates
-    except Exception as e:
-        logging.warning(f"Could not search for map files for slice {idx}: {e}")
-        map_files = []
-    
-    # Initialize slice entries
-    if idx not in fwd_map_data:
-        fwd_map_data[idx] = {'slice_idx': idx, 'slice_name': img_basename}
-    if idx not in inv_map_data:
-        inv_map_data[idx] = {'slice_idx': idx, 'slice_name': img_basename}
-    
-    # Categorize map files by transform type and iteration
-    for map_file in map_files:
-        # Verify file exists before adding
-        if not os.path.isfile(map_file):
-            continue
-            
-        fname = os.path.basename(map_file)
-        
-        # Determine map type (forward or inverse)
-        is_inverse = 'invmap' in fname
-        
-        # Extract iteration/stage info from filename to build column name (without map_type suffix)
-        # Check for groupwise iterations first
-        if 'groupwise_iter' in fname:
-            match = re.search(r'groupwise_iter(\d+)', fname)
-            if match:
-                col_name = f"groupwise_iter{match.group(1)}"
-            else:
-                col_name = f"groupwise"
-        # Check for rigsyn iterations with window variants
-        elif 'coreg12nl_win12' in fname:
-            match = re.search(r'_rigsyn_(\d+)', fname)
-            iter_str = f"_iter{match.group(1)}" if match else ""
-            col_name = f"rigsyn{iter_str}_win12"
-        elif 'coreg12nl_win1' in fname:
-            match = re.search(r'_rigsyn_(\d+)', fname)
-            iter_str = f"_iter{match.group(1)}" if match else ""
-            col_name = f"rigsyn{iter_str}_win1"
-        elif 'coreg12nl_win2' in fname:
-            match = re.search(r'_rigsyn_(\d+)', fname)
-            iter_str = f"_iter{match.group(1)}" if match else ""
-            col_name = f"rigsyn{iter_str}_win2"
-        elif 'coreg12nl' in fname:
-            match = re.search(r'_rigsyn_(\d+)', fname)
-            iter_str = f"_iter{match.group(1)}" if match else ""
-            col_name = f"rigsyn{iter_str}"
-        elif 'coreg1nl' in fname:
-            match = re.search(r'_rigsyn_(\d+)', fname)
-            iter_str = f"_iter{match.group(1)}" if match else ""
-            col_name = f"coreg1nl{iter_str}"
-        elif 'coreg2nl' in fname:
-            match = re.search(r'_rigsyn_(\d+)', fname)
-            iter_str = f"_iter{match.group(1)}" if match else ""
-            col_name = f"coreg2nl{iter_str}"
-        elif 'coreg0nl' in fname:
-            col_name = f"coreg0nl"
-        elif 'cascade' in fname:
-            match = re.search(r'cascade_(\d+)', fname)
-            if match:
-                col_name = f"cascade_iter{match.group(1)}"
-            else:
-                col_name = f"cascade"
-        else:
-            # Try to extract any iteration number from filename
-            iter_match = re.search(r'iter(\d+)', fname)
-            iter_str = f"_iter{iter_match.group(1)}" if iter_match else ""
-            col_name = f"other{iter_str}"
-        
-        # Add to appropriate dictionary
-        if is_inverse:
-            inv_map_data[idx][col_name] = map_file
-        else:
-            fwd_map_data[idx][col_name] = map_file
-
-# Process and save forward maps
-fwd_df = pd.DataFrame.from_dict(fwd_map_data, orient='index')
-fwd_df = fwd_df.sort_values('slice_idx').reset_index(drop=True)
-
-# Remove empty columns for forward maps
-fwd_map_cols = [c for c in fwd_df.columns if c not in ['slice_idx', 'slice_name']]
-fwd_empty_cols = [c for c in fwd_map_cols if fwd_df[c].isna().all()]
-if fwd_empty_cols:
-    logging.warning(f"Removing {len(fwd_empty_cols)} empty forward map columns")
-    fwd_df = fwd_df.drop(columns=fwd_empty_cols)
-
-# Reorder columns
-fwd_cols_sorted = sorted([c for c in fwd_df.columns if c not in ['slice_idx', 'slice_name']])
-fwd_df = fwd_df[['slice_idx', 'slice_name'] + fwd_cols_sorted]
-
-# Save forward maps CSV
 fwd_csv_path = os.path.join(output_dir, f'{subject}_forward_maps.csv')
-fwd_df.to_csv(fwd_csv_path, index=False)
-num_fwd_maps = fwd_df[fwd_cols_sorted].notna().sum().sum() if fwd_cols_sorted else 0
-logging.warning(f"Forward map CSV saved to: {fwd_csv_path}")
-logging.warning(f"  Found {num_fwd_maps} forward maps across {len(fwd_cols_sorted)} transform types")
-
-# Process and save inverse maps
-inv_df = pd.DataFrame.from_dict(inv_map_data, orient='index')
-inv_df = inv_df.sort_values('slice_idx').reset_index(drop=True)
-
-# Remove empty columns for inverse maps
-inv_map_cols = [c for c in inv_df.columns if c not in ['slice_idx', 'slice_name']]
-inv_empty_cols = [c for c in inv_map_cols if inv_df[c].isna().all()]
-if inv_empty_cols:
-    logging.warning(f"Removing {len(inv_empty_cols)} empty inverse map columns")
-    inv_df = inv_df.drop(columns=inv_empty_cols)
-
-# Reorder columns
-inv_cols_sorted = sorted([c for c in inv_df.columns if c not in ['slice_idx', 'slice_name']])
-inv_df = inv_df[['slice_idx', 'slice_name'] + inv_cols_sorted]
-
-# Save inverse maps CSV
 inv_csv_path = os.path.join(output_dir, f'{subject}_inverse_maps.csv')
-inv_df.to_csv(inv_csv_path, index=False)
-num_inv_maps = inv_df[inv_cols_sorted].notna().sum().sum() if inv_cols_sorted else 0
-logging.warning(f"Inverse map CSV saved to: {inv_csv_path}")
-logging.warning(f"  Found {num_inv_maps} inverse maps across {len(inv_cols_sorted)} transform types")
 
-# Diagnostic: identify mismatches between forward and inverse maps
-if num_fwd_maps != num_inv_maps:
-    logging.warning(f"  MISMATCH: {num_fwd_maps} forward maps vs {num_inv_maps} inverse maps")
-    # Find which (slice, transform) pairs have forward but no inverse
-    common_cols = set(fwd_cols_sorted) & set(inv_cols_sorted)
-    for col in common_cols:
-        fwd_has = fwd_df[col].notna()
-        inv_has = inv_df[col].notna()
-        missing_inv = fwd_has & ~inv_has
-        missing_fwd = ~fwd_has & inv_has
-        if missing_inv.any():
-            missing_slices = fwd_df.loc[missing_inv, 'slice_idx'].tolist()
-            logging.warning(f"    Transform '{col}': slices {missing_slices} have forward map but no inverse")
-        if missing_fwd.any():
-            missing_slices = inv_df.loc[missing_fwd, 'slice_idx'].tolist()
-            logging.warning(f"    Transform '{col}': slices {missing_slices} have inverse map but no forward")
-    # Check for columns only in one dataframe
-    fwd_only_cols = set(fwd_cols_sorted) - set(inv_cols_sorted)
-    inv_only_cols = set(inv_cols_sorted) - set(fwd_cols_sorted)
-    if fwd_only_cols:
-        logging.warning(f"    Columns with forward maps only (no inverse column): {fwd_only_cols}")
-    if inv_only_cols:
-        logging.warning(f"    Columns with inverse maps only (no forward column): {inv_only_cols}")
+if os.path.isfile(fwd_csv_path) and os.path.isfile(inv_csv_path):
+    logging.warning('CSV files with deformation map file paths already exist, skipping generation')
+else:
+    logging.warning('\t\tGenerating CSV files with deformation map file paths')
+    import re  # for parsing iteration numbers from filenames
+    fwd_map_data = {}  # forward maps
+    inv_map_data = {}  # inverse maps
+
+    for idx, img_name in enumerate(all_image_fnames):
+        img_basename = os.path.basename(img_name).split('.')[0]
+        slice_prefix = f"{subject}_{str(idx).zfill(zfill_num)}_{img_basename}"
+        
+        # Find all map files for this slice (handle case where none exist)
+        try:
+            map_files = glob.glob(os.path.join(output_dir, f"**/*{slice_prefix}*map*.nii.gz"), recursive=True)
+            map_files += glob.glob(os.path.join(output_dir, f"{slice_prefix}*map*.nii.gz"))
+            map_files = list(set(map_files))  # Remove duplicates
+        except Exception as e:
+            logging.warning(f"Could not search for map files for slice {idx}: {e}")
+            map_files = []
+        
+        # Initialize slice entries
+        if idx not in fwd_map_data:
+            fwd_map_data[idx] = {'slice_idx': idx, 'slice_name': img_basename}
+        if idx not in inv_map_data:
+            inv_map_data[idx] = {'slice_idx': idx, 'slice_name': img_basename}
+        
+        # Categorize map files by transform type and iteration
+        for map_file in map_files:
+            # Verify file exists before adding
+            if not os.path.isfile(map_file):
+                continue
+                
+            fname = os.path.basename(map_file)
+            
+            # Determine map type (forward or inverse)
+            is_inverse = 'invmap' in fname
+            
+            # Extract iteration/stage info from filename to build column name (without map_type suffix)
+            # Check for groupwise iterations first
+            if 'groupwise_iter' in fname:
+                match = re.search(r'groupwise_iter(\d+)', fname)
+                if match:
+                    col_name = f"groupwise_iter{match.group(1)}"
+                else:
+                    col_name = f"groupwise"
+            # Check for rigsyn iterations with window variants
+            elif 'coreg12nl_win12' in fname:
+                match = re.search(r'_rigsyn_(\d+)', fname)
+                iter_str = f"_iter{match.group(1)}" if match else ""
+                col_name = f"rigsyn{iter_str}_win12"
+            elif 'coreg12nl_win1' in fname:
+                match = re.search(r'_rigsyn_(\d+)', fname)
+                iter_str = f"_iter{match.group(1)}" if match else ""
+                col_name = f"rigsyn{iter_str}_win1"
+            elif 'coreg12nl_win2' in fname:
+                match = re.search(r'_rigsyn_(\d+)', fname)
+                iter_str = f"_iter{match.group(1)}" if match else ""
+                col_name = f"rigsyn{iter_str}_win2"
+            elif 'coreg12nl' in fname:
+                match = re.search(r'_rigsyn_(\d+)', fname)
+                iter_str = f"_iter{match.group(1)}" if match else ""
+                col_name = f"rigsyn{iter_str}"
+            elif 'coreg1nl' in fname:
+                match = re.search(r'_rigsyn_(\d+)', fname)
+                iter_str = f"_iter{match.group(1)}" if match else ""
+                col_name = f"coreg1nl{iter_str}"
+            elif 'coreg2nl' in fname:
+                match = re.search(r'_rigsyn_(\d+)', fname)
+                iter_str = f"_iter{match.group(1)}" if match else ""
+                col_name = f"coreg2nl{iter_str}"
+            elif 'coreg0nl' in fname:
+                col_name = f"coreg0nl"
+            elif 'cascade' in fname:
+                match = re.search(r'cascade_(\d+)', fname)
+                if match:
+                    col_name = f"cascade_iter{match.group(1)}"
+                else:
+                    col_name = f"cascade"
+            else:
+                # Try to extract any iteration number from filename
+                iter_match = re.search(r'iter(\d+)', fname)
+                iter_str = f"_iter{iter_match.group(1)}" if iter_match else ""
+                col_name = f"other{iter_str}"
+            
+            # Add to appropriate dictionary
+            if is_inverse:
+                inv_map_data[idx][col_name] = map_file
+            else:
+                fwd_map_data[idx][col_name] = map_file
+
+    # Process and save forward maps
+    fwd_df = pd.DataFrame.from_dict(fwd_map_data, orient='index')
+    fwd_df = fwd_df.sort_values('slice_idx').reset_index(drop=True)
+
+    # Remove empty columns for forward maps
+    fwd_map_cols = [c for c in fwd_df.columns if c not in ['slice_idx', 'slice_name']]
+    fwd_empty_cols = [c for c in fwd_map_cols if fwd_df[c].isna().all()]
+    if fwd_empty_cols:
+        logging.warning(f"Removing {len(fwd_empty_cols)} empty forward map columns")
+        fwd_df = fwd_df.drop(columns=fwd_empty_cols)
+
+    # Reorder columns
+    fwd_cols_sorted = sorted([c for c in fwd_df.columns if c not in ['slice_idx', 'slice_name']])
+    fwd_df = fwd_df[['slice_idx', 'slice_name'] + fwd_cols_sorted]
+
+    # Save forward maps CSV
+    fwd_df.to_csv(fwd_csv_path, index=False)
+    num_fwd_maps = fwd_df[fwd_cols_sorted].notna().sum().sum() if fwd_cols_sorted else 0
+    logging.warning(f"Forward map CSV saved to: {fwd_csv_path}")
+    logging.warning(f"  Found {num_fwd_maps} forward maps across {len(fwd_cols_sorted)} transform types")
+
+    # Process and save inverse maps
+    inv_df = pd.DataFrame.from_dict(inv_map_data, orient='index')
+    inv_df = inv_df.sort_values('slice_idx').reset_index(drop=True)
+
+    # Remove empty columns for inverse maps
+    inv_map_cols = [c for c in inv_df.columns if c not in ['slice_idx', 'slice_name']]
+    inv_empty_cols = [c for c in inv_map_cols if inv_df[c].isna().all()]
+    if inv_empty_cols:
+        logging.warning(f"Removing {len(inv_empty_cols)} empty inverse map columns")
+        inv_df = inv_df.drop(columns=inv_empty_cols)
+
+    # Reorder columns
+    inv_cols_sorted = sorted([c for c in inv_df.columns if c not in ['slice_idx', 'slice_name']])
+    inv_df = inv_df[['slice_idx', 'slice_name'] + inv_cols_sorted]
+
+    # Save inverse maps CSV
+    inv_df.to_csv(inv_csv_path, index=False)
+    num_inv_maps = inv_df[inv_cols_sorted].notna().sum().sum() if inv_cols_sorted else 0
+    logging.warning(f"Inverse map CSV saved to: {inv_csv_path}")
+    logging.warning(f"  Found {num_inv_maps} inverse maps across {len(inv_cols_sorted)} transform types")
+
+    # Diagnostic: identify mismatches between forward and inverse maps
+    if num_fwd_maps != num_inv_maps:
+        logging.warning(f"  MISMATCH: {num_fwd_maps} forward maps vs {num_inv_maps} inverse maps")
+        # Find which (slice, transform) pairs have forward but no inverse
+        common_cols = set(fwd_cols_sorted) & set(inv_cols_sorted)
+        for col in common_cols:
+            fwd_has = fwd_df[col].notna()
+            inv_has = inv_df[col].notna()
+            missing_inv = fwd_has & ~inv_has
+            missing_fwd = ~fwd_has & inv_has
+            if missing_inv.any():
+                missing_slices = fwd_df.loc[missing_inv, 'slice_idx'].tolist()
+                logging.warning(f"    Transform '{col}': slices {missing_slices} have forward map but no inverse")
+            if missing_fwd.any():
+                missing_slices = inv_df.loc[missing_fwd, 'slice_idx'].tolist()
+                logging.warning(f"    Transform '{col}': slices {missing_slices} have inverse map but no forward")
+        # Check for columns only in one dataframe
+        fwd_only_cols = set(fwd_cols_sorted) - set(inv_cols_sorted)
+        inv_only_cols = set(inv_cols_sorted) - set(fwd_cols_sorted)
+        if fwd_only_cols:
+            logging.warning(f"    Columns with forward maps only (no inverse column): {fwd_only_cols}")
+        if inv_only_cols:
+            logging.warning(f"    Columns with inverse maps only (no forward column): {inv_only_cols}")
 
 
 # ==================================================================================
@@ -826,8 +830,8 @@ if num_fwd_maps != num_inv_maps:
 #   - orig_fill_value: fill value for out-of-bounds pixels
 #   - save_composed_orig_mappings: whether to save the composed mapping per slice
 
-apply_transforms_to_orig = True and use_signed_distance_weighting_for_registration  # only makes sense when SDF was used (otherwise _orig == registered images)
-orig_target_levels = [f'rigsyn_iter1_win12'] #,f'groupwise_iter{groupwise_iterations-1}']  # project into the final groupwise space; add more levels to project into multiple spaces
+apply_transforms_to_orig = True # and use_signed_distance_weighting_for_registration  # only makes sense when SDF was used (otherwise _orig == registered images)
+orig_target_levels = [f'rigsyn_iter4_win12'] #,f'groupwise_iter{groupwise_iterations-1}']  # project into the final groupwise space; add more levels to project into multiple spaces
 keep_deformed_orig_slices = False      # True: keep individual slice files, False: only keep the stack
 generate_orig_stack = True             # True: generate a 3D stack NIfTI
 orig_interpolation = 'linear'          # 'linear' or 'nearest'
@@ -852,7 +856,7 @@ if apply_transforms_to_orig:
             generate_stack=generate_orig_stack,
             save_composed_mappings=save_composed_orig_mappings,
             groupwise_first_chained_iter=groupwise_first_chained_iter,
-            orig_suffix='_orig',
+            orig_suffix='_coreg0nl_ants-def0',
             voxel_res=voxel_res,
             missing_idxs_to_fill=missing_idxs_to_fill,
         )

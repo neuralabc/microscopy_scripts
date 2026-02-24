@@ -28,11 +28,11 @@ mask_zero = False #mask zeros for nighres registrations
 #                  Output images will have the specified voxel resolution in their headers, but registration itself does not use this information
 # True: Registration uses physical resolution (ignore_res=False), more physically accurate
 use_resolution_in_registration = True
-use_signed_distance_weighting_for_registration = False #compute signed distance function from the images and use this image for registration
+use_signed_distance_weighting_for_registration = True #compute signed distance function from the images and use this image for registration
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
-rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=40
+# rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
+rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
@@ -55,8 +55,13 @@ if use_signed_distance_weighting_for_registration:
     sdf_tag = '_sdf'
     cost_function = 'CrossCorrelation'
     missing_slice_interp_method = 'mean'
-    sdf_clip_val = 10
     cortical_detail_weight = .3 #.5 equally balances cortical ribbon with inside definition of structure (.5 is equal weighting, .3 is good for stability I think!), smaller values preserve more of the interior holes but may lose some cortical detail, larger values preserve more of the cortical detail but may lose definition in the interior (since it will blend with the filled SDF)
+    if rescale == 40:
+        sdf_clip_val = 10
+    elif rescale == 5:
+        sdf_clip_val = 100
+    else:
+        sdf_clip_val = 50
 else:
     sdf_tag = ''
     cost_function = 'MutualInformation'

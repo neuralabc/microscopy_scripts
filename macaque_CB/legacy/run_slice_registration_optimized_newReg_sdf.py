@@ -30,7 +30,7 @@ use_resolution_in_registration = True
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-rescale=40
+# rescale=40
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution
@@ -325,7 +325,7 @@ if template_not_generated:
                                             scaling_factor=scaling_factor,voxel_res=voxel_res,mask_zero=mask_zero,
                                             across_slice_smoothing_sigma=apply_smoothing_kernel,nonlin_interp_max_workers=nonlin_interp_max_workers)
         template_tag = f'cascade_{num_cascade_iterations-1}'        
-
+'''
 logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
 num_reg_iterations = 5
@@ -602,3 +602,4 @@ for iter in range(groupwise_iterations):
     )
 
 logging.warning(f"Output directory: {output_dir}")
+'''

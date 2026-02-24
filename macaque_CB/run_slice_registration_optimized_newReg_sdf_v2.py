@@ -32,7 +32,7 @@ use_signed_distance_weighting_for_registration = True #compute signed distance f
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-rescale=40
+rescale=5
 # rescale=10
 
 #based on the rescale value, we adjust our in-plane resolution

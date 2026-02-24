@@ -28,12 +28,12 @@ mask_zero = False #mask zeros for nighres registrations
 #                  Output images will have the specified voxel resolution in their headers, but registration itself does not use this information
 # True: Registration uses physical resolution (ignore_res=False), more physically accurate
 use_resolution_in_registration = True
-use_signed_distance_weighting_for_registration = True #compute signed distance function from the images and use this image for registration
+use_signed_distance_weighting_for_registration = False #compute signed distance function from the images and use this image for registration
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-rescale=5
-# rescale=10
+# rescale=5
+rescale=50
 
 #based on the rescale value, we adjust our in-plane resolution
 #keep resolutions in microns (not mm) - only apply rescale to x and y
@@ -82,7 +82,9 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 all_image_fnames = list(_df['file_name'].values)
 
 # ## for testing XXX
-# all_image_fnames = all_image_fnames[0:35] #for testing
+all_image_fnames = all_image_fnames[0:5] #for testing
+all_image_fnames = all_image_fnames[0:35] #for testing
+missing_idxs_to_fill = None
 # missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')
@@ -381,7 +383,7 @@ for iter in range(num_reg_iterations):
         across_slice_smoothing_sigma = 0 # we do not smooth the final output stack and templates
         retain_reg_mappings=True #we retain the registration mappings for all outputs at the last level
     else:
-        retain_reg_mappings=False #and ONLY the last level
+        retain_reg_mappings=True #and ONLY the last level XXX SET TO TRUE FOR TESTING
     #here we always go back to the original coreg0 images, we are basically just refning our target template(s) and trying not to induce too much deformation
     
     iter_tag = f"_rigsyn_{iter}"

@@ -3756,13 +3756,14 @@ def compute_MI_for_slice(idx, img_name, output_dir, subject, template_tail, out_
         shutil.copyfile(inverse2, inverse)
         shutil.copyfile(slice2_path, output_path)
     
-    # Clean up old files
-    # logging.warning(f'Removing old intermediate files for idx {idx}: {img_name}')
-    for f in glob.glob(output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + "*_ants-*map.nii.gz"):
-        if out_tail not in f:
-            os.remove(f)
-            time.sleep(0.5)
-    # logging.warning(f'---> Intermediate files removed')
+    # Clean up only the specific input tag files (tag1 and tag2), not all non-matching files
+    # This preserves mappings from previous iterations (e.g., coreg12nl_rigsyn_0 when selecting coreg12nl_win12_rigsyn_0)
+    for tag_tail in [tag1_tail, tag2_tail]:
+        for suffix in ['_ants-map.nii.gz', '_ants-invmap.nii.gz']:
+            f = output_dir + subject + f'_{str(idx).zfill(zfill_num)}_' + img_name + tag_tail + suffix
+            if os.path.exists(f):
+                os.remove(f)
+                time.sleep(0.5)
 
     os.remove(slice1_path)
     time.sleep(0.5)
@@ -3910,14 +3911,14 @@ def select_best_reg_by_MI(output_dir,subject,all_image_fnames,df_struct=None, te
                 shutil.copyfile(inverse2, inverse)
                 shutil.copyfile(slice2, output)
 
-            # cleanup files, removing old mappings that are no longer needed
-            map_files = glob.glob(output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+"*"+'_ants-*map.nii.gz')
-            for f in map_files:
-                if out_tail in f:
-                    pass
-                else:
-                    os.remove(f)
-                    time.sleep(.5)
+            # cleanup files - only remove the specific input tag files (tag1 and tag2)
+            # This preserves mappings from previous iterations
+            for tag_tail in [tag1_tail, tag2_tail]:
+                for suffix in ['_ants-map.nii.gz', '_ants-invmap.nii.gz']:
+                    f = output_dir+subject+'_'+str(idx).zfill(zfill_num)+'_'+img_name+tag_tail+suffix
+                    if os.path.exists(f):
+                        os.remove(f)
+                        time.sleep(.5)
 
             os.remove(slice1)
             time.sleep(.5)

@@ -5,9 +5,16 @@ import logging
 import sys
 import tempfile
 from datetime import datetime
-import nighres
+
+try:
+    import nighres
+except:
+    print("nighres not found, skipping")
+
 import numpy
+
 np = numpy #for shorthand
+
 import nibabel
 import glob
 from PIL import Image
@@ -16,6 +23,7 @@ import pandas as pd
 from scipy.ndimage import gaussian_filter, laplace
 from scipy.stats import trim_mean
 from skimage.exposure import match_histograms
+
 import math
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from embedded_antspy_smthMod import embedded_antspy_2d_multi
@@ -673,8 +681,10 @@ def embedded_antspy_groupwise(
     inverse = [r for r in results[::-1] if r.endswith('GenericAffine.mat') or 
                r.endswith('InverseWarp.nii.gz')]
     
-    flag = [r.endswith('GenericAffine.mat') for r in forward]
-    linear = [r.endswith('GenericAffine.mat') for r in inverse]
+    # For forward transforms: invert=0 for ALL (both affines and warps)
+    # For inverse transforms: invert=1 for affines (to invert them), invert=0 for InverseWarp files
+    flag = [False for r in forward]  # Don't invert any forward transforms
+    linear = [r.endswith('GenericAffine.mat') for r in inverse]  # Invert affines for inverse direction
     
     # Apply transforms to source image
     at_args = [

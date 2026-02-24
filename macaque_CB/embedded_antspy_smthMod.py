@@ -14,13 +14,15 @@ import nibabel
 import ants.utils
 
 # nighresjava and nighres functions
-import nighresjava
-from nighres.io import load_volume, save_volume
-from nighres.utils import _output_dir_4saving, _fname_4saving, \
-                    _check_topology_lut_dir
-from nighres.surface import probability_to_levelset
-from nighres.shape import levelset_thickness
-
+try:
+    import nighresjava
+    from nighres.io import load_volume, save_volume
+    from nighres.utils import _output_dir_4saving, _fname_4saving, \
+                        _check_topology_lut_dir
+    from nighres.surface import probability_to_levelset
+    from nighres.shape import levelset_thickness
+except:
+    print("nighres not found, skipping")
 # convenience labels
 X=0
 Y=1

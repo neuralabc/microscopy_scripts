@@ -33,7 +33,7 @@ use_signed_distance_weighting_for_registration = False #compute signed distance 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
 # rescale=5
-rescale=50
+rescale=40
 
 #based on the rescale value, we adjust our in-plane resolution
 #keep resolutions in microns (not mm) - only apply rescale to x and y
@@ -82,9 +82,9 @@ missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with
 all_image_fnames = list(_df['file_name'].values)
 
 # ## for testing XXX
-all_image_fnames = all_image_fnames[0:5] #for testing
-all_image_fnames = all_image_fnames[0:35] #for testing
-missing_idxs_to_fill = None
+# all_image_fnames = all_image_fnames[0:5] #for testing
+# all_image_fnames = all_image_fnames[0:35] #for testing
+# missing_idxs_to_fill = None
 # missing_idxs_to_fill = [missing_idxs_to_fill[0]]
 
 print('*********************************************************************************************************')

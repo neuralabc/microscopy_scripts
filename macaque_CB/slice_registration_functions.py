@@ -9,7 +9,13 @@ from datetime import datetime
 try:
     import nighres
 except:
-    print("nighres not found, skipping")
+    try:
+        sys.path.append('/opt/quarantine/nighres/1.5/install/bin/')
+        sys.path.append('/opt/quarantine/nighres/1.5/install/lib/python3.9/site-packages/nighres-1.5.0-py3.9.egg')
+        sys.path.append('/opt/quarantine/nighres/1.5/install/lib/python3.9/site-packages')
+        import nighres
+    except:
+        print("nighres not found, skipping")
 
 import numpy
 
@@ -4100,90 +4106,203 @@ def generate_slice_mask(img_data, threshold_pct = 5):
 ## =====================================================================================
 ## Transform composition and application utilities for nighres-style coordinate mappings
 ## =====================================================================================
+# PURPOSE: implement and verify the exact equivalent of sequential apply using
+# bilinear stencil expansion.  No intermediate images, no accumulated interpolation.
+#
+# ALGORITHM for N maps [M1, M2, ..., MN]:
+#   1. Start with a single stencil point per pixel: the coordinates from MN[p].
+#   2. Expand backwards through each map M_{k} (k = N-1 down to 1):
+#      - For each existing stencil point at fractional (r, c):
+#          * The bilinear footprint has 4 neighbours at integer grid positions
+#            q_ij = (floor(r)+i, floor(c)+j), i,j ∈ {0,1}, with weights w_ij.
+#          * Read M_k[q_ij] EXACTLY at those integer positions — zero interp error.
+#          * Each q_ij produces a new stencil point with compound weight w_prev * w_ij.
+#   3. Final stencil has 4^(N-1) points in src space.
+#   4. Sample src at each stencil point with bilinear; sum weighted results.
+#
+# This is provably identical to apply(apply(apply(src,M1),M2),M3).
 
-def compose_coordinate_mappings_2d(mapping1, mapping2):
+
+# this function is the exact equivalent of sequentially applying each coordinate map with bilinear interpolation.
+# it is, however, v. slow so don't use it.
+def apply_mapping_chain_exact(source_image, mapping_list, fill_value=0):
     """
-    Compose two 2D pull-style coordinate mappings into a single mapping.
-    
-    Given two nighres-style coordinate mappings (absolute voxel coordinate maps):
-      - mapping1: A→B  (for each pixel in B, stores (x,y) coordinates in A)
-      - mapping2: B→C  (for each pixel in C, stores (x,y) coordinates in B)
-    
-    Returns composed mapping A→C: for each pixel in C, stores (x,y) coordinates in A.
-    
-    The composition samples mapping1 at the coordinates specified by mapping2:
-        M_composed[x,y] = M1( M2[x,y] )
-    
-    This interpolates the (smooth) coordinate fields, NOT the image. The image is only
-    ever sampled once when the final composed mapping is applied.
-    
+    Exact equivalent of sequentially applying each coordinate map with bilinear
+    interpolation, without creating intermediate images.
+
+    Uses bilinear stencil expansion: for N maps, performs 4^(N-1) source lookups
+    per output pixel.  For N=3 that is 16 lookups — fast and memory-efficient.
+
+    Algorith:
+    1. Start from the last map's coordinates
+    2. Expand bilinear footprint backwards through each previous map, reading maps at exact integer positions
+    3. Sample src once at all 16 final stencil points, sum with compound weights
+
     Parameters
     ----------
-    mapping1 : nibabel.Nifti1Image
-        First coordinate mapping (A→B). Shape (nx, ny, 2) where last dim is [X, Y].
-    mapping2 : nibabel.Nifti1Image
-        Second coordinate mapping (B→C). Shape (mx, my, 2) where last dim is [X, Y].
-    
+    source_image : nibabel.Nifti1Image
+        Source image.  Shape (H, W) or (H, W, 1).
+    mapping_list : list of nibabel.Nifti1Image
+        Ordered list of coordinate maps [M1, M2, ..., MN].
+        Each map shape (H_out, W_out, 2), channel 0 = row coord, channel 1 = col coord.
+    fill_value : float
+        Value for out-of-bounds source pixels (matches apply_coordinate_mapping_2d).
+
     Returns
     -------
     nibabel.Nifti1Image
-        Composed coordinate mapping (A→C). Shape (mx, my, 2), uses mapping2's affine/header.
+        Transformed image in the target space of MN.
     """
-    from scipy.ndimage import map_coordinates
+    import numpy as np
+    from scipy.ndimage import map_coordinates as mc_fn
+    import nibabel as nb
     
-    m1_data = mapping1.get_fdata()  # shape (nx, ny, 2)
-    m2_data = mapping2.get_fdata()  # shape (mx, my, 2)
+    src = source_image.get_fdata()
+    if src.ndim == 3 and src.shape[2] == 1:
+        src = src[:, :, 0]
+
+    maps = [m.get_fdata() for m in mapping_list]
+    N = len(maps)
+    H_out, W_out = maps[-1].shape[:2]
+
+    # stencil: list of (coords_r, coords_c, weights)
+    # each array has shape (H_out, W_out)
+    stencil = [(maps[-1][:, :, 0].copy(),
+                maps[-1][:, :, 1].copy(),
+                np.ones((H_out, W_out), dtype=np.float64))]
+
+    # Expand backwards through maps M_{N-1} down to M_1
+    for m_data in reversed(maps[:-1]):
+        H_m, W_m = m_data.shape[:2]
+        new_stencil = []
+
+        for (r, c, w) in stencil:
+            # Bilinear footprint: integer-grid neighbours of fractional (r, c)
+            r0 = np.floor(r).astype(np.int64)
+            c0 = np.floor(c).astype(np.int64)
+            fr = r - r0   # fractional row
+            fc = c - c0   # fractional col
+
+            for dr, dc, wf in [(0, 0, (1 - fr) * (1 - fc)),
+                               (0, 1, (1 - fr) * fc),
+                               (1, 0, fr       * (1 - fc)),
+                               (1, 1, fr       * fc)]:
+                ri = r0 + dr
+                ci = c0 + dc
+
+                # Pixels whose stencil corner is OOB in M_k get zero weight —
+                # equivalent to mode='constant', cval=0 in map_coordinates.
+                valid = (ri >= 0) & (ri < H_m) & (ci >= 0) & (ci < W_m)
+
+                ri_c = np.clip(ri, 0, H_m - 1)
+                ci_c = np.clip(ci, 0, W_m - 1)
+
+                # Read map at exact integer grid positions — no interpolation error
+                new_r = m_data[ri_c, ci_c, 0]
+                new_c = m_data[ri_c, ci_c, 1]
+
+                new_w = w * wf
+                new_w[~valid] = 0.0   # OOB corner contributes nothing
+
+                new_stencil.append((new_r, new_c, new_w))
+
+        stencil = new_stencil
+
+    # Evaluate: sum weighted source samples across all stencil points
+    result = np.zeros((H_out, W_out), dtype=np.float64)
+    for (r, c, w) in stencil:
+        vals = mc_fn(src, [r.ravel(), c.ravel()],
+                     order=1, mode='constant', cval=fill_value)
+        result += w * vals.reshape(H_out, W_out)
+
+    last_map = mapping_list[-1]
+    return nb.Nifti1Image(result, last_map.affine, last_map.header)
+
+## These are fundamentally incorrect and do not work, use sequentially applied mappings instead
+
+# def compose_coordinate_mappings_2d(mapping1, mapping2):
+#     """
+#     Compose two 2D pull-style coordinate mappings into a single mapping.
     
-    # M2 gives us coordinates in B-space (the domain of M1)
-    # We need to sample M1's X-channel and Y-channel at those B-space coordinates
-    b_coords_x = m2_data[:, :, 0]  # shape (mx, my) — row indices into M1
-    b_coords_y = m2_data[:, :, 1]  # shape (mx, my) — col indices into M1
+#     Given two nighres-style coordinate mappings (absolute voxel coordinate maps):
+#       - mapping1: A→B  (for each pixel in B, stores (x,y) coordinates in A)
+#       - mapping2: B→C  (for each pixel in C, stores (x,y) coordinates in B)
     
-    # Use 'nearest' mode to clamp out-of-bounds coordinates (matches nighres 'closest' padding)
-    composed_x = map_coordinates(m1_data[:, :, 0], [b_coords_x, b_coords_y], 
-                                  order=1, mode='nearest')
-    composed_y = map_coordinates(m1_data[:, :, 1], [b_coords_x, b_coords_y], 
-                                  order=1, mode='nearest')
+#     Returns composed mapping A→C: for each pixel in C, stores (x,y) coordinates in A.
     
-    composed = numpy.stack((composed_x, composed_y), axis=-1)
-    return nibabel.Nifti1Image(composed, mapping2.affine, mapping2.header)
+#     The composition samples mapping1 at the coordinates specified by mapping2:
+#         M_composed[x,y] = M1( M2[x,y] )
+    
+#     This interpolates the (smooth) coordinate fields, NOT the image. The image is only
+#     ever sampled once when the final composed mapping is applied.
+    
+#     Parameters
+#     ----------
+#     mapping1 : nibabel.Nifti1Image
+#         First coordinate mapping (A→B). Shape (nx, ny, 2) where last dim is [X, Y].
+#     mapping2 : nibabel.Nifti1Image
+#         Second coordinate mapping (B→C). Shape (mx, my, 2) where last dim is [X, Y].
+    
+#     Returns
+#     -------
+#     nibabel.Nifti1Image
+#         Composed coordinate mapping (A→C). Shape (mx, my, 2), uses mapping2's affine/header.
+#     """
+#     from scipy.ndimage import map_coordinates
+    
+#     m1_data = mapping1.get_fdata()  # shape (nx, ny, 2)
+#     m2_data = mapping2.get_fdata()  # shape (mx, my, 2)
+    
+#     # M2 gives us coordinates in B-space (the domain of M1)
+#     # We need to sample M1's X-channel and Y-channel at those B-space coordinates
+#     b_coords_x = m2_data[:, :, 0]  # shape (mx, my) — row indices into M1
+#     b_coords_y = m2_data[:, :, 1]  # shape (mx, my) — col indices into M1
+    
+#     # Use 'nearest' mode to clamp out-of-bounds coordinates (matches nighres 'closest' padding)
+#     composed_x = map_coordinates(m1_data[:, :, 0], [b_coords_x, b_coords_y], 
+#                                   order=1, mode='nearest')
+#     composed_y = map_coordinates(m1_data[:, :, 1], [b_coords_x, b_coords_y], 
+#                                   order=1, mode='nearest')
+    
+#     composed = numpy.stack((composed_x, composed_y), axis=-1)
+#     return nibabel.Nifti1Image(composed, mapping2.affine, mapping2.header)
 
 
-def compose_mapping_chain_2d(mapping_files):
-    """
-    Compose a chain of 2D coordinate mappings into a single mapping.
+# def compose_mapping_chain_2d(mapping_files):
+#     """
+#     Compose a chain of 2D coordinate mappings into a single mapping.
     
-    Given an ordered list of mapping files [M1, M2, ..., Mn] where:
-      - M1: A→B
-      - M2: B→C
-      - ...
-      - Mn: (N-1)→N
+#     Given an ordered list of mapping files [M1, M2, ..., Mn] where:
+#       - M1: A→B
+#       - M2: B→C
+#       - ...
+#       - Mn: (N-1)→N
     
-    Returns composed mapping A→N.
+#     Returns composed mapping A→N.
     
-    Mappings are composed left-to-right: M_composed = M1 ∘ M2 ∘ ... ∘ Mn
-    (read as "first apply Mn to get coordinates, then look up in Mn-1, ..., then M1").
+#     Mappings are composed left-to-right: M_composed = M1 ∘ M2 ∘ ... ∘ Mn
+#     (read as "first apply Mn to get coordinates, then look up in Mn-1, ..., then M1").
     
-    Parameters
-    ----------
-    mapping_files : list of str
-        Ordered list of paths to coordinate mapping NIfTI files.
+#     Parameters
+#     ----------
+#     mapping_files : list of str
+#         Ordered list of paths to coordinate mapping NIfTI files.
     
-    Returns
-    -------
-    nibabel.Nifti1Image
-        Single composed coordinate mapping from source of M1 to target of Mn.
-    """
-    if len(mapping_files) == 0:
-        raise ValueError("At least one mapping file is required.")
+#     Returns
+#     -------
+#     nibabel.Nifti1Image
+#         Single composed coordinate mapping from source of M1 to target of Mn.
+#     """
+#     if len(mapping_files) == 0:
+#         raise ValueError("At least one mapping file is required.")
     
-    composed = load_volume(mapping_files[0])
+#     composed = load_volume(mapping_files[0])
     
-    for i in range(1, len(mapping_files)):
-        next_map = load_volume(mapping_files[i])
-        composed = compose_coordinate_mappings_2d(composed, next_map)
+#     for i in range(1, len(mapping_files)):
+#         next_map = load_volume(mapping_files[i])
+#         composed = compose_coordinate_mappings_2d(composed, next_map)
     
-    return composed
+#     return composed
 
 
 def apply_coordinate_mapping_2d(source_image, mapping, interpolation='linear', 

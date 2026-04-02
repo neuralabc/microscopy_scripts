@@ -4059,7 +4059,64 @@ def downsample_image_parallel(image, rescale, n_jobs=-1):
         downsampled_image = np.array(downsampled_values).reshape(blocks.shape[:2])
         
         return downsampled_image
-            
+
+def build_centroid_image(mask, structure=None):
+    
+    mask_bin = (np.asarray(mask) > 0).astype(np.uint8)
+
+    if structure is None:
+        structure = np.ones((3, 3), dtype=np.uint8) #will count diagonal connectivity. not sure if this is better, or if should only count cardinal. 
+
+
+    labels, n = ndi.label(mask_bin, structure=structure)
+    centroid_seed_map = np.zeros(mask_bin.shape, dtype=np.uint8)
+
+    if n == 0:
+        print("No connected components found.")
+        return centroid_seed_map
+
+    centroids = ndi.center_of_mass(mask_bin, labels, index=np.arange(1, n + 1))
+    cy = np.array([c[0] for c in centroids], dtype=np.float64)
+    cx = np.array([c[1] for c in centroids], dtype=np.float64)
+
+    j = np.floor(cy).astype(np.int64)
+    i = np.floor(cx).astype(np.int64)
+
+    in_bounds = (j >= 0) & (j < mask_bin.shape[0]) & (i >= 0) & (i < mask_bin.shape[1])
+    np.add.at(centroid_seed_map, (j[in_bounds], i[in_bounds]), 1)
+
+    print(f"components={n}")
+    print(f"all centroid indices in bounds={bool(np.all(in_bounds))}")
+
+    print(f"sum(centroid_seed_map)={int(centroid_seed_map.sum())}")
+
+    return centroid_seed_map
+
+
+def downsample_mask_to_counts(mask_like, factor, mode="qupath"):
+    factor = max(1, int(round(factor)))
+
+    arr = np.asarray(mask_like)
+    h, w = arr.shape
+
+    if mode == "floor":
+        # Crop to divisible size (this trims when a remainder exists. This is the default in a lot of cases but it seems like QuPath does it differentky)
+        h2 = (h // factor) * factor
+        w2 = (w // factor) * factor
+        arr2 = arr[:h2, :w2]
+    else:
+        # QuPath-like extent preservation: keep full field of view using ceil shape, meaning that remainders become full pixels i believe
+        out_h = (h + factor - 1) // factor
+        out_w = (w + factor - 1) // factor
+        h2 = out_h * factor
+        w2 = out_w * factor
+        arr2 = np.pad(arr, ((0, h2 - h), (0, w2 - w)), mode="constant", constant_values=0)
+
+    ds_counts = arr2.reshape(h2 // factor, factor, w2 // factor, factor).sum(axis=(1, 3))
+    return ds_counts.astype(np.uint32)
+
+
+
 def create_affine(shape, voxel_res=None, center=True):
     """
     Creates an affine transformation matrix. Should be RAS+

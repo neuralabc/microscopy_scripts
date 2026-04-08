@@ -97,7 +97,7 @@ if missing_idxs_to_fill is not None:
         raise ValueError("Missing slice indices exceed the number of images in the stack.")
 
 # all_image_fnames = all_image_fnames[0:10] #for testing
-all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
+# all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
 
 
 if not os.path.exists(output_dir):

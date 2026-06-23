@@ -32,8 +32,8 @@ use_signed_distance_weighting_for_registration = False #compute signed distance 
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-# rescale=5
-rescale=40
+rescale=5
+#rescale=40
 
 #based on the rescale value, we adjust our in-plane resolution
 #keep resolutions in microns (not mm) - only apply rescale to x and y
@@ -837,7 +837,7 @@ else:
 #   - orig_fill_value: fill value for out-of-bounds pixels
 #   - save_composed_orig_mappings: whether to save the composed mapping per slice
 
-apply_transforms_to_orig = True # and use_signed_distance_weighting_for_registration  # only makes sense when SDF was used (otherwise _orig == registered images)
+apply_transforms_to_orig = False # and use_signed_distance_weighting_for_registration  # only makes sense when SDF was used (otherwise _orig == registered images)
 orig_target_levels = [f'rigsyn_iter4_win12'] #,f'groupwise_iter{groupwise_iterations-1}']  # project into the final groupwise space; add more levels to project into multiple spaces
 keep_deformed_orig_slices = False      # True: keep individual slice files, False: only keep the stack
 generate_orig_stack = True             # True: generate a 3D stack NIfTI

@@ -81,6 +81,10 @@ jitter_sigma = float(os.environ.get('SLICEREG_JITTER_SIGMA', 15)) #slices; the s
 jitter_iterations = int(os.environ.get('SLICEREG_JITTER_ITERS', 6))
 if use_jitter_correction:
     variant_tag += '_jit'
+if os.environ.get('SLICEREG_STAGE1_SYN', '1') != '1':
+    variant_tag += '_s1rigid'
+if os.environ.get('SLICEREG_STAGE1_REG', 'Medium') != 'Medium':
+    variant_tag += '_s1reg' + os.environ['SLICEREG_STAGE1_REG']
 
 def stage1_neighbour_target_tag(template_tag):
     return template_tag if stage1_neighbour_targets == 'previous' else None
@@ -475,8 +479,8 @@ logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 # STEP 1: Rigid + Syn
 num_reg_iterations = 5
 run_rigid = True
-run_syn = True
-regularization ='Medium'
+run_syn = os.environ.get('SLICEREG_STAGE1_SYN', '1') == '1' #0: STAGE1 rigid only, all warping left to the groupwise step
+regularization = os.environ.get('SLICEREG_STAGE1_REG', 'Medium') #SyN preset in embedded_antspy_smthMod: Low, Medium, High, VeryHigh
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
 # did this below in the groupwise reg, which decreased high frequency drift at the expense of low

@@ -1,7 +1,9 @@
 """Compare slice-registration runs (output dirs of run_slice_registration_optimized_newReg_sdf_v2_local.py).
 
 Measures per run:
-  - continuity: NCC of adjacent slices (high spatial frequency along the stack)
+  - continuity: NCC of adjacent slices (high spatial frequency along the stack), also after the same in-plane
+    smoothing of every stack (blur-equalized: raw NCC rewards interpolation blur), and Dice of adjacent tissue masks
+  - slow path: low-pass tissue centroid and principal-axis angle, compared with a reference run (--reference)
   - MRI agreement: an independent shear-free affine fit of the final stack to the MRI template, then per slice
     the Dice and the tissue-centroid offset between the stack and its MRI plane (low frequency: drift, shape).
     Runs that used the MRI anchor were optimised toward this target, so for them it is not independent.
@@ -73,6 +75,39 @@ def warp_size(run_dir, level, res_mm, threshold):
     return np.array(nonaff), np.array(total)
 
 
+def blur_equalized_ncc(stack, threshold, sigma_vox=1.0):
+    """Adjacent NCC after the same in-plane Gaussian smoothing of every slice: raw adjacent NCC rises with
+    interpolation blur (a half-pixel resampling alone took A's STAGE1 median from 0.80 to 0.88), so runs with a
+    different number of resampling steps are compared on this."""
+    return adjacent_ncc(ndi.gaussian_filter(stack, (sigma_vox, sigma_vox, 0)), threshold)
+
+
+def adjacent_mask_dice(stack, threshold):
+    masks = [ndi.binary_fill_holes(stack[..., s] > threshold) for s in range(stack.shape[2])]
+    return np.array([2 * (masks[s] & masks[s + 1]).sum() / (masks[s].sum() + masks[s + 1].sum() + 1e-12)
+                     for s in range(len(masks) - 1)])
+
+
+def slow_path(stack, threshold, res_mm, sigma=15.0):
+    """Low-pass tissue centroid (mm) and principal-axis angle (deg) along the stack."""
+    cen, ang = [], []
+    for s in range(stack.shape[2]):
+        m = ndi.binary_fill_holes(stack[..., s] > threshold)
+        if m.sum() < 20:
+            cen.append([np.nan, np.nan]); ang.append(np.nan); continue
+        ii, jj = np.nonzero(m)
+        cen.append([ii.mean() * res_mm, jj.mean() * res_mm])
+        cov = np.cov(np.stack([ii, jj]))
+        w, v = np.linalg.eigh(cov)
+        ang.append(np.degrees(np.arctan2(v[1, -1], v[0, -1])) % 180)
+    out = []
+    for x in [np.array(cen)[:, 0], np.array(cen)[:, 1], np.unwrap(np.radians(np.array(ang)) * 2) / 2 * 180 / np.pi]:
+        g = ~np.isnan(x)
+        x = np.interp(np.arange(len(x)), np.flatnonzero(g), x[g])
+        out.append(ndi.gaussian_filter1d(x, sigma, mode='nearest'))
+    return np.stack(out, axis=1)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('runs', nargs='+', help='name=run_dir')
@@ -83,12 +118,14 @@ def main():
                    help='tissue threshold in counts per voxel; default: mri_anchor.tissue_threshold_for (same density at every rescale)')
     p.add_argument('--stage1_level', default='coreg12nl_win12_rigsyn_4')
     p.add_argument('--groupwise_iters', type=int, default=10)
+    p.add_argument('--no-mri', action='store_true', help='skip the MRI fits (slow, and noisy at this level)')
+    p.add_argument('--reference', default=None, help='run name to compare the slow path against')
     a = p.parse_args()
     res_mm, slice_mm = a.rescale * 10 / 1000.0, 0.05
     if a.threshold is None:
         a.threshold = mri_anchor.tissue_threshold_for(res_mm)
     os.makedirs(a.out, exist_ok=True)
-    summary = {}
+    summary, paths = {}, {}
     for spec in a.runs:
         name, run_dir = spec.split('=', 1)
         run_dir = run_dir.rstrip('/') + '/'
@@ -101,16 +138,38 @@ def main():
                 print(f'{name}: missing {sf}')
                 continue
             stack = nibabel.load(sf).get_fdata().astype(np.float32)
+            os.makedirs(os.path.join(a.out, name, lname), exist_ok=True)
             ncc = adjacent_ncc(stack, a.threshold)
-            dice, offset, qc = mri_agreement(stack, res_mm, slice_mm, os.path.join(a.out, name, lname), a.threshold)
-            np.savez(os.path.join(a.out, name, lname, 'per_slice.npz'), ncc=ncc, dice=dice, offset_mm=offset)
-            summary[name][lname] = dict(ncc_median=float(np.median(ncc)), ncc_p5=float(np.percentile(ncc, 5)),
-                                        mri_dice_3d=qc['dice_affine'], mri_dice_slice_median=float(np.nanmedian(dice)),
-                                        mri_offset_mm_median=float(np.nanmedian(offset)),
-                                        mri_offset_mm_p95=float(np.nanpercentile(offset, 95)))
+            bncc = blur_equalized_ncc(stack, a.threshold)
+            mdice = adjacent_mask_dice(stack, a.threshold)
+            paths[(name, lname)] = slow_path(stack, a.threshold, res_mm)
+            row = dict(ncc_median=float(np.median(ncc)), ncc_p5=float(np.percentile(ncc, 5)),
+                       blur_eq_ncc_median=float(np.median(bncc)), blur_eq_ncc_p5=float(np.percentile(bncc, 5)),
+                       mask_dice_median=float(np.median(mdice)), mask_dice_p5=float(np.percentile(mdice, 5)))
+            per_slice = dict(ncc=ncc, blur_eq_ncc=bncc, mask_dice=mdice, slow_path=paths[(name, lname)])
+            if not a.no_mri:
+                dice, offset, qc = mri_agreement(stack, res_mm, slice_mm, os.path.join(a.out, name, lname), a.threshold)
+                per_slice.update(dice=dice, offset_mm=offset)
+                row.update(mri_dice_3d=qc['dice_affine'], mri_dice_slice_median=float(np.nanmedian(dice)),
+                           mri_offset_mm_median=float(np.nanmedian(offset)),
+                           mri_offset_mm_p95=float(np.nanpercentile(offset, 95)))
+            np.savez(os.path.join(a.out, name, lname, 'per_slice.npz'), **per_slice)
+            summary[name][lname] = row
         nonaff, total = warp_size(run_dir, a.stage1_level, res_mm, a.threshold)
         summary[name]['stage1_warp'] = dict(nonaffine_rms_mm_median=float(np.median(nonaff)),
                                             total_rms_mm_median=float(np.median(total)), n=len(nonaff))
+    if a.reference:
+        for (name, lname), pth in paths.items():
+            ref = paths.get((a.reference, lname))
+            if ref is None or name == a.reference:
+                continue
+            d = pth - ref
+            d = d - d.mean(axis=0)  # a constant offset of the whole stack does not matter
+            summary[name][lname].update(
+                slow_path_vs_ref_centroid_mm_max=float(np.abs(d[:, :2]).max()),
+                slow_path_vs_ref_centroid_mm_rms=float(np.sqrt((d[:, :2] ** 2).sum(axis=1).mean())),
+                slow_path_vs_ref_angle_deg_max=float(np.abs(d[:, 2]).max()))
+    for name in summary:
         print(name, json.dumps(summary[name], indent=1))
     with open(os.path.join(a.out, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=2)

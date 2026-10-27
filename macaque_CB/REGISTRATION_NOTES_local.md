@@ -197,6 +197,30 @@ show a ~1 mm dip near slice 220, where A's offset curve has its bump).
 **Conclusion:** do not build per-slice MRI anchoring with D99. Use D99 for global placement (OME-Zarr `mri`
 placement) and QC only. The resolution is not the cause (same result at rescale 40 and at 0.1 mm).
 
+### 4.5 MRI-free drift control (offline test, `drift_control_test.py`)
+
+Raw slices (`coreg0nl`) are the separate scans placed by their image centres (the initial step has no
+registration). Rigid part of each slice's STAGE1 map (raw -> final), fitted over tissue, smoothed along the stack:
+
+| run | rotation slow SD, sigma 15 (expected if random) | slow translation SD dx / dy |
+|---|---|---|
+| A | 0.53 deg (0.39) | **0.05 / 0.03 mm** |
+| B | 0.91 deg (0.42) | 0.76 / 0.80 mm |
+| C | 0.65 deg (0.42) | 1.00 / 0.78 mm |
+
+- Rotation: A's slow rotation is close to what independent mounting angles leave (little rotational drift);
+  B has twice that (drift). Removing A's slow rotation (max 3.5 deg) changes adjacent NCC slightly for the better
+  (median 0.796 -> 0.810, 5th pct 0.485 -> 0.506). Small effect; not added to the pipeline.
+- Translation cannot be controlled this way: the raw scans are framed on the tissue (bounding-box centre at the
+  image centre, SD 0.3 mm, slow part 0.07 mm). A keeps this framing, so A's stack has every section's bounding-box
+  centre on one line. In D99 the bounding-box centre of the sagittal planes across our hemisphere moves 2.5-6.6 mm
+  (1.6-3.4 mm after removing a linear trend), so A can straighten the true shape by a few mm ("banana effect" from
+  the framing). B and C drift away from A by 2-4 mm, mostly in TP3, growing along the stack (chained drift); the
+  MRI fits do not confirm their shifts (r -0.06 to 0.41 for dx; dy follows whichever fit's linear trend).
+- So the remaining low-frequency uncertainty is the in-plane translation path, and the data hold no reference for
+  it (no same-animal MRI). Options: a physical reference if one exists (blockface photos, fiducials), or accept A
+  and document the limitation.
+
 ## 5. OME-Zarr export of the final densities
 
 `export_ome_zarr.py` (our env) writes the final stack as OME-Zarr **NGFF 0.6 on Zarr v3**, through

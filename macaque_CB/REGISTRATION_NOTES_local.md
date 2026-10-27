@@ -42,6 +42,7 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
 | `SLICEREG_JITTER` | 0 | 1 = rigid jitter correction folded into coreg0nl (4.7); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (6) |
 | `SLICEREG_STAGE1_SYN` | 1 | 0 = STAGE1 rigid only |
+| `SLICEREG_STAGE1_SYN_LAST` | 1 | 0 = SyN only in the template-building STAGE1 levels, the last level rigid |
 | `SLICEREG_STAGE1_REG` | Medium | STAGE1 SyN regularization preset |
 | `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5) |
 
@@ -257,6 +258,10 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
 |---|---|---|---|
 | J | 40 | A + jitter correction in coreg0nl | re-running after the fix below |
 | JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | re-running after the fix below |
+| JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | queued after JR |
+
+Note on what STAGE1 warps do: every STAGE1 level registers from coreg0nl again, so the warps of levels 0-3 (and of
+the cascade) only shape the templates. Only the last level (`rigsyn_4`) feeds the groupwise step and is in the chain.
 
 Bug found in the first JR run (fixed in `slice_jitter.py`, commit 434b3c8): at the border of the valid map region the
 composed map was interpolated with the zeros outside it, which copied tissue to the image edges (dotted streaks).

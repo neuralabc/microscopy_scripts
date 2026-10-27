@@ -256,9 +256,25 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
 
 | Run | Rescale | Change | Status |
 |---|---|---|---|
-| J | 40 | A + jitter correction in coreg0nl | re-running after the fix below |
-| JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | re-running after the fix below |
-| JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | queued after JR |
+| J | 40 | A + jitter correction in coreg0nl | done: better than A (below) |
+| JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | done: mixed, worse than J |
+| JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | running |
+
+Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median / 5th pct of adjacent pairs):
+
+| Measure | A STAGE1 | J STAGE1 | JR STAGE1 | A final | J final | JR final |
+|---|---|---|---|---|---|---|
+| adjacent NCC | 0.796 / 0.485 | **0.871 / 0.639** | 0.816 / 0.553 | 0.914 / 0.724 | **0.936 / 0.796** | 0.922 / 0.752 |
+| blur-equalized NCC | 0.936 / 0.735 | **0.961 / 0.801** | 0.911 / 0.723 | 0.968 / 0.839 | **0.977 / 0.874** | 0.959 / 0.819 |
+| tissue-mask Dice | 0.964 / 0.914 | **0.973 / 0.922** | 0.957 / 0.884 | 0.976 / **0.939** | **0.982** / 0.938 | 0.976 / 0.921 |
+| STAGE1 warp RMS, total / non-affine (mm) | 0.59 / 0.25 | 0.32 / 0.20 | 0.15 / 0.00 | | | |
+| slow path vs A, centroid max (mm) | | 0.17 | 0.48 | | 0.08 | 0.35 |
+
+- J beats A on every measure except final mask-Dice 5th pct (equal, 0.938 vs 0.939), with about half the STAGE1
+  warp and the same slow path (centroid within 0.1 mm of A in the final stack). Through-plane views: folia layers
+  more continuous, no edge artifacts. Per-slice total counts at coreg0nl are unchanged by the correction.
+- JR (no STAGE1 SyN) has the smallest warp, but lower blur-equalized NCC and mask Dice than A: the STAGE1 SyN
+  corrects real shape differences between sections, not only noise. Single misfit slices show as dark lines.
 
 Note on what STAGE1 warps do: every STAGE1 level registers from coreg0nl again, so the warps of levels 0-3 (and of
 the cascade) only shape the templates. Only the last level (`rigsyn_4`) feeds the groupwise step and is in the chain.

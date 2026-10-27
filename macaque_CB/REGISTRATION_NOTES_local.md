@@ -273,6 +273,10 @@ Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median
 - J beats A on every measure except final mask-Dice 5th pct (equal, 0.938 vs 0.939), with about half the STAGE1
   warp and the same slow path (centroid within 0.1 mm of A in the final stack). Through-plane views: folia layers
   more continuous, no edge artifacts. Per-slice total counts at coreg0nl are unchanged by the correction.
+- Known data feature (not a registration error): slices 277-285 (TP3 Image_13_02 - Image_17_02) have extra tissue
+  at the upper edge (spike in through-plane views near y=53), already in the raw coreg0nl stack; the rest of each
+  outline agrees with the neighbours. Folium crest or tissue flap, not decided. Slices 272-276 are torn at the
+  upper right (area and centroid step at 277). Within-slide section order (_01/_02) checked: correct here.
 - JR (no STAGE1 SyN) has the smallest warp, but lower blur-equalized NCC and mask Dice than A: the STAGE1 SyN
   corrects real shape differences between sections, not only noise. Single misfit slices show as dark lines.
 

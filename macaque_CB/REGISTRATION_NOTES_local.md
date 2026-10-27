@@ -41,6 +41,7 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_MRI_REFIT` | 0 | 1 = refit the MRI affine at every STAGE1 level (drifts, see 4.2); 0 = one fit on `cascade_0` |
 | `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
 | `SLICEREG_JITTER` | 0 | 1 = rigid jitter correction folded into coreg0nl (4.7); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (6) |
+| `SLICEREG_GROUPWISE_ITERS` | 10 | number of groupwise iterations; the final level becomes `..._groupwise_iter{N-1}` (suffix `_gw{N}`; jitter iterations other than 6 add the number to `_jit`) |
 | `SLICEREG_STAGE1_SYN` | 1 | 0 = STAGE1 rigid only |
 | `SLICEREG_STAGE1_SYN_LAST` | 1 | 0 = SyN only in the template-building STAGE1 levels, the last level rigid |
 | `SLICEREG_STAGE1_REG` | Medium | STAGE1 SyN regularization preset |
@@ -259,6 +260,8 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
 | J | 40 | A + jitter correction in coreg0nl | done: better than A (below) |
 | JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | done: mixed, worse than J |
 | JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | done: same as JR, worse than J |
+| A20, J20 | 20 | A and J at rescale 20: does the gain hold at a finer grid? | running |
+| JG | 40 | J + 10 jitter iterations + 15 groupwise iterations (`_jit10_gw15`): convergence and warp per iteration | running |
 
 Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median / 5th pct of adjacent pairs):
 

@@ -80,7 +80,11 @@ use_jitter_correction = os.environ.get('SLICEREG_JITTER', '0') == '1'
 jitter_sigma = float(os.environ.get('SLICEREG_JITTER_SIGMA', 15)) #slices; the slow part removed from the poses
 jitter_iterations = int(os.environ.get('SLICEREG_JITTER_ITERS', 6))
 if use_jitter_correction:
-    variant_tag += '_jit'
+    variant_tag += '_jit' + ('' if jitter_iterations == 6 else str(jitter_iterations))
+# number of groupwise iterations; the final level (and the end of the transform chain) is groupwise_iter{N-1}
+groupwise_iterations = int(os.environ.get('SLICEREG_GROUPWISE_ITERS', 10))
+if groupwise_iterations != 10:
+    variant_tag += f'_gw{groupwise_iterations}'
 if os.environ.get('SLICEREG_STAGE1_SYN', '1') != '1':
     variant_tag += '_s1rigid'
 elif os.environ.get('SLICEREG_STAGE1_SYN_LAST', '1') != '1':
@@ -743,8 +747,6 @@ logging.warning("=" * 80)
 #     scaling_factor=scaling_factor,
 #     voxel_res=voxel_res
 # )
-
-groupwise_iterations = 10
 
 expected_stack_fname = f'{subject}_{input_source_file_tag}_groupwise_iter{groupwise_iterations-1}_stack.nii.gz'
 logging.warning(expected_stack_fname)

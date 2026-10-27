@@ -82,6 +82,9 @@ def stage1_neighbour_target_tag(template_tag):
 # *_{level}_mri_target.nii.gz and mri_anchor/{level}/ (transforms + qc.json)
 use_mri_anchor = os.environ.get('SLICEREG_MRI_ANCHOR', '0') == '1'
 mri_target_weight_scale = float(os.environ.get('SLICEREG_MRI_WEIGHT', 1.0)) #multiplies the weight of the (replaced) stack template
+mri_refit = os.environ.get('SLICEREG_MRI_REFIT', '0') == '1' #1: refit the MRI affine at every STAGE1 level (warm start); 0: fit once on cascade_0 and keep it
+# refitting let the reference follow the stack (run C, 2026-10-27: Dice 0.86 -> 0.76, section scale 1.01 -> 1.20 over the levels)
+mri_fixed_level = 'cascade_0'
 mri_direction = int(os.environ.get('SLICEREG_MRI_DIRECTION', 1)) #+1/-1: hemisphere of the MRI that the stack is fitted to (the MRI is near symmetric; fixed so that runs are comparable)
 mri_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target')
 mri_template_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')
@@ -91,7 +94,7 @@ if not use_mri_anchor:
 if use_mri_anchor:
     import json
     import mri_anchor
-    variant_tag += '_mri' if mri_target_weight_scale == 1.0 else f'_mri{mri_target_weight_scale:g}'
+    variant_tag += ('_mri' if mri_refit else '_mrifix') + ('' if mri_target_weight_scale == 1.0 else f'{mri_target_weight_scale:g}')
 mri_state = None #qc of the last MRI fit, used to warm-start the next one
 
 def stage1_stack_targets(template_tag):
@@ -99,6 +102,8 @@ def stage1_stack_targets(template_tag):
     global mri_state
     if not use_mri_anchor:
         return None
+    if not mri_refit:
+        template_tag = mri_fixed_level #one fit, the same MRI planes for every level
     fnames = [f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{os.path.basename(f).split('.')[0]}_{template_tag}_mri_target.nii.gz"
               for idx, f in enumerate(all_image_fnames)]
     level_dir = os.path.join(output_dir, 'mri_anchor', template_tag)

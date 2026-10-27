@@ -178,7 +178,7 @@ Pipeline integration (`SLICEREG_MRI_ANCHOR=1`, `SLICEREG_MRI_WEIGHT`, module `mr
 Synthetic slices keep 80-93% of the edge sharpness of their neighbours. Where they are weak, the cause is
 poor alignment of slices i-1 and i+1 across the 100 um gap, not the interpolation itself.
 
-### 4.4 Is the MRI-derived low-frequency correction real? (offline test, )
+### 4.4 Is the MRI-derived low-frequency correction real? (offline test, `mri_pose_consistency.py`)
 
 Two equally good global fits of the same stack to D99 (reference slices 140 and 260), per-slice rigid fit
 (mask-based) of every slice to its D99 plane, poses smoothed along the stack (sigma 10 / 20 slices).
@@ -194,7 +194,7 @@ With a different-animal MRI, a linear drift and a small difference in the global
 Only the in-plane component along stack axis i (mostly superior-inferior) is partly consistent (r ~0.75; both fits
 show a ~1 mm dip near slice 220, where A's offset curve has its bump).
 
-**Conclusion:** do not build per-slice MRI anchoring with D99. Use D99 for global placement (OME-Zarr 
+**Conclusion:** do not build per-slice MRI anchoring with D99. Use D99 for global placement (OME-Zarr `mri`
 placement) and QC only. The resolution is not the cause (same result at rescale 40 and at 0.1 mm).
 
 ## 5. OME-Zarr export of the final densities

@@ -37,7 +37,7 @@ def adjacent_ncc(stack, threshold):
 
 
 def mri_agreement(stack, res_mm, slice_mm, out_dir, threshold, mri_threshold=5.0):
-    aff_f, qc = mri_anchor.stack_to_mri_affine(stack, res_mm, slice_mm, MRI_T, MRI_M, out_dir)
+    aff_f, qc = mri_anchor.stack_to_mri_affine(stack, res_mm, slice_mm, MRI_T, MRI_M, out_dir, direction=1)
     fnames = [os.path.join(out_dir, f'mri_plane_{s:04d}.nii.gz') for s in range(stack.shape[2])]
     V = mri_anchor.write_mri_slice_targets(aff_f, stack.shape, res_mm, slice_mm, MRI_T, fnames,
                                            [res_mm * 1000, res_mm * 1000, slice_mm * 1000])

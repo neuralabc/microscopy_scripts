@@ -36,6 +36,10 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_NEIGHBOUR_TARGETS` | `coreg0nl` | STAGE1 neighbour targets, see §4 |
 | `SLICEREG_SMOKE` | 0 | 1 = first 7 slices, slice 3 as missing, rescale 40 |
 | `SLICEREG_THREADS_PER_WORKER` | 1 | ITK/OpenMP threads per worker |
+| `SLICEREG_MRI_ANCHOR` | 0 | 1 = MRI planes replace the stack-median target in STAGE1 (§4.2) |
+| `SLICEREG_MRI_WEIGHT` | 1.0 | weight factor of the MRI target |
+| `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
+| `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5) |
 
 Data: the lookup csv lists `/data/data_drive/...`; on this workstation that is `/mnt/ssd/...`
 (the script rewrites the prefix). Output:
@@ -129,3 +133,24 @@ Pipeline integration (`SLICEREG_MRI_ANCHOR=1`, `SLICEREG_MRI_WEIGHT`, module `mr
 
 Synthetic slices keep 80-93% of the edge sharpness of their neighbours. Where they are weak, the cause is
 poor alignment of slices i-1 and i+1 across the 100 um gap, not the interpolation itself.
+
+## 5. OME-Zarr export of the final densities
+
+`export_ome_zarr.py` (our env) writes the final stack as OME-Zarr **NGFF 0.6 on Zarr v3**, through
+`neuralarc.core.ome_zarr.write_ome_zarr` from tck_view, run in tck_view's own uv environment
+(`_tckview_write_ome_zarr.py`; tck_view needs Python >= 3.13 and vtk/trame, so it is not a dependency here).
+The pipeline calls it at the end of a run (`SLICEREG_EXPORT_ZARR=1`):
+`{output_dir}{subject}_{final_level}_density_{stack|mri}.ome.zarr`.
+
+- Values: **cells/mm^3** = pipeline counts per voxel / voxel volume (the stacks hold counts: `downsample_image`
+  sums blocks). The factor and the units are in the attributes under `microscopy_scripts`.
+- Pyramid: tck_view's default (mean; the finest axes halve first, then all, until the largest side <= 256;
+  64^3 chunks, Blosc zstd). Rescale 5: (398, 873, 623) -> (199, 437, 312) -> (100, 219, 156) (z, y, x).
+- Labels: `labels/synthetic_slices` = 1 on the interpolated slices (not measured).
+- Placement `stack`: the registered grid in mm, no anatomical claim.
+  Placement `mri`: the same voxels (not resampled) with an NGFF 0.6 affine to D99 world (RAS, mm), from a fresh
+  shear-free fit of the stack to D99 (`--direction`, default +1 = right hemisphere).
+- Open in tck_view: `uv run --project ~/Documents/code/tck_view arc <file>.ome.zarr`.
+
+Exports of the existing rescale-5 `groupwise_iter9` stack (made before this branch):
+`/mnt/ssd/Macaque_CB/processing/results_from_cell_counts/ome_zarr_exports/zefir_r5_gw9_{stack,mri}.ome.zarr`

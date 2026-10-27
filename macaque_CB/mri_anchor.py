@@ -173,11 +173,14 @@ def _affine_3d(F, Mv, init_f, Mmask, direction, x0, mri_sp, mri_ox, side_margin_
 
 def stack_to_mri_affine(stack, res_mm, slice_mm, mri_template_fname, mri_mask_fname, out_dir,
                         tissue_threshold=2.0, side_margin_mm=1.0, mask_dilation_mm=1.0,
-                        work_mm=None, ref_slice=None, init_state=None, run_syn_qc=False):
+                        work_mm=None, ref_slice=None, init_state=None, direction=None, run_syn_qc=False):
     """Register the stack (i, j, s array) to the MRI.
     Returns (affine_file, qc). The affine maps MRI -> stack coordinates and has no shear (see remove_shear).
     init_state: qc dict of an earlier call (needs 'affine_file', 'direction', 'x0_mm'); if given, the area fit and
-    the orientation search are skipped and the 3D affine starts from the earlier result."""
+    the orientation search are skipped and the 3D affine starts from the earlier result.
+    direction: +1 / -1 to fix the slice direction along MRI x (which hemisphere the stack is placed in), or None
+    to try both. The MRI is close to symmetric, so both fit about equally well and an automatic choice can
+    differ between runs; fix it when outputs must be comparable (+1: slices run toward the right, RAS +x)."""
     os.makedirs(out_dir, exist_ok=True)
     pre = os.path.join(out_dir, 'mri_')
     T, Mmask, mri_sp, mri_ox = load_mri(mri_template_fname, mri_mask_fname)
@@ -204,7 +207,10 @@ def stack_to_mri_affine(stack, res_mm, slice_mm, mri_template_fname, mri_mask_fn
         # the MRI is close to left-right symmetric, so both slice directions are run to the end
         # (orientation + 3D affine) and the one with the better final Dice is kept
         best = None
-        for direction, x0 in [(fit['direction'], fit['x0_mm']), (-fit['direction'], -fit['x0_mm'])]:
+        options = [(fit['direction'], fit['x0_mm']), (-fit['direction'], -fit['x0_mm'])]
+        if direction is not None:
+            options = [o for o in options if o[0] == direction]
+        for direction, x0 in options:
             dpre = f'{pre}{"pos" if direction > 0 else "neg"}_'
             xi = int(round((x0 + direction * ref_slice * slice_mm - mri_ox) / mri_sp))
             orient = orientation_search_2d(H[..., ref_h], work_mm, T[xi], mri_sp, dpre)

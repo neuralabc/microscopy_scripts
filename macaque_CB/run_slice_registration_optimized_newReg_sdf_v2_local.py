@@ -82,6 +82,7 @@ def stage1_neighbour_target_tag(template_tag):
 # *_{level}_mri_target.nii.gz and mri_anchor/{level}/ (transforms + qc.json)
 use_mri_anchor = os.environ.get('SLICEREG_MRI_ANCHOR', '0') == '1'
 mri_target_weight_scale = float(os.environ.get('SLICEREG_MRI_WEIGHT', 1.0)) #multiplies the weight of the (replaced) stack template
+mri_direction = int(os.environ.get('SLICEREG_MRI_DIRECTION', 1)) #+1/-1: hemisphere of the MRI that the stack is fitted to (the MRI is near symmetric; fixed so that runs are comparable)
 mri_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target')
 mri_template_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')
 mri_mask_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_mask_crop.nii.gz')
@@ -110,7 +111,7 @@ def stage1_stack_targets(template_tag):
     res_mm = rescaled_in_plane_res_x / 1000.0
     slice_mm = in_plane_res_z_microns / 1000.0
     aff_f, qc = mri_anchor.stack_to_mri_affine(stack, res_mm, slice_mm, mri_template_fname, mri_mask_fname,
-                                               level_dir, init_state=mri_state)
+                                               level_dir, init_state=mri_state, direction=mri_direction)
     mri_anchor.write_mri_slice_targets(aff_f, stack.shape, res_mm, slice_mm, mri_template_fname, fnames, voxel_res)
     with open(qc_fname, 'w') as f:
         json.dump(qc, f, indent=2, default=str)
@@ -955,3 +956,28 @@ if apply_transforms_to_orig:
         )
         if stack_file:
             logging.warning(f"Original image stack in '{target_level}' space: {stack_file}")
+
+
+# ==================================================================================
+# STEP: Export the final densities as OME-Zarr (NGFF 0.6, tck_view format), see export_ome_zarr.py
+# ==================================================================================
+# stack: registered grid in mm; mri: same voxels with an affine to D99 world (right hemisphere, SLICEREG_MRI_DIRECTION)
+# needs tck_view's uv environment (~/Documents/code/tck_view); a failure is logged and does not stop the run
+export_zarr = os.environ.get('SLICEREG_EXPORT_ZARR', '1') == '1' and not smoke_test
+if export_zarr:
+    import subprocess
+    final_level = f'{input_source_file_tag}_groupwise_iter{groupwise_iterations-1}'
+    for placement in ['stack', 'mri']:
+        zarr_out = f'{output_dir}{subject}_{final_level}_density_{placement}.ome.zarr'
+        if os.path.isdir(zarr_out):
+            logging.warning(f'OME-Zarr exists, skipping: {zarr_out}')
+            continue
+        cmd = [sys.executable, os.path.join(script_dir, 'export_ome_zarr.py'), '--run-dir', output_dir,
+               '--rescale', str(rescale), '--level', final_level, '--placement', placement, '--out', zarr_out,
+               '--direction', str(int(os.environ.get('SLICEREG_MRI_DIRECTION', 1))),
+               '--missing', ','.join(map(str, missing_idxs_to_fill or []))]
+        try:
+            subprocess.run(cmd, check=True)
+            logging.warning(f'OME-Zarr written: {zarr_out}')
+        except Exception as e:
+            logging.warning(f'OME-Zarr export failed for {placement}: {e}')

@@ -38,6 +38,7 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_THREADS_PER_WORKER` | 1 | ITK/OpenMP threads per worker |
 | `SLICEREG_MRI_ANCHOR` | 0 | 1 = MRI planes replace the stack-median target in STAGE1 (§4.2) |
 | `SLICEREG_MRI_WEIGHT` | 1.0 | weight factor of the MRI target |
+| `SLICEREG_MRI_REFIT` | 0 | 1 = refit the MRI affine at every STAGE1 level (drifts, see 4.2); 0 = one fit on `cascade_0` |
 | `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
 | `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5) |
 
@@ -82,9 +83,26 @@ acted as a weak anchor to the raw positions).
 
 | Run | Rescale | Neighbours | Status / result |
 |---|---|---|---|
-| A | 40 | `coreg0nl` (original) | running |
-| B | 40 | `previous` | running |
-| C | 40 | `previous` + MRI anchor | running |
+| A | 40 | `coreg0nl` (original) | done (1 h 47 min, 6 workers) |
+| B | 40 | `previous` | done (1 h 47 min, 6 workers) |
+| C | 40 | `previous` + MRI anchor, refit every level | MRI fit drifted, see 4.2 |
+| C2 | 40 | `coreg0nl` + MRI anchor, affine fixed at `cascade_0` | running |
+
+Result A vs B (`evaluate_registration.py`, MRI fit with direction +1):
+
+| measure | A | B |
+|---|---|---|
+| adjacent NCC median, stage1 / groupwise | 0.855 / 0.944 | 0.853 / 0.941 |
+| adjacent NCC 5th pct, stage1 / groupwise | **0.667 / 0.841** | 0.599 / 0.804 |
+| MRI per-slice Dice median, stage1 / groupwise | **0.861 / 0.865** | 0.825 / 0.772 |
+| centroid offset to MRI plane, median mm, stage1 / groupwise | **1.46 / 1.39** | 2.48 / 2.96 |
+| STAGE1 warp RMS total / non-affine (mm) | **0.59 / 0.27** | 1.43 / 0.31 |
+
+Decision: keep the original neighbour targets (`coreg0nl`). The translation-only neighbours act as an anchor to
+the raw section positions; without them the stack drifts more and warps more, with no gain in continuity.
+A still shows low-frequency drift (offset rises to ~2.5 mm near slice 180 and falls to ~0.1 mm near slice 235),
+which is what the MRI anchor is for. (The offset includes a bias from the partial brainstem; compare runs, not
+absolute values.)
 
 Compare runs with `evaluate_registration.py` (adjacent-slice NCC, independent MRI fit per final stack with
 per-slice Dice and centroid offset, non-affine warp size of the final STAGE1 maps).
@@ -121,6 +139,12 @@ Pipeline integration (`SLICEREG_MRI_ANCHOR=1`, `SLICEREG_MRI_WEIGHT`, module `mr
 - each slice's MRI plane replaces the whole-stack median target (same weight x `SLICEREG_MRI_WEIGHT`)
 - new files only: `*_{level}_mri_target.nii.gz`, `mri_anchor/{level}/` (transforms, `qc.json`).
   Names in §3 are unchanged.
+- Run C (refit at every level, warm start) drifted: Dice of the fit 0.86 (cascade_0) -> 0.76, section-axis scale
+  1.01 -> 1.20 by iteration 1, then stable. The reference followed the stack. Probable reasons: the refit itself,
+  and the MRI target also drives the SyN part (embedded_antspy_2d_multi uses one target set for rigid and SyN),
+  so at rescale 40 slices are warped toward the D99 anatomy (another animal). Default is now one fit on
+  `cascade_0`, kept for all levels (`SLICEREG_MRI_REFIT=0`). If C2 still shows the SyN effect, the next step is
+  to use the MRI in a rigid-only per-slice step (with the poses smoothed along the stack) instead of as a SyN target.
 
 ### 4.3 Missing-slice interpolation check (rescale-5 `groupwise_iter9` stack)
 

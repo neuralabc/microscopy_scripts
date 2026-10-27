@@ -98,6 +98,20 @@ Result A vs B (`evaluate_registration.py`, MRI fit with direction +1):
 | centroid offset to MRI plane, median mm, stage1 / groupwise | **1.46 / 1.39** | 2.48 / 2.96 |
 | STAGE1 warp RMS total / non-affine (mm) | **0.59 / 0.27** | 1.43 / 0.31 |
 
+**Correction (same day):** the MRI-based numbers above used a tissue threshold of 2 counts per voxel, which at
+rescale 40 (64x the pixel area of rescale 5) made tissue masks 25-45% too large. With the density-based
+threshold (`mri_anchor.tissue_threshold_for`) and the more robust shear-free affine:
+
+| run | NCC median s1 / gw | NCC 5th pct s1 / gw | MRI Dice slice median s1 / gw | offset median mm s1 / gw | offset p95 mm s1 / gw | warp total / non-affine mm |
+|---|---|---|---|---|---|---|
+| A | 0.796 / 0.914 | **0.485 / 0.724** | 0.846 / 0.857 | 1.09 / 1.11 | 3.28 / 3.70 | **0.59 / 0.25** |
+| B | 0.797 / 0.907 | 0.402 / 0.675 | 0.835 / 0.849 | 1.16 / 0.93 | 1.65 / 1.73 | 1.43 / 0.29 |
+| C | 0.778 / 0.897 | 0.312 / 0.636 | 0.829 / 0.838 | 1.18 / 1.22 | 3.48 / 3.18 | 1.77 / 0.28 |
+
+"B drifts more" is **not** supported any more: the MRI-based measures carry fit noise of the same size as the
+differences (the in-plane scale of repeated fits ranged 0.64-0.88). The decision below rests on the measures that
+need no MRI: the continuity tail and the warp size.
+
 Decision: keep the original neighbour targets (`coreg0nl`). The translation-only neighbours act as an anchor to
 the raw section positions; without them the stack drifts more and warps more, with no gain in continuity.
 Run C (B + MRI, refit at every level): per-slice MRI Dice 0.873 / 0.867, centroid offset 1.47 / 1.51 mm (back to
@@ -189,3 +203,16 @@ The pipeline calls it at the end of a run (`SLICEREG_EXPORT_ZARR=1`):
 
 Exports of the existing rescale-5 `groupwise_iter9` stack (made before this branch):
 `/mnt/ssd/Macaque_CB/processing/results_from_cell_counts/ome_zarr_exports/zefir_r5_gw9_{stack,mri}.ome.zarr`
+
+## 6. Comparison: BigBrain reconstruction (Lepage, Mohlberg et al., BigBrain2 workshop abstracts)
+
+- MRI: the post-mortem MRI of the **same** fixed brain (1.5T MPRAGE, 0.5 mm) - an undistorted reference of that
+  brain, which also gives the shrinkage. We have D99, another animal.
+- Order: (1) iterative alignment to the MRI, alternating 3D stack->MRI and 2D section->sliced MRI, rigid -> affine
+  -> non-linear over 10 global iterations (low-frequency errors, "jaggies", shrinkage); (2) then, separately,
+  section-to-section non-linear 2D alignment **without MRI** (high-frequency errors); intensity balancing to MRI.
+- The first BigBrain (2013) did section-to-section first and registered the volume to MNI afterwards; low-frequency
+  jaggies remained, which motivated the MRI-first scheme.
+- Lessons for us: keep the MRI and the neighbour terms in separate steps (run C mixed them in one cost, with the MRI
+  also driving SyN); with a different-animal MRI stop at rigid (+ a constrained scale), and smooth the poses along
+  the stack, so that only low-frequency corrections come from the MRI.

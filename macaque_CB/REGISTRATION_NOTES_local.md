@@ -40,6 +40,9 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_MRI_WEIGHT` | 1.0 | weight factor of the MRI target |
 | `SLICEREG_MRI_REFIT` | 0 | 1 = refit the MRI affine at every STAGE1 level (drifts, see 4.2); 0 = one fit on `cascade_0` |
 | `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
+| `SLICEREG_JITTER` | 0 | 1 = rigid jitter correction folded into coreg0nl (4.7); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (6) |
+| `SLICEREG_STAGE1_SYN` | 1 | 0 = STAGE1 rigid only |
+| `SLICEREG_STAGE1_REG` | Medium | STAGE1 SyN regularization preset |
 | `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5) |
 
 Data: the lookup csv lists `/data/data_drive/...`; on this workstation that is `/mnt/ssd/...`
@@ -227,6 +230,30 @@ Keep run A's setup: original neighbour targets (`coreg0nl`), no MRI term in STAG
 D99 for global placement (OME-Zarr `mri` placement) and QC only. Known limit: the slow in-plane translation
 path follows the scan framing (bounding-box centred sections), possibly a few mm off the true shape across the
 hemisphere (4.5). These are the defaults of the local script.
+
+### 4.7 Improving the alignment without MRI (started 2026-10-27)
+
+Diagnosis of A (rescale 40): A corrects slice-to-slice jitter (fast part of its STAGE1 corrections: rotation SD
+2.8 deg, shift SD ~0.3 mm) but keeps the slow path of the scan framing. Weak adjacent pairs have larger jumps in
+tissue area and centroid (Spearman r ~ -0.25): partly real tissue change or damage. A's final stack shows
+intensity bands (staining; left as they are in the outputs) and jagged edges mostly in TP3.
+
+**Measurement caveat:** adjacent NCC rises with interpolation blur. A half-pixel resampling alone took A's STAGE1
+median from 0.80 to 0.88. Compare runs with the same number of resampling steps, or use the blur-equalized NCC
+in `evaluate_registration.py` (same in-plane smoothing for every stack), plus adjacent tissue-mask Dice.
+
+Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test.py`): each slice fitted rigidly
+(GC) to the mean of its neighbours, the slow part of the poses removed (sigma 15 slices), half steps, iterated.
+- on A's STAGE1 / final stacks (offline, resampled twice): NCC gain over a sub-pixel-shift control of about
+  +0.04 / +0.02 (median) and +0.10 / +0.04 (5th pct); mask Dice unchanged.
+- folded into coreg0nl (one interpolation of the native slice, maps/inverse maps rewritten in place, names and
+  chain unchanged): raw coreg0nl adjacent NCC 0.41 -> 0.74; rotation SD 5 deg, shift SD 0.2 mm.
+- pipeline switch `SLICEREG_JITTER=1` (output suffix `_jit`); poses in `{subject}_coreg0nl_jitter_poses.csv`.
+
+| Run | Rescale | Change | Status |
+|---|---|---|---|
+| J | 40 | A + jitter correction in coreg0nl | running |
+| JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | running |
 
 ## 5. OME-Zarr export of the final densities
 

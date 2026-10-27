@@ -158,7 +158,10 @@ def correct_level_in_place(output_dir, subject, all_image_fnames, level, res_mm,
         # forward map: new canvas point p takes the old map at R^T (p - c - t) + c
         ii, jj = np.meshgrid(np.arange(m.shape[0]), np.arange(m.shape[1]), indexing='ij')
         q = np.einsum('ab,bij->aij', R.T, np.stack([ii - c[0] - t[0], jj - c[1] - t[1]])) + c[:, None, None]
-        inside = ndi.map_coordinates(np.any(m != 0, axis=2).astype(np.float32), q, order=0, cval=0.0) > 0
+        # inside only where all map entries used by the linear interpolation are valid: at the border of the valid
+        # region, interpolating with the zeros outside gives coordinates inside the slice and copies tissue to the
+        # edges (seen as dotted streaks in run JR, 2026-10-27)
+        inside = ndi.map_coordinates(np.any(m != 0, axis=2).astype(np.float32), q, order=1, cval=0.0) > 0.999
         m_new = np.stack([ndi.map_coordinates(m[..., k], q, order=1, cval=0.0) for k in range(m.shape[2])], axis=2)
         m_new[~inside] = 0.0
         nibabel.save(nibabel.Nifti1Image(m_new, mimg.affine, mimg.header), maps[0])

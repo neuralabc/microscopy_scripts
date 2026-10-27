@@ -89,7 +89,7 @@ def adjacent_mask_dice(stack, threshold):
 
 
 def slow_path(stack, threshold, res_mm, sigma=15.0):
-    """Low-pass tissue centroid (mm) and principal-axis angle (deg) along the stack."""
+    """Low-pass tissue centroid (mm) and principal-axis angle (deg, slices with an elongated outline only)."""
     cen, ang = [], []
     for s in range(stack.shape[2]):
         m = ndi.binary_fill_holes(stack[..., s] > threshold)
@@ -99,9 +99,13 @@ def slow_path(stack, threshold, res_mm, sigma=15.0):
         cen.append([ii.mean() * res_mm, jj.mean() * res_mm])
         cov = np.cov(np.stack([ii, jj]))
         w, v = np.linalg.eigh(cov)
-        ang.append(np.degrees(np.arctan2(v[1, -1], v[0, -1])) % 180)
+        # the principal axis of a near-round outline is ill-defined and flips; skip those slices
+        ang.append(np.degrees(np.arctan2(v[1, -1], v[0, -1])) % 180 if w[-1] > 1.5 * w[0] else np.nan)
+    ang = np.array(ang, float)
+    ok = ~np.isnan(ang)
+    ang[ok] = np.degrees(np.unwrap(np.radians(ang[ok]) * 2) / 2)  # axes: unwrap on the doubled angle
     out = []
-    for x in [np.array(cen)[:, 0], np.array(cen)[:, 1], np.unwrap(np.radians(np.array(ang)) * 2) / 2 * 180 / np.pi]:
+    for x in [np.array(cen)[:, 0], np.array(cen)[:, 1], ang]:
         g = ~np.isnan(x)
         x = np.interp(np.arange(len(x)), np.flatnonzero(g), x[g])
         out.append(ndi.gaussian_filter1d(x, sigma, mode='nearest'))

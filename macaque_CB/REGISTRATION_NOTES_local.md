@@ -255,8 +255,14 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
 
 | Run | Rescale | Change | Status |
 |---|---|---|---|
-| J | 40 | A + jitter correction in coreg0nl | running |
-| JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | running |
+| J | 40 | A + jitter correction in coreg0nl | re-running after the fix below |
+| JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | re-running after the fix below |
+
+Bug found in the first JR run (fixed in `slice_jitter.py`, commit 434b3c8): at the border of the valid map region the
+composed map was interpolated with the zeros outside it, which copied tissue to the image edges (dotted streaks).
+That first JR result (worse mask Dice, a false 50 deg slow-angle difference at the lateral end) is void; the first J
+run was stopped. After the fix, raw coreg0nl adjacent NCC with the correction is 0.78 (0.74 with the bug).
+The slow-path angle in `evaluate_registration.py` now skips slices with a near-round outline (ill-defined axis).
 
 ## 5. OME-Zarr export of the final densities
 

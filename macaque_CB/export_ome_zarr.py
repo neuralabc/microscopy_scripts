@@ -101,9 +101,22 @@ def main():
         'placement': a.placement, 'synthetic_slices': missing}}
     if a.placement == 'mri':
         affine, qc = mri_world_affine(counts, res_mm, SLICE_MM, out + '.mri_fit', direction=a.direction)
+        # The stack axes are (in-plane, in-plane, section) and the sections are sagittal, so array axis 2 runs
+        # left-right in the world, and the fit includes an in-plane flip (determinant < 0). tck_view's slice panes
+        # take array axes 0, 1, 2 as world x, y, z, and the axial pane showed the wrong plane. So the array is
+        # permuted and flipped (no resampling) to the closest RAS+ order; only a small rotation stays in the affine.
+        ornt = nibabel.orientations.io_orientation(affine)
+        reorient = nibabel.orientations.inv_ornt_aff(ornt, density.shape)
+        density = nibabel.orientations.apply_orientation(density, ornt)
+        synthetic = nibabel.orientations.apply_orientation(synthetic, ornt)
+        affine = affine @ reorient
+        if np.linalg.det(affine[:3, :3]) <= 0 or not np.all(np.argmax(np.abs(affine[:3, :3]), axis=0) == [0, 1, 2]):
+            raise ValueError(f'reorientation to RAS+ failed:\n{affine}')
         attrs['microscopy_scripts'].update(
             world='D99 cerebellum_brainstem_template_crop (RAS, mm)',
-            mri_fit={k: qc[k] for k in ('direction', 'x0_mm', 'scales_stack_axes', 'dice_affine')})
+            mri_fit={k: qc[k] for k in ('direction', 'x0_mm', 'scales_stack_axes', 'dice_affine')},
+            # row k: stack axis k (i, j, section) is array axis ornt[k][0], reversed if ornt[k][1] == -1
+            array_axes_from_stack=ornt.tolist())
         anatomical = True
     else:
         affine = stack_affine_mm(counts.shape, res_mm, SLICE_MM)

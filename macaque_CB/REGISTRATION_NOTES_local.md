@@ -147,9 +147,14 @@ The pipeline calls it at the end of a run (`SLICEREG_EXPORT_ZARR=1`):
 - Pyramid: tck_view's default (mean; the finest axes halve first, then all, until the largest side <= 256;
   64^3 chunks, Blosc zstd). Rescale 5: (398, 873, 623) -> (199, 437, 312) -> (100, 219, 156) (z, y, x).
 - Labels: `labels/synthetic_slices` = 1 on the interpolated slices (not measured).
+- Our attributes are under `neuralarc.microscopy_scripts` in the root `zarr.json` (tck_view merges them there).
 - Placement `stack`: the registered grid in mm, no anatomical claim.
   Placement `mri`: the same voxels (not resampled) with an NGFF 0.6 affine to D99 world (RAS, mm), from a fresh
   shear-free fit of the stack to D99 (`--direction`, default +1 = right hemisphere).
+  The array is permuted and flipped (not resampled) to the closest RAS+ order before writing: tck_view's slice
+  panes take array axes 0, 1, 2 as world x, y, z, and with the stack order (in-plane, in-plane, section) the axial
+  pane showed the wrong plane (reported 2026-10-27). The section axis is then array x; the mapping is stored as
+  `array_axes_from_stack` (row k: stack axis k (i, j, section) is array axis [0], reversed if [1] == -1).
 - Open in tck_view: `uv run --project ~/Documents/code/tck_view arc <file>.ome.zarr`.
 
 Exports of the existing rescale-5 `groupwise_iter9` stack (made before this branch):

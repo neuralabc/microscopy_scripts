@@ -221,6 +221,13 @@ registration). Rigid part of each slice's STAGE1 map (raw -> final), fitted over
   it (no same-animal MRI). Options: a physical reference if one exists (blockface photos, fiducials), or accept A
   and document the limitation.
 
+### 4.6 Decision (2026-10-27)
+
+Keep run A's setup: original neighbour targets (`coreg0nl`), no MRI term in STAGE1 (`SLICEREG_MRI_ANCHOR=0`),
+D99 for global placement (OME-Zarr `mri` placement) and QC only. Known limit: the slow in-plane translation
+path follows the scan framing (bounding-box centred sections), possibly a few mm off the true shape across the
+hemisphere (4.5). These are the defaults of the local script.
+
 ## 5. OME-Zarr export of the final densities
 
 `export_ome_zarr.py` (our env) writes the final stack as OME-Zarr **NGFF 0.6 on Zarr v3**, through

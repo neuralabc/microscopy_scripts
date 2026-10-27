@@ -258,13 +258,14 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
 |---|---|---|---|
 | J | 40 | A + jitter correction in coreg0nl | done: better than A (below) |
 | JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | done: mixed, worse than J |
-| JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | running |
+| JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | done: same as JR, worse than J |
 
 Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median / 5th pct of adjacent pairs):
 
 | Measure | A STAGE1 | J STAGE1 | JR STAGE1 | A final | J final | JR final |
 |---|---|---|---|---|---|---|
 | adjacent NCC | 0.796 / 0.485 | **0.871 / 0.639** | 0.816 / 0.553 | 0.914 / 0.724 | **0.936 / 0.796** | 0.922 / 0.752 |
+| (JT: NCC STAGE1 0.812 / 0.532, final 0.921 / 0.739; blur-eq final 0.959 / 0.817; Dice final 0.975 / 0.921; warp 0.10 / 0.00; slow path vs A 0.28 mm) | | | | | | |
 | blur-equalized NCC | 0.936 / 0.735 | **0.961 / 0.801** | 0.911 / 0.723 | 0.968 / 0.839 | **0.977 / 0.874** | 0.959 / 0.819 |
 | tissue-mask Dice | 0.964 / 0.914 | **0.973 / 0.922** | 0.957 / 0.884 | 0.976 / **0.939** | **0.982** / 0.938 | 0.976 / 0.921 |
 | STAGE1 warp RMS, total / non-affine (mm) | 0.59 / 0.25 | 0.32 / 0.20 | 0.15 / 0.00 | | | |
@@ -279,6 +280,9 @@ Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median
   upper right (area and centroid step at 277). Within-slide section order (_01/_02) checked: correct here.
 - JR (no STAGE1 SyN) has the smallest warp, but lower blur-equalized NCC and mask Dice than A: the STAGE1 SyN
   corrects real shape differences between sections, not only noise. Single misfit slices show as dark lines.
+- JT (SyN only for the templates, rigid last level) gives the same result as JR: better templates do not help
+  when the slice that enters the chain is only rigidly aligned. The STAGE1 SyN in the chain is needed.
+- Decision candidate: J (`SLICEREG_JITTER=1`, STAGE1 unchanged). Confirm at a finer rescale before the full run.
 
 Note on what STAGE1 warps do: every STAGE1 level registers from coreg0nl again, so the warps of levels 0-3 (and of
 the cascade) only shape the templates. Only the last level (`rigsyn_4`) feeds the groupwise step and is in the chain.

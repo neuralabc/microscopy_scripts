@@ -83,6 +83,8 @@ if use_jitter_correction:
     variant_tag += '_jit'
 if os.environ.get('SLICEREG_STAGE1_SYN', '1') != '1':
     variant_tag += '_s1rigid'
+elif os.environ.get('SLICEREG_STAGE1_SYN_LAST', '1') != '1':
+    variant_tag += '_s1lastrigid'
 if os.environ.get('SLICEREG_STAGE1_REG', 'Medium') != 'Medium':
     variant_tag += '_s1reg' + os.environ['SLICEREG_STAGE1_REG']
 
@@ -480,6 +482,7 @@ logger.warning('3. Begin STAGE1 registration iterations - Rigid + Syn')
 num_reg_iterations = 5
 run_rigid = True
 run_syn = os.environ.get('SLICEREG_STAGE1_SYN', '1') == '1' #0: STAGE1 rigid only, all warping left to the groupwise step
+stage1_syn_last = os.environ.get('SLICEREG_STAGE1_SYN_LAST', '1') == '1' #0: SyN only in the template-building STAGE1 levels, the last level (in the chain) rigid only
 regularization = os.environ.get('SLICEREG_STAGE1_REG', 'Medium') #SyN preset in embedded_antspy_smthMod: Low, Medium, High, VeryHigh
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
@@ -488,6 +491,9 @@ MI_df_struct = {} #output for MI values, will be saved in a csv file
 ## TODO: nonlin slice templates not working from cascade as of yet?
 template_not_generated = True #keeps track of if we generated a template or not at this stage so that we can generate one if we stopped the registration at some point
 for iter in range(num_reg_iterations):
+    # the last STAGE1 level is the one that goes into the groupwise step and the transform chain; earlier levels
+    # only build templates (every level registers from coreg0nl again)
+    run_syn_this_iter = run_syn and not (iter == num_reg_iterations-1 and not stage1_syn_last)
     if iter == num_reg_iterations-1:
         across_slice_smoothing_sigma = 0 # we do not smooth the final output stack and templates
         retain_reg_mappings=True #we retain the registration mappings for all outputs at the last level
@@ -551,7 +557,7 @@ for iter in range(num_reg_iterations):
                                     input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg1nl'+iter_tag,
                                     image_weights=image_weights_win1,
-                                    run_syn=run_syn,
+                                    run_syn=run_syn_this_iter,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     regularization=regularization,
@@ -569,7 +575,7 @@ for iter in range(num_reg_iterations):
                                     input_source_file_tag='coreg0nl', 
                                     reg_level_tag='coreg2nl'+iter_tag,
                                     image_weights=image_weights_win2,
-                                    run_syn=run_syn,
+                                    run_syn=run_syn_this_iter,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     regularization=regularization,
@@ -632,7 +638,7 @@ for iter in range(num_reg_iterations):
                                     previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win1'+iter_tag,
                                     image_weights=image_weights_win1,
-                                    run_syn=run_syn,
+                                    run_syn=run_syn_this_iter,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,
@@ -653,7 +659,7 @@ for iter in range(num_reg_iterations):
                                     previous_target_tag = None,
                                     reg_level_tag='coreg12nl_win2'+iter_tag,
                                     image_weights=image_weights_win2,
-                                    run_syn=run_syn,
+                                    run_syn=run_syn_this_iter,
                                     run_rigid=run_rigid,
                                     scaling_factor=scaling_factor,
                                     mask_zero=mask_zero,

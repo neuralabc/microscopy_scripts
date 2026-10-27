@@ -72,6 +72,16 @@ if stage1_neighbour_targets not in ['coreg0nl', 'previous']:
     raise ValueError(f'Unknown stage1_neighbour_targets: {stage1_neighbour_targets}')
 variant_tag = '' if stage1_neighbour_targets == 'coreg0nl' else '_nbrprev'
 
+# rigid jitter correction folded into coreg0nl (see slice_jitter.py): each slice is fitted rigidly to the mean of its
+# neighbours, only the fast part of the poses is kept (the slow path stays as it was), iterated with half steps.
+# The coreg0nl maps, inverse maps and deformed slices are rewritten in place (same names and formats), so the
+# transform chain is unchanged; the poses are in {subject}_coreg0nl_jitter_poses.csv
+use_jitter_correction = os.environ.get('SLICEREG_JITTER', '0') == '1'
+jitter_sigma = float(os.environ.get('SLICEREG_JITTER_SIGMA', 15)) #slices; the slow part removed from the poses
+jitter_iterations = int(os.environ.get('SLICEREG_JITTER_ITERS', 6))
+if use_jitter_correction:
+    variant_tag += '_jit'
+
 def stage1_neighbour_target_tag(template_tag):
     return template_tag if stage1_neighbour_targets == 'previous' else None
 
@@ -355,6 +365,21 @@ for _file in image_list:
     dest_file = os.path.join(output_dir, os.path.basename(_file))
     if not os.path.isfile(dest_file):
         shutil.copy2(_file, output_dir)
+
+if use_jitter_correction:
+    jitter_poses_fname = os.path.join(output_dir, f'{subject}_coreg0nl_jitter_poses.csv')
+    if os.path.isfile(jitter_poses_fname): #written last, so its presence means the correction is complete
+        logging.warning('Jitter correction of coreg0nl already done, skipping')
+    else:
+        logger.warning('2b. Rigid jitter correction of coreg0nl (slow path kept)')
+        import slice_jitter
+        import mri_anchor
+        slice_jitter.correct_level_in_place(output_dir, subject, all_image_fnames, 'coreg0nl',
+                                            res_mm=rescaled_in_plane_res_x / 1000.0, voxel_res=voxel_res,
+                                            thr=mri_anchor.tissue_threshold_for(rescaled_in_plane_res_x / 1000.0),
+                                            sigma=jitter_sigma, iters=jitter_iterations, step=0.5,
+                                            exclude=missing_idxs_to_fill or [], max_workers=max_workers,
+                                            zfill_num=zfill_num)
 
 
 expected_stack_name = f'{subject}_coreg0nl_stack.nii.gz'

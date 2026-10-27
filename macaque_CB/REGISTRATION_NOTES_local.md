@@ -80,6 +80,10 @@ acted as a weak anchor to the raw positions).
 |---|---|---|---|
 | A | 40 | `coreg0nl` (original) | running |
 | B | 40 | `previous` | running |
+| C | 40 | `previous` + MRI anchor | running |
+
+Compare runs with `evaluate_registration.py` (adjacent-slice NCC, independent MRI fit per final stack with
+per-slice Dice and centroid offset, non-affine warp size of the final STAGE1 maps).
 
 ### 4.2 MRI anchor (D99 cerebellum + brainstem, 0.25 mm) — prototype
 
@@ -102,5 +106,26 @@ Facts from the fits: sections are sagittal, one hemisphere + vermis + ~3 mm past
 histology is ~15% smaller in-plane than D99 but close to D99 scale through-plane (consistent with
 in-plane shrinkage after mounting), so the 3D step must be affine, not similarity.
 
-Next: resample D99 into the stack grid (one MRI plane per slice) and use it in STAGE1 in place of the
-whole-stack median target. This adds new files but must not change the names in §3.
+Pipeline integration (`SLICEREG_MRI_ANCHOR=1`, `SLICEREG_MRI_WEIGHT`, module `mri_anchor.py`):
+
+- at every STAGE1 template level (`cascade_0`, `coreg12nl_rigsyn_k`, `coreg12nl_win12_rigsyn_k`) the stack is
+  fitted to the MRI (first level: area fit + orientation search for both slice directions; later levels:
+  warm start from the previous fit) and D99 is resampled into the stack grid
+- the 3D affine is projected to rotation x per-axis scale (no shear): a shear between the slice axis and the
+  in-plane axes is what a linear drift looks like, so it must not be copied into the targets. Cost: Dice 0.807 -> 0.805
+- fitted scales (MRI -> stack, rescale-5 stack): in-plane 0.86 / 0.87, slice axis 0.98 (~51 um of D99 per section)
+- each slice's MRI plane replaces the whole-stack median target (same weight x `SLICEREG_MRI_WEIGHT`)
+- new files only: `*_{level}_mri_target.nii.gz`, `mri_anchor/{level}/` (transforms, `qc.json`).
+  Names in §3 are unchanged.
+
+### 4.3 Missing-slice interpolation check (rescale-5 `groupwise_iter9` stack)
+
+| slice | NCC prev-next | NCC synthetic-neighbours | note |
+|---|---|---|---|
+| 59, 189 | 0.91-0.94 | ~0.97 | good |
+| 120, 228 | 0.69-0.82 | 0.87-0.94 | acceptable |
+| 160 | 0.61 | ~0.85 | neighbours disagree |
+| 32 | 0.41 | ~0.76 | neighbours disagree strongly (pair 33-34 is also among the worst in the stack) |
+
+Synthetic slices keep 80-93% of the edge sharpness of their neighbours. Where they are weak, the cause is
+poor alignment of slices i-1 and i+1 across the 100 um gap, not the interpolation itself.

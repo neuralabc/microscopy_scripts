@@ -79,11 +79,14 @@ def main():
     p.add_argument('--rescale', type=int, required=True)
     p.add_argument('--out', required=True)
     p.add_argument('--subject', default='zefir')
-    p.add_argument('--threshold', type=float, default=2.0)
+    p.add_argument('--threshold', type=float, default=None,
+                   help='tissue threshold in counts per voxel; default: mri_anchor.tissue_threshold_for (same density at every rescale)')
     p.add_argument('--stage1_level', default='coreg12nl_win12_rigsyn_4')
     p.add_argument('--groupwise_iters', type=int, default=10)
     a = p.parse_args()
     res_mm, slice_mm = a.rescale * 10 / 1000.0, 0.05
+    if a.threshold is None:
+        a.threshold = mri_anchor.tissue_threshold_for(res_mm)
     os.makedirs(a.out, exist_ok=True)
     summary = {}
     for spec in a.runs:

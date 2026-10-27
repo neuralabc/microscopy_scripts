@@ -36,6 +36,20 @@ def load_mri(template_fname, mask_fname):
     return (np.asarray(t.dataobj, np.float32), np.asarray(m.dataobj) > 0, spacing, float(t.affine[0, 3]))
 
 
+def embed_mask(mask_fname, template_fname):
+    """A mask on another crop of the same MRI (same spacing and orientation), put on the template's grid."""
+    m, t = nibabel.load(mask_fname), nibabel.load(template_fname)
+    if not np.allclose(m.affine[:3, :3], t.affine[:3, :3]):
+        raise ValueError(f'{mask_fname} and {template_fname} differ in spacing or orientation')
+    off = np.round(np.linalg.solve(t.affine[:3, :3], m.affine[:3, 3] - t.affine[:3, 3])).astype(int)
+    out = np.zeros(t.shape, bool)
+    src = np.asarray(m.dataobj) > 0
+    dst_lo, src_lo = np.maximum(off, 0), np.maximum(-off, 0)
+    n = np.minimum(np.array(src.shape) - src_lo, np.array(t.shape) - dst_lo)
+    out[tuple(slice(d, d + k) for d, k in zip(dst_lo, n))] = src[tuple(slice(s0, s0 + k) for s0, k in zip(src_lo, n))]
+    return out
+
+
 def stack_to_ants(stack, res_mm, slice_mm):
     return ants.from_numpy(np.ascontiguousarray(stack, dtype=np.float32), spacing=(res_mm, res_mm, slice_mm))
 
@@ -46,6 +60,13 @@ def downsample_stack(stack, res_mm, slice_mm, target_mm):
     sig = [max(0.0, (target_mm ** 2 - s ** 2)) ** 0.5 / 2.355 for s in (res_mm, res_mm, slice_mm)]
     img = ants.smooth_image(img, sig, sigma_in_physical_coordinates=True)
     return ants.resample_image(img, (target_mm, target_mm, target_mm), use_voxels=False, interp_type=0)
+
+
+def tissue_threshold_for(res_mm, counts_per_50um_voxel=2.0):
+    """Tissue threshold in the stack's units (cell counts per voxel, which grow with the in-plane voxel area),
+    so that one density threshold is used at every rescale: 2 counts per 50 um voxel (rescale 5) is 128 at rescale 40.
+    A fixed count threshold made the rescale-40 tissue area 25-45% too large."""
+    return counts_per_50um_voxel * (res_mm / 0.05) ** 2
 
 
 def tissue_area_profile(stack, res_mm, threshold):
@@ -140,56 +161,93 @@ def remove_shear(matrix, n_iter=100):
     return D[:, None] * R, D, R
 
 
-def _affine_3d(F, Mv, init_f, Mmask, direction, x0, mri_sp, mri_ox, side_margin_mm, mask_dilation_mm,
-               tissue_threshold, out_prefix, mri_center_mm):
-    """3D affine (fixed = MRI masked to our side + margin, moving = downsampled stack), then shear removal."""
-    xw = mri_ox + np.arange(Mmask.shape[0]) * mri_sp
-    side = direction * (xw - x0) >= -side_margin_mm  # the stack runs from x0 in `direction`
-    fmask = ndi.binary_dilation(Mmask & side[:, None, None], iterations=max(1, int(round(mask_dilation_mm / mri_sp))))
-    Fm = ants.from_numpy(fmask.astype(np.float32), spacing=(mri_sp,) * 3)
-    r = ants.registration(F, Mv, 'Affine', initial_transform=init_f, mask=Fm, aff_metric='mattes',
-                          aff_iterations=(500, 250, 100, 50), aff_shrink_factors=(6, 4, 2, 1),
-                          aff_smoothing_sigmas=(3, 2, 1, 0), outprefix=out_prefix + 'aff_')
-    free_f = out_prefix + 'affine_free.mat'
-    os.replace(r['fwdtransforms'][0], free_f)
-    t = ants.read_transform(free_f)
+def _shear_free(tx_file, out_f, mri_center_mm):
+    """Write the shear-free version (remove_shear) of an affine transform file; returns (file, scales, removed)."""
+    t = ants.read_transform(tx_file)
     p = np.array(t.parameters)
     c = np.array(t.fixed_parameters)
     M, b = p[:9].reshape(3, 3), p[9:12]
     M2, D, R = remove_shear(M)
     # keep the mapping of the MRI tissue centre unchanged: M(x-c)+b+c == M2(x-c)+b2+c at x = mri_center_mm
     b2 = b + (M - M2) @ (mri_center_mm - c)
-    t2 = ants.create_ants_transform(transform_type='AffineTransform', dimension=3,
-                                    matrix=M2, translation=b2, center=tuple(c))
+    ants.write_transform(ants.create_ants_transform(transform_type='AffineTransform', dimension=3,
+                                                    matrix=M2, translation=b2, center=tuple(c)), out_f)
+    return out_f, [float(v) for v in D], float(np.linalg.norm(M - M2))
+
+
+def _affine_3d(F, Mv, init_f, Mmask, direction, x0, mri_sp, mri_ox, side_margin_mm, mask_dilation_mm,
+               tissue_threshold, out_prefix, mri_center_mm):
+    """3D affine of the downsampled stack (moving) to the MRI (fixed, masked to our side + margin).
+
+    The density maps and the MRI have very different contrast, and an MI-only affine often ended worse than its
+    start (Dice 0.84 -> 0.73) with unstable scales. So the candidates are: the start, an affine on smoothed tissue
+    masks (shape only, mean squares), and that refined with MI on the intensities; each made shear-free, and the
+    one with the best Dice is kept. ANTS_RANDOM_SEED is fixed during the fit so that repeated fits agree."""
+    xw = mri_ox + np.arange(Mmask.shape[0]) * mri_sp
+    side = direction * (xw - x0) >= -side_margin_mm  # the stack runs from x0 in `direction`
+    fmask = ndi.binary_dilation(Mmask & side[:, None, None], iterations=max(1, int(round(mask_dilation_mm / mri_sp))))
+    Fm = ants.from_numpy(fmask.astype(np.float32), spacing=(mri_sp,) * 3)
+    work_sp = Mv.spacing
+    H = Mv.numpy()
+    hmask = np.stack([ndi.binary_fill_holes(H[..., k] > tissue_threshold) for k in range(H.shape[2])], axis=2)
+    Hm = ants.from_numpy(ndi.gaussian_filter(hmask.astype(np.float32), 1.0), spacing=work_sp)
+    Mm = ants.from_numpy(ndi.gaussian_filter(Mmask.astype(np.float32), 1.0), spacing=(mri_sp,) * 3)
+    common = dict(mask=Fm, aff_random_sampling_rate=1.0, aff_iterations=(500, 250, 100, 50),
+                  aff_shrink_factors=(6, 4, 2, 1), aff_smoothing_sigmas=(3, 2, 1, 0))
+
+    seed_before = os.environ.get('ANTS_RANDOM_SEED')
+    os.environ['ANTS_RANDOM_SEED'] = '1'
+    try:
+        cands = {'init': _shear_free(init_f, out_prefix + 'affine_init.mat', mri_center_mm)}
+        r = ants.registration(Mm, Hm, 'Affine', initial_transform=init_f, aff_metric='meansquares',
+                              outprefix=out_prefix + 'affmask_', **common)
+        cands['mask'] = _shear_free(r['fwdtransforms'][0], out_prefix + 'affine_mask.mat', mri_center_mm)
+        r = ants.registration(F, Mv, 'Affine', initial_transform=cands['mask'][0], aff_metric='mattes',
+                              outprefix=out_prefix + 'affmi_', **common)
+        cands['mask_mi'] = _shear_free(r['fwdtransforms'][0], out_prefix + 'affine_mask_mi.mat', mri_center_mm)
+    finally:
+        if seed_before is None:
+            os.environ.pop('ANTS_RANDOM_SEED', None)
+        else:
+            os.environ['ANTS_RANDOM_SEED'] = seed_before
+
+    dice = {k: _dice(ants.apply_transforms(F, Mv, [v[0]]).numpy(), Mmask, fmask, tissue_threshold)
+            for k, v in cands.items()}
+    best = max(dice, key=dice.get)
     aff_f = out_prefix + 'affine.mat'
-    ants.write_transform(t2, aff_f)
-    qc = dict(direction=direction, x0_mm=float(x0), scales_stack_axes=[float(v) for v in D],
-              shear_removed_frob=float(np.linalg.norm(M - M2)),
-              dice_init=_dice(ants.apply_transforms(F, Mv, [init_f]).numpy(), Mmask, fmask, tissue_threshold),
-              dice_affine_free=_dice(r['warpedmovout'].numpy(), Mmask, fmask, tissue_threshold),
-              dice_affine=_dice(ants.apply_transforms(F, Mv, [aff_f]).numpy(), Mmask, fmask, tissue_threshold))
+    shutil.copyfile(cands[best][0], aff_f)
+    qc = dict(direction=direction, x0_mm=float(x0), chosen=best, scales_stack_axes=cands[best][1],
+              shear_removed_frob=cands[best][2], dice_init=dice['init'], dice_candidates=dice, dice_affine=dice[best])
     return aff_f, qc, Fm
 
 
 def stack_to_mri_affine(stack, res_mm, slice_mm, mri_template_fname, mri_mask_fname, out_dir,
-                        tissue_threshold=2.0, side_margin_mm=1.0, mask_dilation_mm=1.0,
-                        work_mm=None, ref_slice=None, init_state=None, direction=None, run_syn_qc=False):
+                        tissue_threshold=None, side_margin_mm=1.0, mask_dilation_mm=1.0,
+                        work_mm=None, ref_slice=None, init_state=None, direction=None, run_syn_qc=False,
+                        shape_mask_fname=None):
     """Register the stack (i, j, s array) to the MRI.
     Returns (affine_file, qc). The affine maps MRI -> stack coordinates and has no shear (see remove_shear).
     init_state: qc dict of an earlier call (needs 'affine_file', 'direction', 'x0_mm'); if given, the area fit and
     the orientation search are skipped and the 3D affine starts from the earlier result.
     direction: +1 / -1 to fix the slice direction along MRI x (which hemisphere the stack is placed in), or None
     to try both. The MRI is close to symmetric, so both fit about equally well and an automatic choice can
-    differ between runs; fix it when outputs must be comparable (+1: slices run toward the right, RAS +x)."""
+    differ between runs; fix it when outputs must be comparable (+1: slices run toward the right, RAS +x).
+    shape_mask_fname: mask for the shape fit and the Dice (e.g. the cerebellum only: the sections hold only part of
+    the brainstem, which left the in-plane scale poorly defined); None: mri_mask_fname. The area-profile fit and
+    the MI term still use mri_mask_fname / the full template.
+    tissue_threshold: in counts per voxel; None: tissue_threshold_for(res_mm)."""
     os.makedirs(out_dir, exist_ok=True)
     pre = os.path.join(out_dir, 'mri_')
+    if tissue_threshold is None:
+        tissue_threshold = tissue_threshold_for(res_mm)
     T, Mmask, mri_sp, mri_ox = load_mri(mri_template_fname, mri_mask_fname)
     work_mm = mri_sp if work_mm is None else work_mm
     H = downsample_stack(stack, res_mm, slice_mm, work_mm).numpy()
     F = ants.from_numpy(T, spacing=(mri_sp,) * 3)
     Mv = ants.from_numpy(np.ascontiguousarray(H), spacing=(work_mm,) * 3)
-    mri_center_mm = np.array(ndi.center_of_mass(Mmask)) * mri_sp
-    common = dict(Mmask=Mmask, mri_sp=mri_sp, mri_ox=mri_ox, side_margin_mm=side_margin_mm,
+    Mshape = Mmask if shape_mask_fname is None else embed_mask(shape_mask_fname, mri_template_fname)
+    mri_center_mm = np.array(ndi.center_of_mass(Mshape)) * mri_sp
+    common = dict(Mmask=Mshape, mri_sp=mri_sp, mri_ox=mri_ox, side_margin_mm=side_margin_mm,
                   mask_dilation_mm=mask_dilation_mm, tissue_threshold=tissue_threshold, mri_center_mm=mri_center_mm)
 
     if init_state is not None:

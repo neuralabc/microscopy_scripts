@@ -248,6 +248,9 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
   +0.04 / +0.02 (median) and +0.10 / +0.04 (5th pct); mask Dice unchanged.
 - folded into coreg0nl (one interpolation of the native slice, maps/inverse maps rewritten in place, names and
   chain unchanged): raw coreg0nl adjacent NCC 0.41 -> 0.74; rotation SD 5 deg, shift SD 0.2 mm.
+- on the rescale-5 final stack (fitted at 0.1 mm), against a sub-pixel-shift control: NCC median 0.820 -> 0.836,
+  5th pct 0.414 -> 0.476; blur-equalized 5th pct 0.583 -> 0.627; mask Dice unchanged; rotation SD 0.5 deg,
+  shift SD 0.05 mm. Small but real gain in the weakest pairs, even after the groupwise step.
 - pipeline switch `SLICEREG_JITTER=1` (output suffix `_jit`); poses in `{subject}_coreg0nl_jitter_poses.csv`.
 
 | Run | Rescale | Change | Status |

@@ -85,7 +85,7 @@ acted as a weak anchor to the raw positions).
 |---|---|---|---|
 | A | 40 | `coreg0nl` (original) | done (1 h 47 min, 6 workers) |
 | B | 40 | `previous` | done (1 h 47 min, 6 workers) |
-| C | 40 | `previous` + MRI anchor, refit every level | MRI fit drifted, see 4.2 |
+| C | 40 | `previous` + MRI anchor, refit every level | done; MRI fit drifted, see 4.2 and below |
 | C2 | 40 | `coreg0nl` + MRI anchor, affine fixed at `cascade_0` | running |
 
 Result A vs B (`evaluate_registration.py`, MRI fit with direction +1):
@@ -100,6 +100,12 @@ Result A vs B (`evaluate_registration.py`, MRI fit with direction +1):
 
 Decision: keep the original neighbour targets (`coreg0nl`). The translation-only neighbours act as an anchor to
 the raw section positions; without them the stack drifts more and warps more, with no gain in continuity.
+Run C (B + MRI, refit at every level): per-slice MRI Dice 0.873 / 0.867, centroid offset 1.47 / 1.51 mm (back to
+A's level, so the anchor removed B's drift), but adjacent NCC 5th pct 0.516 / 0.789 and STAGE1 warp RMS 1.79 mm
+(worst of the three). Slice 307 failed in the last STAGE1 iteration (MI with its template 0.74 -> 0.23 / 0.13,
+the slice slid out of the field of view): its MRI plane came from the drifted fit (section scale 1.2) and was far
+more medial than the slice. QC idea: flag slices whose MI in `{subject}_MI_values.csv` drops sharply.
+
 A still shows low-frequency drift (offset rises to ~2.5 mm near slice 180 and falls to ~0.1 mm near slice 235),
 which is what the MRI anchor is for. (The offset includes a bias from the partial brainstem; compare runs, not
 absolute values.)

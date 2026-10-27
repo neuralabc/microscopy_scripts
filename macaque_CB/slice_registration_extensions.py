@@ -1,7 +1,13 @@
 """Opt-in extensions to slice_registration_functions, kept separate so that the original functions are unchanged.
 
 coreg_single_slice_v3 / run_parallel_coregistrations_v3
-    Same as coreg_single_slice_orig / run_parallel_coregistrations, plus `neighbour_target_tag`:
+    Same as coreg_single_slice_orig / run_parallel_coregistrations, plus two options.
+
+    `stack_template_list` / `stack_template_weight_scale`:
+    per-slice files that replace the whole-stack median target (e.g. MRI planes from mri_anchor.py),
+    and a factor for the weight of that target. None / 1.0 (default) is the original behaviour.
+
+    `neighbour_target_tag`:
     the registration level whose deformed slices (`_{tag}_ants-def0.nii.gz`) are used as the neighbour targets.
     - None (default): neighbours come from the source level (input_source_file_tag / previous_target_tag),
       identical to the original functions.
@@ -19,9 +25,10 @@ def coreg_single_slice_v3(idx, output_dir, subject, img, all_image_fnames, templ
                           scaling_factor=64, image_weights=None, retain_reg_mappings=False,
                           mask_zero=False, include_stack_template=True, regularization='Medium',
                           voxel_res=None, use_resolution_in_registration=False,
-                          cost_function='Mattes', default_value=0, neighbour_target_tag=None):
+                          cost_function='Mattes', default_value=0, neighbour_target_tag=None,
+                          stack_template_list=None, stack_template_weight_scale=1.0):
     """
-    coreg_single_slice_orig with a separate tag for the neighbour targets (see module docstring).
+    coreg_single_slice_orig with a per-slice replacement for the stack template and a separate tag for the neighbour targets (see module docstring).
     All other parameters are as in coreg_single_slice_orig.
     """
     all_image_names = [os.path.basename(image).split('.')[0] for image in all_image_fnames] #remove the .tif extension to comply with formatting below
@@ -47,11 +54,14 @@ def coreg_single_slice_v3(idx, output_dir, subject, img, all_image_fnames, templ
         #generate the name of the template from the entire stack
         targets = [template[idx]]
         if include_stack_template: #we want to incldue the stack template to help reduce drift
-            stack_template = os.path.dirname(template[idx]) + os.path.sep + os.path.basename(template[idx]).split('_')[0] + template[idx].split('pix')[1]
+            if stack_template_list is not None:
+                stack_template = stack_template_list[idx]
+            else:
+                stack_template = os.path.dirname(template[idx]) + os.path.sep + os.path.basename(template[idx]).split('_')[0] + template[idx].split('pix')[1]
             #now we append the stack appropriately
             sources.append(nifti)
             targets.append(stack_template)
-            image_weights_ordered.append(image_weights[0])
+            image_weights_ordered.append(image_weights[0] * stack_template_weight_scale)
     else:
         targets = [template]
 
@@ -124,9 +134,10 @@ def run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, templ
                                     reg_level_tag='coreg1nl', run_syn=True, run_rigid=True, previous_target_tag=None,
                                     scaling_factor=64, image_weights=None, retain_reg_mappings=False, mask_zero=False,
                                     regularization='Medium', voxel_res=None, use_resolution_in_registration=False,
-                                    cost_function='Mattes', default_value=0, neighbour_target_tag=None):
+                                    cost_function='Mattes', default_value=0, neighbour_target_tag=None,
+                                    stack_template_list=None, stack_template_weight_scale=1.0):
     """
-    run_parallel_coregistrations using coreg_single_slice_v3 (adds `neighbour_target_tag`, see module docstring).
+    run_parallel_coregistrations using coreg_single_slice_v3 (see module docstring for the added options).
     """
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = []
@@ -141,7 +152,9 @@ def run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, templ
                                 regularization=regularization, voxel_res=voxel_res,
                                 use_resolution_in_registration=use_resolution_in_registration,
                                 cost_function=cost_function, default_value=default_value,
-                                neighbour_target_tag=neighbour_target_tag)
+                                neighbour_target_tag=neighbour_target_tag,
+                                stack_template_list=stack_template_list,
+                                stack_template_weight_scale=stack_template_weight_scale)
             )
         for future in as_completed(futures):
             try:

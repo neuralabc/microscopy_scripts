@@ -4,7 +4,7 @@ Local copy of run_slice_registration_optimized_newReg_sdf_v2.py for this worksta
 Run from a scratch working directory (ANTs can leave files in the cwd), e.g.:
     cd <scratch> && uv run --project /home/chris/Documents/code/microscopy_scripts \
         python /home/chris/Documents/code/microscopy_scripts/macaque_CB/run_slice_registration_optimized_newReg_sdf_v2_local.py
-Set SLICEREG_SMOKE=1 for a quick test (first 7 slices, slice 3 treated as missing, rescale 40).
+See REGISTRATION_NOTES_local.md for the SLICEREG_* options. Set SLICEREG_SMOKE=1 for a quick test (first 7 slices, slice 3 treated as missing, rescale 40).
 """
 import env_compat  # must come before slice_registration_functions (threads, OOM priority, ANTsPy/nighres shims)
 from slice_registration_functions import *
@@ -74,6 +74,49 @@ variant_tag = '' if stage1_neighbour_targets == 'coreg0nl' else '_nbrprev'
 
 def stage1_neighbour_target_tag(template_tag):
     return template_tag if stage1_neighbour_targets == 'previous' else None
+
+# STAGE1 MRI anchor (see mri_anchor.py): replace the whole-stack median target of every slice with the plane of
+# the MRI template that corresponds to it. The MRI is fitted to the current stack with a shear-free affine
+# at each template level, so it corrects low-frequency drift and global shape but not folium-level detail.
+# The source is still coreg0nl, so the outputs and the transform chain are unchanged; new files are
+# *_{level}_mri_target.nii.gz and mri_anchor/{level}/ (transforms + qc.json)
+use_mri_anchor = os.environ.get('SLICEREG_MRI_ANCHOR', '0') == '1'
+mri_target_weight_scale = float(os.environ.get('SLICEREG_MRI_WEIGHT', 1.0)) #multiplies the weight of the (replaced) stack template
+mri_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target')
+mri_template_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')
+mri_mask_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_mask_crop.nii.gz')
+if not use_mri_anchor:
+    mri_target_weight_scale = 1.0 #only applies to the MRI targets
+if use_mri_anchor:
+    import json
+    import mri_anchor
+    variant_tag += '_mri' if mri_target_weight_scale == 1.0 else f'_mri{mri_target_weight_scale:g}'
+mri_state = None #qc of the last MRI fit, used to warm-start the next one
+
+def stage1_stack_targets(template_tag):
+    """Per-slice MRI targets for the stack at `template_tag` (computed once per level), or None."""
+    global mri_state
+    if not use_mri_anchor:
+        return None
+    fnames = [f"{output_dir}{subject}_{str(idx).zfill(zfill_num)}_{os.path.basename(f).split('.')[0]}_{template_tag}_mri_target.nii.gz"
+              for idx, f in enumerate(all_image_fnames)]
+    level_dir = os.path.join(output_dir, 'mri_anchor', template_tag)
+    qc_fname = os.path.join(level_dir, 'qc.json')
+    if all(os.path.isfile(f) for f in fnames) and os.path.isfile(qc_fname):
+        with open(qc_fname) as f:
+            mri_state = json.load(f)
+        return fnames
+    stack = nibabel.load(f'{output_dir}{subject}_{template_tag}_stack.nii.gz').get_fdata().astype(numpy.float32)
+    res_mm = rescaled_in_plane_res_x / 1000.0
+    slice_mm = in_plane_res_z_microns / 1000.0
+    aff_f, qc = mri_anchor.stack_to_mri_affine(stack, res_mm, slice_mm, mri_template_fname, mri_mask_fname,
+                                               level_dir, init_state=mri_state)
+    mri_anchor.write_mri_slice_targets(aff_f, stack.shape, res_mm, slice_mm, mri_template_fname, fnames, voxel_res)
+    with open(qc_fname, 'w') as f:
+        json.dump(qc, f, indent=2, default=str)
+    logging.warning(f'MRI targets for {template_tag}: dice_affine={qc["dice_affine"]:.3f}, scales={qc["scales_stack_axes"]}')
+    mri_state = qc
+    return fnames
 
 # setup the output directory for use
 if use_signed_distance_weighting_for_registration:
@@ -482,7 +525,9 @@ for iter in range(num_reg_iterations):
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
                                     default_value=-1*sdf_clip_val,
-                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag),
+                                    stack_template_list=stage1_stack_targets(template_tag),
+                                    stack_template_weight_scale=mri_target_weight_scale)
         run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
@@ -498,7 +543,9 @@ for iter in range(num_reg_iterations):
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
                                     default_value=-1*sdf_clip_val,
-                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag),
+                                    stack_template_list=stage1_stack_targets(template_tag),
+                                    stack_template_weight_scale=mri_target_weight_scale)
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -560,7 +607,9 @@ for iter in range(num_reg_iterations):
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
                                     default_value=-1*sdf_clip_val,
-                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag),
+                                    stack_template_list=stage1_stack_targets(template_tag),
+                                    stack_template_weight_scale=mri_target_weight_scale)
         
         run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
@@ -579,7 +628,9 @@ for iter in range(num_reg_iterations):
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
                                     default_value=-1*sdf_clip_val,
-                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag),
+                                    stack_template_list=stage1_stack_targets(template_tag),
+                                    stack_template_weight_scale=mri_target_weight_scale)
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         

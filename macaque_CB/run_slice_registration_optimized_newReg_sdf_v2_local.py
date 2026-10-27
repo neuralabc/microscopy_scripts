@@ -9,6 +9,7 @@ Set SLICEREG_SMOKE=1 for a quick test (first 7 slices, slice 3 treated as missin
 import env_compat  # must come before slice_registration_functions (threads, OOM priority, ANTsPy/nighres shims)
 from slice_registration_functions import *
 from slice_structure_identification_functions import compute_signed_distance_weight_filled
+from slice_registration_extensions import run_parallel_coregistrations_v3
 
 # file parameters
 subject = 'zefir'
@@ -40,7 +41,7 @@ use_signed_distance_weighting_for_registration = False #compute signed distance 
 
 # scaling factor that is applied to the x and y dimensions (in-plane dimensions) to downsample the data
 # rescale=5 #larger scale means that you have to change the scaling_factor, which is now done automatically just before computations
-rescale=5
+rescale=int(os.environ.get('SLICEREG_RESCALE', 5))
 #rescale=40
 smoke_test = os.environ.get('SLICEREG_SMOKE', '0') == '1'
 if smoke_test:
@@ -61,6 +62,18 @@ downsample_parallel = False #True means that we invoke Parallel, but can be much
 # local workstation (24 cores, shared with other jobs): keep workers low, each worker is single-threaded (see env_compat)
 max_workers = int(os.environ.get('SLICEREG_MAX_WORKERS', 8))
 nonlin_interp_max_workers = max_workers #number of workers to use for nonlinear slice interpolation when use_nonlin_slice_templates = True
+
+# STAGE1 neighbour targets (see slice_registration_extensions.py):
+#  'coreg0nl' (original behaviour): neighbours are the translation-only slices in every iteration
+#  'previous': neighbours are the deformed slices of the level that also provides the template (cascade_0, then the previous STAGE1 output)
+# the source is coreg0nl in both cases, so the outputs and the transform chain are unchanged
+stage1_neighbour_targets = os.environ.get('SLICEREG_NEIGHBOUR_TARGETS', 'coreg0nl')
+if stage1_neighbour_targets not in ['coreg0nl', 'previous']:
+    raise ValueError(f'Unknown stage1_neighbour_targets: {stage1_neighbour_targets}')
+variant_tag = '' if stage1_neighbour_targets == 'coreg0nl' else '_nbrprev'
+
+def stage1_neighbour_target_tag(template_tag):
+    return template_tag if stage1_neighbour_targets == 'previous' else None
 
 # setup the output directory for use
 if use_signed_distance_weighting_for_registration:
@@ -83,7 +96,7 @@ else:
 
 # local data: the lookup csv still lists the old /data/data_drive mount, which is now /mnt/ssd
 data_root = '/mnt/ssd/Macaque_CB/processing/results_from_cell_counts/'
-output_dir = f'{data_root}{subject}_sliceReg_optimized_v2_rescale_{rescale}{sdf_tag}_local{"_smoke" if smoke_test else ""}/'
+output_dir = f'{data_root}{subject}_sliceReg_optimized_v2_rescale_{rescale}{sdf_tag}_local{variant_tag}{"_smoke" if smoke_test else ""}/'
 _df = pd.read_csv(f'{data_root}all_TP_image_idxs_file_lookup.csv')
 _df['file_name'] = _df['file_name'].str.replace('/data/data_drive/', '/mnt/ssd/', regex=False)
 
@@ -454,7 +467,7 @@ for iter in range(num_reg_iterations):
         image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=3) #symmetric gaussian, so the same on both sides
         image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=3)
 
-        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
+        run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
@@ -468,8 +481,9 @@ for iter in range(num_reg_iterations):
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
-                                    default_value=-1*sdf_clip_val)
-        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
+                                    default_value=-1*sdf_clip_val,
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
+        run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, template, max_workers=max_workers, 
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
@@ -483,7 +497,8 @@ for iter in range(num_reg_iterations):
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
-                                    default_value=-1*sdf_clip_val)
+                                    default_value=-1*sdf_clip_val,
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
 
         logging.warning('\t\tSelecting best registration by MI')
 
@@ -528,7 +543,7 @@ for iter in range(num_reg_iterations):
         image_weights_win1 = generate_gaussian_weights([0,] + slice_offset_list_forward, gauss_std=4) #symmetric gaussian, so the same on both sides
         image_weights_win2 = generate_gaussian_weights([0,] + slice_offset_list_reverse, gauss_std=4)
 
-        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
+        run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_forward, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl', 
@@ -544,9 +559,10 @@ for iter in range(num_reg_iterations):
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
-                                    default_value=-1*sdf_clip_val)
+                                    default_value=-1*sdf_clip_val,
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
         
-        run_parallel_coregistrations(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
+        run_parallel_coregistrations_v3(output_dir, subject, all_image_fnames, template, max_workers=max_workers,
                                     target_slice_offset_list=slice_offset_list_reverse, 
                                     zfill_num=zfill_num, 
                                     input_source_file_tag='coreg0nl',
@@ -562,7 +578,8 @@ for iter in range(num_reg_iterations):
                                     voxel_res=voxel_res,
                                     use_resolution_in_registration=use_resolution_in_registration,
                                     cost_function=cost_function,
-                                    default_value=-1*sdf_clip_val)
+                                    default_value=-1*sdf_clip_val,
+                                    neighbour_target_tag=stage1_neighbour_target_tag(template_tag))
         logging.warning('\t\tSelecting best registration by MI')                                     
 
         

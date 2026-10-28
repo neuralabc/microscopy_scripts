@@ -77,9 +77,10 @@ New files (2026-10-28), nothing existing changes:
   `uv run python macaque_CB/tissue_mask.py --run-dir <dir> --rescale <r> --level <level>`.
 - `run_settings.json`, `QC/`, and (from `mri_register.py`) `mri_registration/<level>/`.
 - From `mri_register.py` (via `atlas_labels.py`, §7.3), beside the stack of the registered level:
-  `{subject}_{level}_D99_labels.nii.gz` (uint8: D99 v2.0 label value in tissue, 0 outside tissue, 254 = tissue
-  without a D99 label, 255 = tissue outside the D99 mask), `{subject}_{level}_D99_regions.nii.gz` (uint8: 1 vermis,
-  2 hemisphere cortex, 3 deep cerebellar nuclei, 4 other D99 label, 254 / 255 as above),
+  `{subject}_{level}_D99_labels.nii.gz` (uint8: D99 v2.0 label value in tissue, 0 outside tissue, 252 / 253 =
+  D99 cerebellum / brainstem without a label, 254 = in the D99 mask but in neither region, 255 = tissue outside
+  the D99 mask), `{subject}_{level}_D99_regions.nii.gz` (uint8: 1 vermis, 2 hemisphere cortex, 3 deep cerebellar
+  nuclei, 4 other D99 label, 252-255 as above),
   `{subject}_{level}_D99_x_mm.nii.gz` (float32, D99 world x in mm) and `{subject}_{level}_D99_labels.tsv` (cells
   per label). Same grid, affine and header as the stack. Label names:
   `mri_reference/D99_v2.0_labels_cerebellum_brainstem.tsv`.
@@ -418,6 +419,9 @@ The pipeline calls it at the end of a run (`SLICEREG_EXPORT_ZARR=1`):
   (since 2026-10-28; the definition of `tissue_mask.py`, see §3). If the D99 label files of the level exist
   (`atlas_labels.py`, §7.3), also `labels/d99_labels` and `labels/d99_regions` (same values as the NIfTI files;
   label names in the attributes under `d99_label_names`). `mri_register.py` makes the labels before its export.
+  The `stack` export of the pipeline runs before `mri_register.py`, so it has no D99 labels; to add them, export
+  it again: `uv run python macaque_CB/export_ome_zarr.py --run-dir <dir> --rescale <r> --level <level>
+  --placement stack --out <dir>/<subject>_<level>_density_stack.ome.zarr --overwrite`.
 - Our attributes are under `neuralarc.microscopy_scripts` in the root `zarr.json` (tck_view merges them there).
 - Placement `stack`: the registered grid in mm, no anatomical claim.
   Placement `mri`: the same voxels (not resampled) with an NGFF 0.6 affine to D99 world (RAS, mm). Since
@@ -522,9 +526,12 @@ uv run python macaque_CB/atlas_labels.py --run-dir <output_dir> --rescale <r> [-
 - Transforms: affine (inverted) + inverse SyN warp, nearest label (ANTs genericLabel), onto the full stack grid in
   slabs of 32 sections. Check of the direction on J20: the D99 mask pulled back this way has Dice 0.873 with the
   stack tissue (affine only 0.818; the transforms in the wrong order 0.804).
-- D99 labels grey matter only, so the cerebellar white matter and arbor vitae are 254. Tissue outside the D99
-  mask (255) is mostly brainstem cut by the D99 crop and a rim where the shapes differ (median depth 0.9 mm); rim
-  tissue within 1 mm of a label takes the nearest label (`--fill-mm`).
+- D99 labels grey matter structures only. Tissue in the D99 mask without a label is split with the D99 region map
+  (`D99_cerebellum_brainstem_regions_crop`, 1 cerebellum, 2 brainstem): 252 = cerebellum (white matter in D99),
+  253 = brainstem (e.g. the reticular formation, which D99 does not label). In a first version both were one code
+  (254, "mostly white matter"); a check showed that 80% of its cells were in the D99 brainstem, at cortex-like
+  density. Tissue outside the D99 mask (255) is mostly brainstem cut by the D99 crop and a rim where the shapes
+  differ (median depth 0.9 mm); rim tissue within 1 mm of a label takes the nearest label (`--fill-mm`).
 - Vermis: D99 has no vermis label. Lobules VI-X (113-117) are vermal (the hemispheric parts have their own labels:
   simple lobule, crus I/II, paramedian lobule, paraflocculus, flocculus). Lobules I-V (108-112) run from the midline
   to the lateral edge; here they are vermis where |D99 x| <= 4.0 mm (the median half-width of D99 lobule VI;
@@ -532,16 +539,19 @@ uv run python macaque_CB/atlas_labels.py --run-dir <output_dir> --rescale <r> [-
 - Left/right is that of the D99 placement (the reference puts the sections on D99's right). Section 75 is at the
   D99 midline in J20.
 
-J20 (`groupwise_iter9`), cells in measured sections: vermis cortex 25%, hemisphere cortex 40%, deep nuclei 0.7%,
-other D99 labels (brainstem, fibre bundles) 9.6%, inside the D99 mask without a label (mostly white matter) 17%,
-outside the D99 mask 7.2% (14.6% before the 1 mm rim fill). About 1 minute, 0.76 GB peak at rescale 20; rescale 5
-not tested yet (estimated peak about 6 GB).
+J20 (`groupwise_iter9`), cells in measured sections: vermis cortex 25.1%, hemisphere cortex 40.4%, deep nuclei
+0.7%, other D99 labels (brainstem, fibre bundles) 9.6%, D99 cerebellum without a label 3.5%, D99 brainstem without
+a label 13.6%, outside the D99 mask 7.2% (14.6% before the 1 mm rim fill). J40 (full `mri_register.py` run, which
+also checks the integration): 24.9 / 40.3 / 0.7 / 9.8 / 3.5 / 13.8 / 6.9%. About 1 minute, 0.76 GB peak at
+rescale 20; rescale 5 not tested yet (estimated peak about 6 GB).
 
 Open point: in D99 coordinates the stack ends at x of about 16 mm (sections 375-397: 105 -> 38 mm^2 of cerebellar
 label area), while 75% of D99 crus I and crus II lies lateral to 16 mm. So crus I/II get few cells (3 M each) and
 the posterior paramedian lobule many (80 M). Either the sections stop before the lateral edge, or the fit
-(free scales; it kept the section direction at scale 1.0 while the in-plane scales are 0.68-0.77) puts the lateral
-end too far medially. The lateral labels depend on which is true.
+(free scales; it kept the section axis at scale 0.995 (row norm of the affine) while the in-plane axes are 0.77 and
+0.68) puts the lateral end too far medially. The lateral labels depend on which is true, and so does the vermis
+width: with a section scale of about 0.72, the 4 mm cut in D99 x would be about 2.9 mm in the stack (about 20
+sections narrower on the covered side).
 
 Accuracy: D99 is another animal at 0.25 mm and the SyN is smooth, so lobule boundaries can be off by about one
 folium (most likely at the primary fissure and in lobules I-V). Check the QC images (sagittal sections with label

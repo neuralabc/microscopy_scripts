@@ -13,8 +13,9 @@ Placement:
 Label maps under the image's labels/ group (uint8, same grid):
   synthetic_slices  1 = interpolated slice (missing_idxs_to_fill): its densities are not measured
   tissue            1 = tissue (tissue_mask.py: counts > 2 per 50 um voxel, holes filled per slice)
-  d99_labels        D99 v2.0 label values in tissue, 254 no D99 label, 255 outside the D99 mask (atlas_labels.py)
-  d99_regions       1 vermis, 2 hemisphere cortex, 3 deep nuclei, 4 other D99 label, 254 / 255 as above
+  d99_labels        D99 v2.0 label values in tissue; 252 / 253 D99 cerebellum / brainstem without a label, 254 in
+                    the D99 mask in neither region, 255 outside the D99 mask (atlas_labels.py)
+  d99_regions       1 vermis, 2 hemisphere cortex, 3 deep nuclei, 4 other D99 label, 252-255 as above
                     (both only if <subject>_<level>_D99_labels.nii.gz / _D99_regions.nii.gz exist, i.e. after
                     mri_register.py / atlas_labels.py; the label names are in the attributes)
 
@@ -127,13 +128,12 @@ def main():
         'labels': {'synthetic_slices': '1 = interpolated slice', 'tissue': '1 = tissue: counts > 2 per 50 um voxel '
                    '(about 16000 cells/mm^3), holes filled per slice (tissue_mask.py)'}}}
     if atlas:
-        from atlas_labels import load_names, REGION_NAMES, NO_LABEL, OUTSIDE_ATLAS
+        from atlas_labels import load_names, REGION_NAMES
         attrs['microscopy_scripts']['labels'].update(
-            d99_labels='D99 v2.0 label value in tissue; 254 = no D99 label (mostly white matter), 255 = outside the '
-                       'D99 mask (atlas_labels.py)',
+            d99_labels='D99 v2.0 label value in tissue; 252-255: see d99_label_names (atlas_labels.py)',
             d99_regions='; '.join(f'{k} = {v}' for k, v in REGION_NAMES.items()))
         names = {str(v): f"{n['abbreviation']}: {n['name']}" for v, n in load_names().items()}
-        names.update({str(NO_LABEL): 'no D99 label', str(OUTSIDE_ATLAS): 'outside the D99 mask'})
+        names.update({str(k): v for k, v in REGION_NAMES.items() if k >= 252})
         attrs['microscopy_scripts']['d99_label_names'] = names
     if a.placement == 'mri':
         affine, qc = mri_world_affine(counts, res_mm, SLICE_MM, out + '.mri_fit', direction=a.direction,

@@ -5,7 +5,9 @@ Run mri_register.py on the level first (it runs this script itself at its end); 
 
 Labels: D99 v2.0 (Saleem et al. 2021), local_extras/cerebellum_target/D99_cerebellum_brainstem_labels_crop.nii.gz
 (the grid of the template that mri_register.py fits), names in mri_reference/D99_v2.0_labels_cerebellum_brainstem.tsv.
-D99 labels the grey matter only; the cerebellar white matter and the arbor vitae have no label.
+D99 labels grey matter structures only: the cerebellar white matter and much of the brainstem (e.g. the reticular
+formation) have no label. The D99 region map (D99_cerebellum_brainstem_regions_crop: 1 cerebellum, 2 brainstem)
+separates these two.
 Transforms: <run_dir>/mri_registration/<level>/ (affine + inverse SyN warp; the affine alone if there is no warp),
 nearest-label (ANTs genericLabel) resampling onto the full-resolution stack grid, in slabs of sections.
 
@@ -19,14 +21,16 @@ D99's right side); the true side of the zefir hemisphere is not known from the r
 
 Outputs beside the stack (same grid, affine and header as <subject>_<level>_stack.nii.gz):
   <subject>_<level>_D99_labels.nii.gz   uint8, the D99 label value in tissue (tissue_mask.py), else 0, and:
-                                          254 = tissue inside the D99 brain mask without a D99 label (mostly white
-                                                matter and the arbor vitae)
+                                          252 = D99 cerebellum without a label (white matter in D99; in zefir also
+                                                some grey matter at the label edges)
+                                          253 = D99 brainstem without a label (e.g. reticular formation)
+                                          254 = inside the D99 mask but in neither region (rare)
                                           255 = tissue outside the D99 mask (the atlas does not cover it: brainstem
                                                 cut by the D99 crop, and a rim where the shapes differ)
                                         tissue outside the D99 mask that is at most --fill-mm (default 1.0) from a D99
                                         label takes the nearest label (the rim; 0 turns this off)
   <subject>_<level>_D99_regions.nii.gz  uint8: 1 vermis cortex, 2 hemisphere cortex, 3 deep cerebellar nuclei,
-                                        4 other D99 label (brainstem nuclei, fibre bundles), 254 / 255 as above
+                                        4 other D99 label (brainstem nuclei, fibre bundles), 252-255 as above
   <subject>_<level>_D99_x_mm.nii.gz     float32, D99 world x (mm; 0 = D99 midline, + = right), NaN outside the D99 grid
   <subject>_<level>_D99_labels.tsv      per label: voxels, volume, cells and density (measured sections only; the
                                         interpolated sections are left out), cells in the vermis, cells left/right
@@ -54,22 +58,25 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from evaluate_registration import MRI_DIR, MRI_M  # noqa: E402
 from tissue_mask import tissue_mask  # noqa: E402
-from qc_report import C1, C2, C3  # noqa: E402
+from qc_report import C1, C2, C3, find_levels  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SUBJECT = 'zefir'
 SLICE_MM = 0.05
 DEFAULT_MISSING = [32, 59, 120, 160, 189, 228]
 D99_LABELS = os.path.join(MRI_DIR, 'D99_cerebellum_brainstem_labels_crop.nii.gz')
+D99_REGIONS = os.path.join(MRI_DIR, 'D99_cerebellum_brainstem_regions_crop.nii.gz')   # 1 cerebellum, 2 brainstem
 D99_NAMES = os.path.join(HERE, 'mri_reference', 'D99_v2.0_labels_cerebellum_brainstem.tsv')
 
-NO_LABEL, OUTSIDE_ATLAS = 254, 255
+CB_NO_LABEL, BS_NO_LABEL, NO_LABEL, OUTSIDE_ATLAS = 252, 253, 254, 255
+SPECIAL = (CB_NO_LABEL, BS_NO_LABEL, NO_LABEL, OUTSIDE_ATLAS)
 ANTERIOR_LOBE = [108, 109, 110, 111, 112]                       # I-V: midline to lateral edge
 VERMIS_POSTERIOR = [113, 114, 115, 116, 117]                    # VI-X (vermal parts)
 HEMISPHERE = [118, 119, 120, 121, 123, 125, 222, 223, 224, 225]  # Par_p/a, Cr_II/I, lPFl, Fl, Sim_a/p, dPFl, vPFl
 NUCLEI = [61, 62, 63, 64]                                       # DN, AIN, PIN, FN
 REGION_NAMES = {1: 'vermis cortex', 2: 'hemisphere cortex', 3: 'deep cerebellar nuclei',
-                4: 'other D99 label (brainstem, fibre bundles)', NO_LABEL: 'in D99 mask, no label (mostly white matter)',
+                4: 'other D99 label (brainstem, fibre bundles)', CB_NO_LABEL: 'D99 cerebellum, no label (white matter)',
+                BS_NO_LABEL: 'D99 brainstem, no label', NO_LABEL: 'in D99 mask, no region',
                 OUTSIDE_ATLAS: 'outside the D99 mask'}
 
 
@@ -107,7 +114,7 @@ def fill_from_nearest(lab, res_mm, fill_mm, slab):
         sub = lab[..., a:b]
         if not (sub[..., s0 - a:s1 - a] == OUTSIDE_ATLAS).any():
             continue
-        src = (sub > 0) & (sub < NO_LABEL)
+        src = (sub > 0) & (sub < CB_NO_LABEL)
         if not src.any():
             continue
         d, idx = ndi.distance_transform_edt(~src, sampling=(res_mm, res_mm, SLICE_MM), return_indices=True)
@@ -125,9 +132,9 @@ def regions_of(lab, x_mm, anterior_halfwidth_mm):
     ant = np.isin(lab, ANTERIOR_LOBE)
     r[ant] = np.where(np.abs(x_mm[ant]) <= anterior_halfwidth_mm, 1, 2)
     r[np.isin(lab, NUCLEI)] = 3
-    r[(lab > 0) & (lab < NO_LABEL) & (r == 0)] = 4
-    r[lab == NO_LABEL] = NO_LABEL
-    r[lab == OUTSIDE_ATLAS] = OUTSIDE_ATLAS
+    r[(lab > 0) & (lab < CB_NO_LABEL) & (r == 0)] = 4
+    for v in SPECIAL:
+        r[lab == v] = v
     return r
 
 
@@ -158,11 +165,11 @@ def label_figure(counts, lab, reg, res_mm, slices, names, out_png):
             rgba[reg[..., s] == k] = matplotlib.colors.to_rgba(c, 0.35)
         a.imshow(np.transpose(rgba, (1, 0, 2)), origin='lower', extent=ext)
         L = lab[..., s].astype(int)
-        edge = ((L != np.roll(L, 1, 0)) | (L != np.roll(L, 1, 1))) & (L > 0) & (L < NO_LABEL)
+        edge = ((L != np.roll(L, 1, 0)) | (L != np.roll(L, 1, 1))) & (L > 0) & (L < CB_NO_LABEL)
         ee = np.zeros(edge.shape + (4,))
         ee[edge] = (1, 1, 1, 0.8)
         a.imshow(np.transpose(ee, (1, 0, 2)), origin='lower', extent=ext)
-        for v in np.unique(L[(L > 0) & (L < NO_LABEL)]):
+        for v in np.unique(L[(L > 0) & (L < CB_NO_LABEL)]):
             m = L == v
             if m.sum() * res_mm ** 2 < 0.6:
                 continue
@@ -219,10 +226,9 @@ def main():
     a = p.parse_args()
 
     run_dir = a.run_dir.rstrip('/') + '/'
-    if a.level is None:
-        done = sorted(d for d in os.listdir(os.path.join(run_dir, 'mri_registration'))
-                      if os.path.isfile(os.path.join(run_dir, 'mri_registration', d, 'stack_to_D99_affine.mat')))
-        a.level = [d for d in done if 'groupwise_iter' in d][-1] if any('groupwise_iter' in d for d in done) else done[-1]
+    if a.level is None:   # the last level (pipeline order) with an MRI registration
+        a.level = [lv for lv in find_levels(run_dir, a.subject)
+                   if os.path.isfile(os.path.join(run_dir, 'mri_registration', lv, 'stack_to_D99_affine.mat'))][-1]
     reg_dir = os.path.join(run_dir, 'mri_registration', a.level)
     qc_dir = os.path.join(run_dir, 'QC', 'mri', a.level)
     os.makedirs(qc_dir, exist_ok=True)
@@ -247,18 +253,23 @@ def main():
     if not np.allclose(Ln.affine[:3, :3], np.diag([0.25] * 3)):
         raise ValueError(f'{D99_LABELS}: expected 0.25 mm RAS voxels without rotation')
     mask = np.asarray(nibabel.load(MRI_M).dataobj) > 0
-    if mask.shape != L.shape:
-        raise ValueError('D99 labels and mask grids differ')
+    R = np.asarray(nibabel.load(D99_REGIONS).dataobj).astype(np.float32)
+    if mask.shape != L.shape or R.shape != L.shape:
+        raise ValueError('D99 labels, mask and regions grids differ')
     xw = (np.arange(L.shape[0]) * Ln.affine[0, 0] + Ln.affine[0, 3]).astype(np.float32)
     X = np.broadcast_to(xw[:, None, None], L.shape)
 
     tissue = tissue_mask(counts, res_mm).astype(bool)
     lab = pull_back(L, shape, res_mm, tl, inv, 'genericLabel', a.slab).round().astype(np.uint8)
     inmask = pull_back(mask, shape, res_mm, tl, inv, 'genericLabel', a.slab) > 0.5
+    region = pull_back(R, shape, res_mm, tl, inv, 'genericLabel', a.slab).round().astype(np.uint8)
     x_mm = pull_back(X, shape, res_mm, tl, inv, 'linear', a.slab, default=-999.0)
     x_mm[x_mm < -900] = np.nan
     lab[~tissue] = 0
+    lab[tissue & (lab == 0) & inmask & (region == 1)] = CB_NO_LABEL
+    lab[tissue & (lab == 0) & inmask & (region == 2)] = BS_NO_LABEL
     lab[tissue & (lab == 0) & inmask] = NO_LABEL
+    del region
     lab[tissue & (lab == 0) & ~inmask] = OUTSIDE_ATLAS
     exact_outside = lab == OUTSIDE_ATLAS
     if a.fill_mm > 0:
@@ -267,7 +278,7 @@ def main():
     reg = regions_of(lab, np.nan_to_num(x_mm, nan=1e3), a.anterior_vermis_halfwidth_mm)
 
     pre = os.path.join(run_dir, f'{a.subject}_{a.level}_D99')
-    d = f'D99 v2.0 labels; 254 no label, 255 outside D99; fill {a.fill_mm} mm'
+    d = f'D99 v2.0; 252 cb/253 bs no label, 255 outside D99; fill {a.fill_mm} mm'
     save_like(lab, stack_img, np.uint8, d, pre + '_labels.nii.gz')
     save_like(reg, stack_img, np.uint8, f'1 vermis 2 hemisphere 3 nuclei 4 other; I-V vermis |x|<={a.anterior_vermis_halfwidth_mm}mm',
               pre + '_regions.nii.gz')
@@ -282,7 +293,8 @@ def main():
     for v in np.unique(lm[lm > 0]):
         sel = lm == v
         c = cm[sel]
-        nm = names.get(int(v), dict(abbreviation={NO_LABEL: 'none', OUTSIDE_ATLAS: 'outside'}.get(int(v), str(v)),
+        nm = names.get(int(v), dict(abbreviation={CB_NO_LABEL: 'cb_none', BS_NO_LABEL: 'bs_none', NO_LABEL: 'none',
+                                                  OUTSIDE_ATLAS: 'outside'}.get(int(v), str(v)),
                                     name=REGION_NAMES.get(int(v), ''), group='', subgroup=''))
         xs = xm[sel]
         rows.append(dict(value=int(v), abbreviation=nm['abbreviation'], name=nm['name'], group=nm['group'],

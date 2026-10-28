@@ -261,7 +261,7 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
 | JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | done: mixed, worse than J |
 | JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | done: same as JR, worse than J |
 | A20, J20 | 20 | A and J at rescale 20: does the gain hold at a finer grid? | running |
-| JG | 40 | J + 10 jitter iterations + 15 groupwise iterations (`_jit10_gw15`): convergence and warp per iteration | running |
+| JG | 40 | J + 10 jitter iterations + 15 groupwise iterations (`_jit10_gw15`): convergence and warp per iteration | done (below) |
 
 Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median / 5th pct of adjacent pairs):
 
@@ -286,6 +286,21 @@ Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median
 - JT (SyN only for the templates, rigid last level) gives the same result as JR: better templates do not help
   when the slice that enters the chain is only rigidly aligned. The STAGE1 SyN in the chain is needed.
 - Decision candidate: J (`SLICEREG_JITTER=1`, STAGE1 unchanged). Confirm at a finer rescale before the full run.
+
+Convergence (rescale 40):
+- Jitter iterations: raw coreg0nl NCC 0.807 at 6, 0.813 at 9-10 (flat). 6 is nearly enough; more than 8-10 adds nothing.
+- STAGE1: plateau at `rigsyn_1`-`rigsyn_2` in A and J; levels 3-4 add nothing (but they are cheap at this point).
+- Groupwise iterations 0-2 do not change the stack (not chained). From iteration 3 the weakest pairs improve at
+  every iteration, with no plateau at 15 (JG, blur-equalized NCC 5th pct): iter9 0.883, iter14 0.904; Dice 5th pct
+  0.935 -> 0.946. The warp per iteration is small and almost constant (total RMS 0.020-0.023 mm, non-affine 0.013 mm,
+  voxel 0.4 mm).
+- Cost of more iterations (independent check, per-slice total counts of the final stack / native slice; a change
+  means the warp stretched or compressed the slice): JG iter9 -> iter14, median ratio 0.992 -> 0.986, median |dev|
+  1.7% -> 2.0%, 95th pct 7.7% -> 7.9%. The groupwise step slowly shrinks the slices (about 0.1% per iteration).
+  For comparison, A iter9: median ratio 0.982, |dev| 2.5% / 7.5%; J iter9: 0.989, 1.8% / 7.7%.
+- Through-plane views of JG iter14 and J iter9: very similar; slightly smoother, no visible loss of structure.
+- Bug in the original groupwise function from iteration 11 on (file names); fixed in the v2 copy (commit fb06be9).
+
 
 Note on what STAGE1 warps do: every STAGE1 level registers from coreg0nl again, so the warps of levels 0-3 (and of
 the cascade) only shape the templates. Only the last level (`rigsyn_4`) feeds the groupwise step and is in the chain.

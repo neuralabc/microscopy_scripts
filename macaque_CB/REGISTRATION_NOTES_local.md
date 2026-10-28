@@ -45,7 +45,11 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_STAGE1_SYN` | 1 | 0 = STAGE1 rigid only |
 | `SLICEREG_STAGE1_SYN_LAST` | 1 | 0 = SyN only in the template-building STAGE1 levels, the last level rigid |
 | `SLICEREG_STAGE1_REG` | Medium | STAGE1 SyN regularization preset |
-| `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5) |
+| `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5; `stack` placement only since 2026-10-28) |
+| `SLICEREG_QC` | 1 | write the QC report `<output_dir>/QC/index.html` at the end of the run (§7) |
+
+Each run also writes `run_settings.json` (all `SLICEREG_*` variables, git commit, main parameters) in its output
+folder; the QC report shows it.
 
 Data: the lookup csv lists `/data/data_drive/...`; on this workstation that is `/mnt/ssd/...`
 (the script rewrites the prefix). Output:
@@ -350,8 +354,10 @@ The pipeline calls it at the end of a run (`SLICEREG_EXPORT_ZARR=1`):
 - Labels: `labels/synthetic_slices` = 1 on the interpolated slices (not measured).
 - Our attributes are under `neuralarc.microscopy_scripts` in the root `zarr.json` (tck_view merges them there).
 - Placement `stack`: the registered grid in mm, no anatomical claim.
-  Placement `mri`: the same voxels (not resampled) with an NGFF 0.6 affine to D99 world (RAS, mm), from a fresh
-  shear-free fit of the stack to D99 (`--direction`, default +1 = right hemisphere).
+  Placement `mri`: the same voxels (not resampled) with an NGFF 0.6 affine to D99 world (RAS, mm). Since
+  2026-10-28 it is written by `mri_register.py` (§7) with the stored, checked affine (`--mri-affine`); the pipeline
+  no longer makes it. A fresh fit for every export (the old behaviour, still the default of `export_ome_zarr.py`
+  without `--mri-affine`) was not stable: the A20 export was turned by about 180 deg in-plane (anatomically wrong).
   The array is permuted and flipped (not resampled) to the closest RAS+ order before writing: tck_view's slice
   panes take array axes 0, 1, 2 as world x, y, z, and with the stack order (in-plane, in-plane, section) the axial
   pane showed the wrong plane (reported 2026-10-27). The section axis is then array x; the mapping is stored as
@@ -373,3 +379,53 @@ Exports of the existing rescale-5 `groupwise_iter9` stack (made before this bran
 - Lessons for us: keep the MRI and the neighbour terms in separate steps (run C mixed them in one cost, with the MRI
   also driving SyN); with a different-animal MRI stop at rigid (+ a constrained scale), and smooth the poses along
   the stack, so that only low-frequency corrections come from the MRI.
+
+## 7. QC report and MRI registration (2026-10-28)
+
+### 7.1 QC report (`qc_report.py`)
+
+Runs at the end of every pipeline run (`SLICEREG_QC=1`) and can be run by hand:
+`uv run python macaque_CB/qc_report.py --run-dir <output_dir> --rescale <r>`. It writes one self-contained page,
+`<output_dir>/QC/index.html` (images embedded), plus `QC/metrics.json` and a cache of per-level measures
+(`QC/cache/`, recomputed when a stack file is newer, or with `--recompute`). Nothing outside `QC/` is changed.
+
+Content: run settings; continuity per level (adjacent NCC, blur-equalized NCC, tissue-mask Dice: median and 5th
+pct); continuity along the stack and images of the weakest adjacent pairs; warp per slice (STAGE1 map) and per
+groupwise step; per-slice count ratio (registered / native; independent of the registration's cost); slow path
+and jitter poses; through-plane views at physical aspect and a slice montage; MRI registration results if
+`mri_register.py` has run. Stacks finer than 0.2 mm are block-summed in-plane to about 0.2 mm for the QC (stated
+in the page), so it stays fast at rescale 5 and the numbers compare between rescales.
+
+### 7.2 MRI registration (`mri_register.py`)
+
+Point it at any run and level (the level to use may not be the last groupwise iteration):
+```bash
+uv run python macaque_CB/mri_register.py --run-dir <output_dir> --rescale <r> [--level <level>]
+```
+1. Affine (shear-free): from the stored reference (`mri_reference/zefir_stack_to_D99_reference.json` + `.mat`),
+   refined; or `--affine FILE` as it is; or a full search (`--no-reference`) that also tries the in-plane 180 deg
+   alternative.
+2. Stability check against the reference (rotation <= 10 deg, scales within 25%; `--max-rotation-deg`,
+   `--max-scale-change`): on failure it stops with exit 2 and writes nothing but a FAILED entry in the QC.
+3. Nonlinear (unless `--no-nonlinear`): SyN (MI, flow sigma 3, gradient step 0.1, iterations 100/70/30) inside the
+   region that the stack covers. D99 is another animal: this is atlas mapping, not part of the reconstruction.
+
+Outputs in `<output_dir>/mri_registration/<level>/` (README.md there explains frames and use): the transforms
+(`stack_to_D99_affine.mat`, `stack_to_D99_warp.nii.gz`, `stack_to_D99_inverse_warp.nii.gz`), densities on the D99
+grid (`density_D99grid_affine.nii.gz`, `density_D99grid_nonlinear.nii.gz`, cells/mm^3), and the OME-Zarr
+`<subject>_<level>_density_mri.ome.zarr`. QC in `QC/mri/<level>/`, shown in `QC/index.html`.
+
+Orientation: the cerebellum outline (one hemisphere + vermis) is nearly symmetric under an in-plane turn of
+180 deg, so Dice cannot choose the orientation (J20: 0.838 vs 0.839, and the higher one was anatomically wrong:
+brainstem dorsal). Mattes MI on the intensities separates them clearly (-0.09 to -0.12 for the correct placement in
+J20, J40, A40; -0.056 to -0.059 for the turned one, which the old A20 export had). The full search chooses by MI.
+
+Reference: made from J20 (`..._rescale_20_local_jit`, `groupwise_iter9`) with a full search, checked by eye
+(folia dorsal and posterior, brainstem and peduncles ventral and anterior, vermis medial), saved with
+`--save-reference`. Scales MRI -> stack 0.68 / 0.77 / 1.00 (in-plane shrinkage of the sections relative to D99,
+about 25-30%, is real tissue processing plus fit uncertainty).
+
+Results (affine from the reference; nonlinear): J20: Dice 0.85 -> 0.87, displacement median 0.6 mm (95th pct
+1.4 mm), Jacobian 5th-95th pct 0.65-1.53, no folding. J40: MI -0.11 -> -0.22, displacement median 0.8 mm,
+Jacobian 0.68-1.60, no folding. Tests: J40 with the reference passes (rotation 0 deg); a 180 deg turned affine
+given with `--affine` fails the check (176 deg, exit 2).

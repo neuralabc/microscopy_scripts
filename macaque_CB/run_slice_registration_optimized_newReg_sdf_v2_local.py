@@ -10,6 +10,9 @@ import env_compat  # must come before slice_registration_functions (threads, OOM
 from slice_registration_functions import *
 from slice_structure_identification_functions import compute_signed_distance_weight_filled
 from slice_registration_extensions import run_parallel_coregistrations_v3, groupwise_stack_optimization_embedded_antspy_v2
+import json
+import subprocess
+import time
 
 # file parameters
 subject = 'zefir'
@@ -210,6 +213,22 @@ if not os.path.exists(output_dir):
 script_name = os.path.basename(__file__).split('.py')[0]
 script_dir = os.path.dirname(os.path.abspath(__file__))
 logger = setup_logging(script_name, output_dir)
+
+# settings of this run, for the QC report and for later reference (a new file; no existing output changes)
+def _git_commit():
+    try:
+        import subprocess
+        return subprocess.run(['git', '-C', os.path.dirname(os.path.abspath(__file__)), 'rev-parse', '--short', 'HEAD'],
+                              capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        return 'unknown'
+with open(os.path.join(output_dir, 'run_settings.json'), 'w') as _fh:
+    json.dump(dict(script=os.path.abspath(__file__), git_commit=_git_commit(), started=time.strftime('%Y-%m-%d %H:%M'),
+                   subject=subject, rescale=rescale, in_plane_res_um=[rescaled_in_plane_res_x, rescaled_in_plane_res_y],
+                   max_workers=max_workers, missing_idxs_to_fill=missing_idxs_to_fill, variant_tag=variant_tag,
+                   jitter_correction=use_jitter_correction, jitter_sigma=jitter_sigma, jitter_iterations=jitter_iterations,
+                   groupwise_iterations=groupwise_iterations,
+                   env={k: v for k, v in sorted(os.environ.items()) if k.startswith('SLICEREG_')}), _fh, indent=1)
 
 
 
@@ -1005,13 +1024,15 @@ if apply_transforms_to_orig:
 # ==================================================================================
 # STEP: Export the final densities as OME-Zarr (NGFF 0.6, tck_view format), see export_ome_zarr.py
 # ==================================================================================
-# stack: registered grid in mm; mri: same voxels with an affine to D99 world (right hemisphere, SLICEREG_MRI_DIRECTION)
+# stack: registered grid in mm. The mri placement is made by mri_register.py (run it by hand for the level you want):
+# a new affine fit for every export was not stable (one of four was turned by 180 deg, 2026-10-28), and that script
+# uses a stored reference affine with a stability check.
 # needs tck_view's uv environment (~/Documents/code/tck_view); a failure is logged and does not stop the run
+import subprocess
+final_level = f'{input_source_file_tag}_groupwise_iter{groupwise_iterations-1}'
 export_zarr = os.environ.get('SLICEREG_EXPORT_ZARR', '1') == '1' and not smoke_test
 if export_zarr:
-    import subprocess
-    final_level = f'{input_source_file_tag}_groupwise_iter{groupwise_iterations-1}'
-    for placement in ['stack', 'mri']:
+    for placement in ['stack']:
         zarr_out = f'{output_dir}{subject}_{final_level}_density_{placement}.ome.zarr'
         if os.path.isdir(zarr_out):
             logging.warning(f'OME-Zarr exists, skipping: {zarr_out}')
@@ -1025,3 +1046,16 @@ if export_zarr:
             logging.warning(f'OME-Zarr written: {zarr_out}')
         except Exception as e:
             logging.warning(f'OME-Zarr export failed for {placement}: {e}')
+
+
+# ==================================================================================
+# STEP: QC report (qc_report.py): <output_dir>/QC/index.html; mri_register.py adds its results to it
+# ==================================================================================
+if os.environ.get('SLICEREG_QC', '1') == '1':
+    try:
+        subprocess.run([sys.executable, os.path.join(script_dir, 'qc_report.py'), '--run-dir', output_dir,
+                        '--rescale', str(rescale), '--subject', subject,
+                        '--missing', ','.join(map(str, missing_idxs_to_fill or []))], check=True)
+        logging.warning(f'QC report written: {output_dir}QC/index.html')
+    except Exception as e:
+        logging.warning(f'QC report failed: {e}')

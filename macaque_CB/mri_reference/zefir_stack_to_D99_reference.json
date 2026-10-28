@@ -1,0 +1,9 @@
+{
+ "affine_file": "zefir_stack_to_D99_reference_affine.mat",
+ "direction": 1,
+ "x0_mm": -3.75,
+ "source": "/mnt/ssd/Macaque_CB/processing/results_from_cell_counts/zefir_sliceReg_optimized_v2_rescale_20_local_jit/ coreg12nl_win12_rigsyn_4_groupwise_iter9",
+ "rescale": 20,
+ "dice": 0.8463649331597823,
+ "saved": "2026-10-28 08:24"
+}

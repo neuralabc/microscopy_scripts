@@ -7,7 +7,8 @@ stay densities and runs at different rescales are comparable.
 Placement:
   stack  the registered stack grid in mm (in-plane rescale*10 um, 50 um sections), no anatomical claim
   mri    the same voxels (not resampled) with an NGFF 0.6 affine to D99 world coordinates (RAS, mm),
-         from a fresh shear-free affine fit of this stack to the D99 cerebellum template (mri_anchor.py)
+         from --mri-affine (made by mri_register.py, which runs this export itself) or else from a fresh
+         shear-free affine fit of this stack to the D99 cerebellum template (mri_anchor.py)
 
 Slices that were interpolated (missing_idxs_to_fill) are marked in a label map `synthetic_slices` (1 = interpolated)
 under the image's labels/ group: their densities are not measured.
@@ -43,13 +44,21 @@ def stack_affine_mm(shape, res_mm, slice_mm):
     return aff
 
 
-def mri_world_affine(stack, res_mm, slice_mm, fit_dir, direction=1):
-    """Voxel -> D99 world (mm), from a shear-free affine fit of the stack to the MRI."""
+def mri_world_affine(stack, res_mm, slice_mm, fit_dir, direction=1, affine_file=None):
+    """Voxel -> D99 world (mm), from a shear-free affine fit of the stack to the MRI, or from a given affine
+    (ANTs .mat, MRI frame -> stack frame, e.g. from mri_register.py) without a fit."""
     import env_compat  # noqa: F401
     import ants
     import mri_anchor
     from evaluate_registration import MRI_T, MRI_M
-    aff_f, qc = mri_anchor.stack_to_mri_affine(stack, res_mm, slice_mm, MRI_T, MRI_M, fit_dir, direction=direction)
+    if affine_file is None:
+        aff_f, qc = mri_anchor.stack_to_mri_affine(stack, res_mm, slice_mm, MRI_T, MRI_M, fit_dir, direction=direction)
+    else:
+        aff_f = affine_file
+        p = np.array(ants.read_transform(aff_f).parameters)
+        qc = dict(direction=direction, x0_mm=None, affine_file=os.path.abspath(aff_f),
+                  scales_stack_axes=[float(v) for v in np.linalg.svd(p[:9].reshape(3, 3), compute_uv=False)],
+                  dice_affine=None)
     tx = ants.read_transform(aff_f)  # MRI frame (index * spacing) -> stack frame (voxel * spacing)
     pts_m = np.array([[x, y, z] for x in (0, 50) for y in (0, 50) for z in (0, 50)], float)
     pts_s = np.array([tx.apply_to_point(p) for p in pts_m])
@@ -73,6 +82,9 @@ def main():
                    help='interpolated slice indices (comma separated, empty for none)')
     p.add_argument('--direction', type=int, choices=(1, -1), default=1,
                    help='mri placement: hemisphere of D99 the stack is placed in (+1: right, as the pipeline default)')
+    p.add_argument('--mri-affine', default=None,
+                   help='mri placement: use this affine (ANTs .mat from mri_register.py) instead of a new fit; '
+                        'a new fit can differ between runs (one of four was turned by 180 deg, 2026-10-28)')
     p.add_argument('--subject', default=SUBJECT)
     p.add_argument('--tck-view', default=TCK_VIEW)
     p.add_argument('--overwrite', action='store_true')
@@ -100,7 +112,8 @@ def main():
         'rescale': a.rescale, 'in_plane_mm': res_mm, 'section_mm': SLICE_MM,
         'placement': a.placement, 'synthetic_slices': missing}}
     if a.placement == 'mri':
-        affine, qc = mri_world_affine(counts, res_mm, SLICE_MM, out + '.mri_fit', direction=a.direction)
+        affine, qc = mri_world_affine(counts, res_mm, SLICE_MM, out + '.mri_fit', direction=a.direction,
+                                     affine_file=a.mri_affine)
         # The stack axes are (in-plane, in-plane, section) and the sections are sagittal, so array axis 2 runs
         # left-right in the world, and the fit includes an in-plane flip (determinant < 0). tck_view's slice panes
         # take array axes 0, 1, 2 as world x, y, z, and the axial pane showed the wrong plane. So the array is
@@ -114,7 +127,7 @@ def main():
             raise ValueError(f'reorientation to RAS+ failed:\n{affine}')
         attrs['microscopy_scripts'].update(
             world='D99 cerebellum_brainstem_template_crop (RAS, mm)',
-            mri_fit={k: qc[k] for k in ('direction', 'x0_mm', 'scales_stack_axes', 'dice_affine')},
+            mri_fit={k: qc.get(k) for k in ('direction', 'x0_mm', 'scales_stack_axes', 'dice_affine', 'affine_file')},
             # row k: stack axis k (i, j, section) is array axis ornt[k][0], reversed if ornt[k][1] == -1
             array_axes_from_stack=ornt.tolist())
         anatomical = True

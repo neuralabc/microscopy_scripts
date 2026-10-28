@@ -35,6 +35,9 @@ nohup uv run --project <repo> python <repo>/macaque_CB/run_slice_registration_op
 - The script stops at the start if an input image is missing. If the csv lists another mount, set
   `SLICEREG_PATH_FROM=/data/data_drive/ SLICEREG_PATH_TO=<hpc prefix>/`.
 - Other inputs: `SLICEREG_LOOKUP_CSV`, `SLICEREG_OUTPUT_ROOT` (default `/tmp/`), `SLICEREG_MAX_WORKERS` (96).
+- Disk: P20 (rescale 20) is 6.1 GB in about 88,000 files. Rescale 5 has 16 times the in-plane voxels: expect
+  about 100 GB. Check `df -h /tmp` before you start. If `/tmp` is tmpfs (in RAM), the output uses memory that the
+  workers need: set `SLICEREG_OUTPUT_ROOT` to scratch storage.
 - `/tmp` may be cleared: copy the output folder off when the run ends.
 - Rescale 5 with this version has not been run yet. Expected: the pose graph takes about 15 min per pass (2
   passes), and the QC takes 10-20 min. The original script used 50 workers at rescale 5 on this HPC.
@@ -62,6 +65,8 @@ strong). Reference data in `mri_reference/`: the stack-to-D99 reference affine a
 |---|---|
 | `evaluate_registration.py --rescale <r> --out <dir> [--no-mri] [--reference A] A=<run> B=<run>` | Compares runs: blur-equalized NCC, mask Dice, slow path, STAGE1 warp size, MRI agreement |
 | `posegraph_test.py <run> <r> <out>` | Pose graph against jitter correction on a raw coreg0nl stack (block steps, NCC, Dice) |
+| `block_steps.py --run-dir <run> --rescale <r> [--level <level>] [--lookup-csv <csv>]` | Steps between groups of 4 sections (blocks mounted at a common angle, §4.8) |
+| `count_ratio.py --levels <l1,l2> A=<run> [B=<run>]` | Cell count per section after the warps against the native section |
 | `jitter_correction_test.py <stack> <res_mm> <out>` | Jitter correction alone on a stack |
 | `mri_pose_consistency.py`, `drift_control_test.py` | Tests of MRI-based and MRI-free drift control (§4.4, void; §4.5) |
 
@@ -76,3 +81,10 @@ strong). Reference data in `mri_reference/`: the stack-to-D99 reference affine a
 | `mri_anchor.py` | D99 loading, stack-to-D99 affine fit, tissue threshold |
 | `_tckview_write_ome_zarr.py` | Runs in tck_view's environment and writes the OME-Zarr |
 | `slice_registration_functions.py`, `embedded_antspy_smthMod.py` | Original library (unchanged) |
+
+## 6. Other files (not changed on this branch)
+
+- QuPath scripts (`*.groovy`, `purk_classifier.json`): cell detection, counts and Purkinje-cell classification
+  on the histology images; they make the count maps that the pipeline reads.
+- `notebooks/*Apply_Mappings*`: push other data through the transform chain into the registered space (§3).
+- `legacy/`: older versions of the registration scripts.

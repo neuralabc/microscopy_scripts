@@ -20,7 +20,9 @@ grid of a chosen registration level, so that Mat's data (pushed into the same sp
   `/mnt/ssd/Macaque_CB/processing/results_from_cell_counts/zefir_sliceReg_optimized_v2_rescale_{20,40}_local_{jit,pg}/`.
   P20 (`_rescale_20_local_pg`) is the current default pipeline. Vermis cortex is 25%, hemisphere cortex 40% of
   the cells (stable across J20, J40, P20).
-- Label names: `mri_reference/D99_v2.0_labels_cerebellum_brainstem.tsv` (from the AFNI D99 v2.0 package).
+- Label names: `mri_reference/D99_v2.0_labels_cerebellum_brainstem.tsv`, from `D99_v2.0_labels_semicolon.txt` in
+  https://afni.nimh.nih.gov/pub/dist/atlases/macaque/D99_Saleem/D99_v2.0_dist.tgz (the full atlas, 27 MB).
+- Evidence tools: `block_steps.py`, `count_ratio.py`, `evaluate_registration.py` (see `SCRIPTS_local.md` §4).
 
 ## 3. Known problems (why this is not done)
 

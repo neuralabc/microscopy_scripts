@@ -260,7 +260,7 @@ Rigid jitter correction (`slice_jitter.py`, offline test `jitter_correction_test
 | J | 40 | A + jitter correction in coreg0nl | done: better than A (below) |
 | JR | 40 | J + STAGE1 rigid only (`SLICEREG_STAGE1_SYN=0`; all warping in the groupwise step) | done: mixed, worse than J |
 | JT | 40 | J + SyN only in the template-building STAGE1 levels 0-3, last level (in the chain) rigid (`SLICEREG_STAGE1_SYN_LAST=0`) | done: same as JR, worse than J |
-| A20, J20 | 20 | A and J at rescale 20: does the gain hold at a finer grid? | running |
+| A20, J20 | 20 | A and J at rescale 20: does the gain hold at a finer grid? | done: yes, larger gain (below) |
 | JG | 40 | J + 10 jitter iterations + 15 groupwise iterations (`_jit10_gw15`): convergence and warp per iteration | done (below) |
 
 Results at rescale 40 (`evaluate_registration.py --no-mri --reference A`; median / 5th pct of adjacent pairs):
@@ -300,6 +300,22 @@ Convergence (rescale 40):
   For comparison, A iter9: median ratio 0.982, |dev| 2.5% / 7.5%; J iter9: 0.989, 1.8% / 7.7%.
 - Through-plane views of JG iter14 and J iter9: very similar; slightly smoother, no visible loss of structure.
 - Bug in the original groupwise function from iteration 11 on (file names); fixed in the v2 copy (commit fb06be9).
+
+Rescale 20 (0.2 mm, 2026-10-28; A20 vs J20, 10 groupwise iterations):
+
+| Measure | A STAGE1 | J STAGE1 | A final | J final |
+|---|---|---|---|---|
+| adjacent NCC | 0.729 / 0.360 | **0.855 / 0.487** | 0.889 / 0.631 | **0.932 / 0.708** |
+| blur-equalized NCC | 0.856 / 0.511 | **0.926 / 0.622** | 0.932 / 0.702 | **0.959 / 0.776** |
+| tissue-mask Dice | 0.957 / 0.901 | **0.970 / 0.910** | 0.974 / 0.925 | **0.979 / 0.934** |
+| STAGE1 warp RMS, total / non-affine (mm) | 0.58 / 0.25 | 0.29 / 0.21 | | |
+| per-slice count ratio, median / median abs dev / 95th pct | | | 0.978 / 2.6% / 6.6% | 0.985 / 2.0% / 7.4% |
+| slow path vs A, centroid max (mm) | | 0.36 | | 0.20 |
+
+- The gain is larger than at rescale 40: final blur-equalized residual (1 - NCC) -40% at the median, -25% at the
+  5th pct (rescale 40: -28% / -22%). J wins every measure except the 95th pct of the count deviation (7.4% vs 6.6%).
+- Through-plane views: folia clearly more continuous in J, also in the lateral part (slices 250-399).
+- Decision candidate stands: J (`SLICEREG_JITTER=1`).
 
 
 Note on what STAGE1 warps do: every STAGE1 level registers from coreg0nl again, so the warps of levels 0-3 (and of

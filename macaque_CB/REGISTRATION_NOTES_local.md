@@ -41,6 +41,7 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_MRI_REFIT` | 0 | 1 = refit the MRI affine at every STAGE1 level (drifts, see 4.2); 0 = one fit on `cascade_0` |
 | `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
 | `SLICEREG_JITTER` | 1 (since 2026-10-28; was 0) | 1 = rigid jitter correction folded into coreg0nl (4.7), output suffix `_jit`; 0 = the original pipeline (no suffix); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (6) |
+| `SLICEREG_JITTER_METHOD` | jitter | `jitter` (nearest neighbours) or `posegraph` (§4.8; suffix `_pg`, 2 passes by default) |
 | `SLICEREG_GROUPWISE_ITERS` | 10 | number of groupwise iterations; the final level becomes `..._groupwise_iter{N-1}` (suffix `_gw{N}`; jitter iterations other than 6 add the number to `_jit`) |
 | `SLICEREG_STAGE1_SYN` | 1 | 0 = STAGE1 rigid only |
 | `SLICEREG_STAGE1_SYN_LAST` | 1 | 0 = SyN only in the template-building STAGE1 levels, the last level rigid |
@@ -353,6 +354,46 @@ composed map was interpolated with the zeros outside it, which copied tissue to 
 That first JR result (worse mask Dice, a false 50 deg slow-angle difference at the lateral end) is void; the first J
 run was stopped. After the fix, raw coreg0nl adjacent NCC with the correction is 0.78 (0.74 with the bug).
 The slow-path angle in `evaluate_registration.py` now skips slices with a near-round outline (ill-defined axis).
+
+### 4.8 Blocks of sections at a common angle; pose-graph correction (2026-10-28)
+
+Reported by eye in J20 (QC through-plane cut and a 3D rendering): steps in the surface where a group of slices is
+offset against the next group, at least two in the hemisphere and one toward the vermis.
+
+Block-step measure (rigid GC fit of the mean of 4 slices before each boundary to the mean of the 4 after it):
+the blocks are in the raw sections (sections mounted together at a common angle), not made by the registration.
+
+| Block (slices) | Position | Raw (A20 coreg0nl) | A20 final | J20 final |
+|---|---|---|---|---|
+| 276-283 (TP3 Image 13-17) | 13.8-14.2 mm | -15 / +10 deg | -4 / +5 deg | -7 / +10 deg |
+| 234-235 (TP2 Image 91) | 11.7 mm | +14..+19 deg | +1..+2 deg | 0..+1 deg |
+| 322-326 (TP3 Image 38-39) | 16.1-16.3 mm | -9..-14 deg | -3..-4 deg | -3..-5 deg |
+| 33-35 (next to interpolated slice 32) | 1.7 mm, vermis side | -3..-5 deg | -1 deg | -1..-2 deg |
+
+Interpolated slices: only 32 (rank 11 of 391 boundaries) and 160 (rank 50) have a step nearby; 59, 120, 189, 228 do
+not. TP changes (112, 251): 251 has a moderate step (0.51 mm at 253). The nearest-neighbour fits of every step
+(jitter, STAGE1 neighbours, groupwise local templates) cannot turn a block back: inside a block all slices agree,
+only its two edges show a mismatch. The jitter correction even made the far edge of 276-283 worse (+10 -> +16 deg),
+and J's STAGE1 kept the block (12-14 deg) where A's reduced it (6-10 deg).
+
+Pose-graph correction (`slice_posegraph.py`, `SLICEREG_JITTER_METHOD=posegraph`, output suffix `_pg`): rigid fits of
+each slice to the slices at distances 1, 2, 3, 4, 6, 8, 12, 16; one robust least-squares solve for all poses
+(rotations first, then translations); slow part removed (sigma 15); 2 outer passes. Offline test on the raw A20
+stack (`posegraph_test.py`, both corrections applied the same way):
+
+| Measure | none | jitter | pose graph |
+|---|---|---|---|
+| block step RMS median / 95th pct (mm) | 0.57 / 1.53 | 0.38 / 1.33 | **0.18 / 0.35** |
+| boundaries with a block step > 0.5 mm | 217 | 137 | **7** |
+| blocks 276-283 / 234 / 324 (deg) | -16,+10 / +19 / -15 | -13,+16 / +10 / -14 | **-0.4,+0.8 / -1.5 / -1.2** |
+| blur-equalized NCC median / 5th pct | 0.475 / 0.114 | 0.824 / 0.466 | **0.841 / 0.581** |
+| mask Dice median / 5th pct | 0.901 / 0.791 | 0.945 / 0.849 | **0.946 / 0.868** |
+| slow-path change, max (mm) | - | 0.02 | 0.22 |
+
+The block-step measure uses the same kind of rigid fit that the pose graph optimises (partly circular); the
+through-plane views (folia continuous through the whole stack with rigid poses only) and the mask Dice are
+independent and agree. Cost: about 3,000 rigid fits per pass (about 12 min per pass at rescale 20, 6 workers).
+Full rescale-20 run P20 (`..._rescale_20_local_pg`): running.
 
 ## 5. OME-Zarr export of the final densities
 

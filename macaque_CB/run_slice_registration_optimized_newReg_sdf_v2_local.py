@@ -1030,6 +1030,12 @@ if apply_transforms_to_orig:
 # needs tck_view's uv environment (~/Documents/code/tck_view); a failure is logged and does not stop the run
 import subprocess
 final_level = f'{input_source_file_tag}_groupwise_iter{groupwise_iterations-1}'
+# tissue mask of the final level beside its stack (tissue_mask.py; a new file, same grid and header as the stack)
+try:
+    from tissue_mask import write_tissue_mask
+    logging.warning(f'Tissue mask written: {write_tissue_mask(output_dir, subject, final_level, rescale)}')
+except Exception as e:
+    logging.warning(f'Tissue mask failed: {e}')
 export_zarr = os.environ.get('SLICEREG_EXPORT_ZARR', '1') == '1' and not smoke_test
 if export_zarr:
     for placement in ['stack']:

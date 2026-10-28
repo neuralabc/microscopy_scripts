@@ -10,8 +10,9 @@ Placement:
          from --mri-affine (made by mri_register.py, which runs this export itself) or else from a fresh
          shear-free affine fit of this stack to the D99 cerebellum template (mri_anchor.py)
 
-Slices that were interpolated (missing_idxs_to_fill) are marked in a label map `synthetic_slices` (1 = interpolated)
-under the image's labels/ group: their densities are not measured.
+Label maps under the image's labels/ group (uint8, same grid):
+  synthetic_slices  1 = interpolated slice (missing_idxs_to_fill): its densities are not measured
+  tissue            1 = tissue (tissue_mask.py: counts > 2 per 50 um voxel, holes filled per slice)
 
 The OME-Zarr itself is written by neuralarc.core.ome_zarr.write_ome_zarr (default chunks and pyramid: levels
 halve the finest axes first, then all, until the largest side is at most 256), run in tck_view's own uv
@@ -28,6 +29,8 @@ import tempfile
 
 import numpy as np
 import nibabel
+
+from tissue_mask import tissue_mask
 
 SUBJECT = 'zefir'
 DEFAULT_LEVEL = 'coreg12nl_win12_rigsyn_4_groupwise_iter9'
@@ -102,6 +105,7 @@ def main():
     for s in missing:
         if s < counts.shape[2]:
             synthetic[..., s] = 1
+    tissue = tissue_mask(counts, res_mm)
 
     out = os.path.abspath(a.out)
     attrs = {'microscopy_scripts': {
@@ -110,7 +114,9 @@ def main():
         'voxel_volume_mm3': voxel_mm3, 'counts_per_voxel_to_density': 1.0 / voxel_mm3,
         'run_dir': run_dir, 'level': a.level, 'stack_file': os.path.basename(stack_f),
         'rescale': a.rescale, 'in_plane_mm': res_mm, 'section_mm': SLICE_MM,
-        'placement': a.placement, 'synthetic_slices': missing}}
+        'placement': a.placement, 'synthetic_slices': missing,
+        'labels': {'synthetic_slices': '1 = interpolated slice', 'tissue': '1 = tissue: counts > 2 per 50 um voxel '
+                   '(about 16000 cells/mm^3), holes filled per slice (tissue_mask.py)'}}}
     if a.placement == 'mri':
         affine, qc = mri_world_affine(counts, res_mm, SLICE_MM, out + '.mri_fit', direction=a.direction,
                                      affine_file=a.mri_affine)
@@ -122,6 +128,7 @@ def main():
         reorient = nibabel.orientations.inv_ornt_aff(ornt, density.shape)
         density = nibabel.orientations.apply_orientation(density, ornt)
         synthetic = nibabel.orientations.apply_orientation(synthetic, ornt)
+        tissue = nibabel.orientations.apply_orientation(tissue, ornt)
         affine = affine @ reorient
         if np.linalg.det(affine[:3, :3]) <= 0 or not np.all(np.argmax(np.abs(affine[:3, :3]), axis=0) == [0, 1, 2]):
             raise ValueError(f'reorientation to RAS+ failed:\n{affine}')
@@ -137,8 +144,11 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix='ome_zarr_export_', dir=os.path.dirname(out)) as tmp:
         np.save(os.path.join(tmp, 'density.npy'), density)
-        np.save(os.path.join(tmp, 'synthetic.npy'), synthetic)
-        spec = dict(out=out, density=os.path.join(tmp, 'density.npy'), synthetic=os.path.join(tmp, 'synthetic.npy'),
+        np.save(os.path.join(tmp, 'synthetic.npy'), np.ascontiguousarray(synthetic))
+        np.save(os.path.join(tmp, 'tissue.npy'), np.ascontiguousarray(tissue))
+        labels = [dict(name='synthetic_slices', path=os.path.join(tmp, 'synthetic.npy')),
+                  dict(name='tissue', path=os.path.join(tmp, 'tissue.npy'))]
+        spec = dict(out=out, density=os.path.join(tmp, 'density.npy'), labels=labels,
                     affine=affine.tolist(), anatomical=anatomical, name=f'{a.subject}_cell_density',
                     source=stack_f, attrs=attrs, overwrite=a.overwrite)
         spec_f = os.path.join(tmp, 'spec.json')

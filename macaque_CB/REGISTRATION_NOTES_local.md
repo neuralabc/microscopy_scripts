@@ -68,6 +68,14 @@ Changes in content (2026-10-28), with the jitter correction now on by default (`
   apply the poses in `{subject}_coreg0nl_jitter_poses.csv` (theta_deg, tx_mm, ty_mm, centroid_i_vox,
   centroid_j_vox per slice; `slice_jitter.pose_to_voxel` gives the voxel form).
 
+New files (2026-10-28), nothing existing changes:
+- `{subject}_{final_level}_tissue_mask.nii.gz` beside the final stack: uint8, 1 = tissue, same grid, affine and
+  header as the stack. Tissue = counts > 2 per 50 um voxel (about 16,000 cells/mm^3; the count threshold scales
+  with the voxel area, so it means the same at every rescale), holes filled in each slice. This is the definition
+  that the QC, the evaluation and the MRI fit use. For another level:
+  `uv run python macaque_CB/tissue_mask.py --run-dir <dir> --rescale <r> --level <level>`.
+- `run_settings.json`, `QC/`, and (from `mri_register.py`) `mri_registration/<level>/`.
+
 - Native slices: `{subject}_{idx:04d}_{img}.nii.gz`, made with `downsample_image(img, rescale, prop_pad=0.2)`
   and `create_affine(shape, voxel_res=[10*rescale, 10*rescale, 50])` (µm, centred).
 - Deformed slices: `{subject}_{idx:04d}_{img}_{level}_ants-def0.nii.gz`;
@@ -358,7 +366,8 @@ The pipeline calls it at the end of a run (`SLICEREG_EXPORT_ZARR=1`):
   sums blocks). The factor and the units are in the attributes under `microscopy_scripts`.
 - Pyramid: tck_view's default (mean; the finest axes halve first, then all, until the largest side <= 256;
   64^3 chunks, Blosc zstd). Rescale 5: (398, 873, 623) -> (199, 437, 312) -> (100, 219, 156) (z, y, x).
-- Labels: `labels/synthetic_slices` = 1 on the interpolated slices (not measured).
+- Labels: `labels/synthetic_slices` = 1 on the interpolated slices (not measured); `labels/tissue` = 1 in tissue
+  (since 2026-10-28; the definition of `tissue_mask.py`, see §3).
 - Our attributes are under `neuralarc.microscopy_scripts` in the root `zarr.json` (tck_view merges them there).
 - Placement `stack`: the registered grid in mm, no anatomical claim.
   Placement `mri`: the same voxels (not resampled) with an NGFF 0.6 affine to D99 world (RAS, mm). Since

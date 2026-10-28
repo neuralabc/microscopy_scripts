@@ -14,13 +14,14 @@ def main(spec_f):
         spec = json.load(f)
     affine = np.asarray(spec['affine'], float)
     density = np.load(spec['density'], mmap_mode='r')
-    synthetic = np.load(spec['synthetic'], mmap_mode='r')
     image = ome_zarr.Volume(density, affine, name=spec['name'], space_unit='millimeter',
                             source=spec['source'], anatomical=spec['anatomical'], reduction='mean')
     labels = []
-    if synthetic.any():
-        labels.append(ome_zarr.Volume(synthetic, affine, name='synthetic_slices', space_unit='millimeter',
-                                      source=spec['source'], anatomical=spec['anatomical']))
+    for lab in spec['labels']:   # [{name, path}], uint8 arrays on the image grid; empty ones are left out
+        arr = np.load(lab['path'], mmap_mode='r')
+        if arr.any():
+            labels.append(ome_zarr.Volume(arr, affine, name=lab['name'], space_unit='millimeter',
+                                          source=spec['source'], anatomical=spec['anatomical']))
     summary = ome_zarr.write_ome_zarr(spec['out'], image, kind='image', labels=labels, overwrite=spec['overwrite'],
                                       version='0.6', attrs=spec['attrs'], progress=print)
     print(json.dumps({k: v for k, v in summary.items() if isinstance(v, (int, float, str, bool, list))}, default=str))

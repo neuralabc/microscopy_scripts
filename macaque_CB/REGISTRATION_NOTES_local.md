@@ -425,7 +425,20 @@ Reference: made from J20 (`..._rescale_20_local_jit`, `groupwise_iter9`) with a 
 `--save-reference`. Scales MRI -> stack 0.68 / 0.77 / 1.00 (in-plane shrinkage of the sections relative to D99,
 about 25-30%, is real tissue processing plus fit uncertainty).
 
-Results (affine from the reference; nonlinear): J20: Dice 0.85 -> 0.87, displacement median 0.6 mm (95th pct
-1.4 mm), Jacobian 5th-95th pct 0.65-1.53, no folding. J40: MI -0.11 -> -0.22, displacement median 0.8 mm,
-Jacobian 0.68-1.60, no folding. Tests: J40 with the reference passes (rotation 0 deg); a 180 deg turned affine
-given with `--affine` fails the check (176 deg, exit 2).
+Results (affine from the reference, then SyN; Dice in the SyN region, which differs from the affine table's Dice):
+- J20: Dice 0.853 -> 0.860, MI -0.099 -> -0.199, displacement median 0.72 mm (95th pct 1.47, max 2.35),
+  Jacobian 5th-95th pct 0.70-1.55, no folding.
+- J40: Dice 0.856 -> 0.851 (Dice and MI disagree here), MI -0.111 -> -0.222, displacement median 0.81 mm,
+  Jacobian 0.68-1.60, no folding.
+- The SyN is not gentle: local volume changes up to about +/-50% (5th-95th pct). This is expected for a different
+  animal; use the affine outputs when the stack's own shape matters.
+- Tests: the evidence that the check works is a 180 deg turned affine given with `--affine`, which fails
+  (176 deg, exit 2, nothing written). A run from the reference passes trivially (the refinement kept it: 0 deg).
+- The full search is not fully repeatable (the 2D orientation search has no fixed seed): two J20 searches
+  differed by 4 deg. The stored reference removes this for later runs.
+- Old `mri` exports checked against the reference (2026-10-28): A20 was turned (177 deg) and is replaced by a
+  `mri_register.py` export; all others agree within 8 deg, also
+  `ome_zarr_exports/zefir_r5_gw9_mri.ome.zarr` (7.7 deg).
+
+QC report at rescale 5 (test with the rescale-5 stack, 2026-10-28): about 5 s per level and 2.1 GB peak memory
+for the stack measures; the map warps (about 400 maps per level) add an estimated 10-20 minutes.

@@ -55,6 +55,7 @@ Each run writes `run_settings.json`. Output files and the transform chain: §3 (
 | `mri_register.py` | Stack to D99: stored reference affine (+ stability check, exit 2 on failure), SyN, densities on the D99 grid, `mri` OME-Zarr; then runs `atlas_labels.py` | `mri_register.py --run-dir <run> --rescale <r> [--level <level>]` |
 | `atlas_labels.py` | D99 labels in the stack grid: `_D99_labels`, `_D99_regions` (vermis / hemisphere / nuclei), `_D99_x_mm`, cell table. **Work in progress** (`LOBULE_LABELS_HANDOFF.md`) | `atlas_labels.py --run-dir <run> --rescale <r> [--level <level>]` |
 | `tissue_mask.py` | Tissue mask of a level (counts > 2 per 50 µm voxel, holes filled) | `tissue_mask.py --run-dir <run> --rescale <r> --level <level>` |
+| `cleanup_run.py` | Removes intermediate files; keeps the native sections and the transform chain that pushes data (e.g. Purkinje-cell maps) into the final space. Dry run by default; `--verify N` proves that the kept chain reproduces the final sections; `--execute` removes (P20: 4.0 of 6.3 GB, 76,000 files) | `cleanup_run.py --run-dir <run> --verify 5 [--execute] [--drop-inverse]` |
 | `export_ome_zarr.py` | OME-Zarr (NGFF 0.6) of a level in cells/mm³, `stack` or `mri` placement, with label maps | `export_ome_zarr.py --run-dir <run> --rescale <r> --level <level> --placement stack --out <file>.ome.zarr` |
 
 `--level` defaults to the last groupwise iteration. An earlier level is allowed (e.g. if the later warps are too

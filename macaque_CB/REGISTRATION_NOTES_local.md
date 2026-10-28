@@ -85,6 +85,12 @@ New files (2026-10-28), nothing existing changes:
   that the QC, the evaluation and the MRI fit use. For another level:
   `uv run python macaque_CB/tissue_mask.py --run-dir <dir> --rescale <r> --level <level>`.
 - `run_settings.json`, `QC/`, and (from `mri_register.py`) `mri_registration/<level>/`.
+- Cleanup (`cleanup_run.py`, optional, run by hand): keeps the native sections, the forward and inverse maps of
+  the chain below (from `{subject}_forward_maps.csv` via `get_transform_chain_for_level`), the final-level `def0`
+  sections and all run-level files; removes the maps of other levels, other deformed sections, per-section
+  templates and ANTs intermediate files, and lists them in `cleanup_manifest.txt`. The maps csv files are not
+  changed, so their columns for removed levels point to absent files. Tested 2026-10-28: P20 4.0 of 6.3 GB
+  removable; after a cleanup (smoke run) the kept chain reproduces the final `def0` sections exactly (NCC 1.000).
 - From `mri_register.py` (via `atlas_labels.py`, §7.3), beside the stack of the registered level:
   `{subject}_{level}_D99_labels.nii.gz` (uint8: D99 v2.0 label value in tissue, 0 outside tissue, 252 / 253 =
   D99 cerebellum / brainstem without a label, 254 = in the D99 mask but in neither region, 255 = tissue outside

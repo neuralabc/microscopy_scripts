@@ -214,6 +214,13 @@ show a ~1 mm dip near slice 220, where A's offset curve has its bump).
 **Conclusion:** do not build per-slice MRI anchoring with D99. Use D99 for global placement (OME-Zarr `mri`
 placement) and QC only. The resolution is not the cause (same result at rescale 40 and at 0.1 mm).
 
+**Correction (2026-10-28): this test is void.** In both stacks, fit 1 was placed turned by about 165 deg (about stack
+axis i) against the checked reference (§7.2); fit 2 agrees with the reference (1 deg / 2.5 deg). MI shows it
+(on A's STAGE1 stack: fit 1 -0.063, fit 2 -0.101, reference -0.096). A turn about axis i keeps the sign of dx and
+reverses dy, which is the pattern above (dx r +0.6..0.8, dy r -0.76). So the test compared a correct and a wrong
+placement; it does not show that D99 cannot constrain the slow path. Run C (§4.2) is still a valid negative
+result for MRI targets in SyN and for a refit at every level.
+
 ### 4.5 MRI-free drift control (offline test, `drift_control_test.py`)
 
 Raw slices (`coreg0nl`) are the separate scans placed by their image centres (the initial step has no

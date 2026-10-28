@@ -345,8 +345,8 @@ def main():
         mi = lambda W: float(ants.image_similarity(F, ants.from_numpy(W, spacing=(mri_sp,) * 3),
                                                    metric_type='MattesMutualInformation', fixed_mask=Fm))
         qc['tables']['nonlinear'] = {
-            'Dice in region, affine': mri_anchor._dice(Wa, Mmask, region, thr_mv),
-            'Dice in region, nonlinear': mri_anchor._dice(Wn, Mmask, region, thr_mv),
+            'Dice in the SyN region (not comparable with the affine table), affine': mri_anchor._dice(Wa, Mmask, region, thr_mv),
+            'Dice in the SyN region, nonlinear': mri_anchor._dice(Wn, Mmask, region, thr_mv),
             'Mattes MI in region, affine (lower is better)': mi(Wa),
             'Mattes MI in region, nonlinear': mi(Wn),
             'displacement in region, median (mm)': float(np.median(dmag)),

@@ -396,6 +396,8 @@ def main():
     p.add_argument('--out', default=None, help='QC directory (default: <run_dir>/QC)')
     p.add_argument('--recompute', action='store_true', help='ignore the cached per-level measures')
     p.add_argument('--n-worst', type=int, default=6)
+    p.add_argument('--qc-grid-mm', type=float, default=QC_GRID_MM,
+                   help='in-plane grid of the QC measures and images (block sum of the stack)')
     a = p.parse_args()
 
     run_dir = a.run_dir.rstrip('/') + '/'
@@ -404,7 +406,7 @@ def main():
     os.makedirs(cache_dir, exist_ok=True)
     missing = [int(v) for v in a.missing.split(',') if v.strip()]
     res_full = a.rescale * 10 / 1000.0
-    f = max(1, int(round(QC_GRID_MM / res_full)))
+    f = max(1, int(round(a.qc_grid_mm / res_full)))
     res_qc = res_full * f
     thr_qc = mri_anchor.tissue_threshold_for(res_qc)
 
@@ -451,6 +453,9 @@ def main():
     count_rows = []
     for lv in show:
         r = ratios[lv][np.isfinite(ratios[lv])]
+        if r.size == 0:   # no native slices found
+            count_rows.append([html.escape(lv)] + ['-'] * 5)
+            continue
         dev = np.abs(r - 1)
         count_rows.append([html.escape(lv), fmt(np.median(r)), fmt(100 * np.median(dev), 1) + ' %',
                            fmt(100 * np.percentile(dev, 95), 1) + ' %', fmt(100 * dev.max(), 1) + ' %',

@@ -23,7 +23,8 @@ from scipy import ndimage as ndi
 import env_compat  # noqa: F401  (ANTs shims, threads, OOM priority)
 import mri_anchor
 
-MRI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target')
+# D99 target files (D99_cerebellum_brainstem_{template,mask,labels,regions}_crop.nii.gz); SLICEREG_D99_DIR overrides
+MRI_DIR = os.environ.get('SLICEREG_D99_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target'))
 MRI_T = os.path.join(MRI_DIR, 'D99_cerebellum_brainstem_template_crop.nii.gz')
 MRI_M = os.path.join(MRI_DIR, 'D99_cerebellum_brainstem_mask_crop.nii.gz')
 

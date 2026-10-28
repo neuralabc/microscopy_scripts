@@ -119,7 +119,7 @@ mri_refit = os.environ.get('SLICEREG_MRI_REFIT', '0') == '1' #1: refit the MRI a
 # refitting let the reference follow the stack (run C, 2026-10-27: Dice 0.86 -> 0.76, section scale 1.01 -> 1.20 over the levels)
 mri_fixed_level = 'cascade_0'
 mri_direction = int(os.environ.get('SLICEREG_MRI_DIRECTION', 1)) #+1/-1: hemisphere of the MRI that the stack is fitted to (the MRI is near symmetric; fixed so that runs are comparable)
-mri_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target')
+mri_dir = os.environ.get('SLICEREG_D99_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target'))
 mri_template_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')
 mri_mask_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_mask_crop.nii.gz')
 if not use_mri_anchor:
@@ -1070,10 +1070,10 @@ if export_zarr:
 
 # ==================================================================================
 # STEP: MRI registration of the final level (mri_register.py: stored reference affine + SyN to D99, then the D99
-# labels in the stack grid, atlas_labels.py). Needs the D99 target files in local_extras/cerebellum_target/
-# (not in git); skipped with a message if they are missing. Exit 2 = stability check failed (nothing written).
+# labels in the stack grid, atlas_labels.py). Needs the D99 target files in mri_dir (SLICEREG_D99_DIR; not in
+# git); skipped with a message if they are missing. Exit 2 = stability check failed (nothing written).
 # ==================================================================================
-d99_dir = os.path.join(script_dir, 'local_extras', 'cerebellum_target')
+d99_dir = mri_dir
 if os.environ.get('SLICEREG_MRI_REGISTER', '1') == '1' and not smoke_test:
     if not os.path.isfile(os.path.join(d99_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')):
         logging.warning(f'MRI registration skipped: D99 target files not found in {d99_dir}')

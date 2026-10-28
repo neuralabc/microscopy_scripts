@@ -9,8 +9,9 @@ Run every command from the repo root through uv: `uv run python macaque_CB/<scri
 cd <repo> && uv sync            # Python 3.12, antspyx 0.6.3 (pyproject.toml, uv.lock)
 ```
 - `nighres` is not needed: `env_compat.py` provides the parts that the pipeline uses (§1).
-- D99 files (not in git, `.gitignore`): copy `macaque_CB/local_extras/cerebellum_target/` (about 4 MB) to every
-  machine that runs the MRI registration or the labels. Without them, the main script skips those steps.
+- D99 files (not in git): `macaque_CB/local_extras/cerebellum_target/` on the workstation; on the HPC the
+  `_hpc` script uses `/data/neuralabc/johmat/phase_ml/D99/D99_v2.0_dist/cerebellum_target`. `SLICEREG_D99_DIR`
+  sets another folder (for all scripts). Without the files, the main script skips the MRI registration and labels.
 - tck_view (optional, for the OME-Zarr export): a checkout at `~/Documents/code/tck_view`, or set
   `SLICEREG_TCK_VIEW`. Without it, the export is skipped.
 
@@ -32,12 +33,12 @@ mkdir -p /tmp/zefir_work && cd /tmp/zefir_work          # ANTs can leave files i
 SLICEREG_SMOKE=1 uv run --project <repo> python <repo>/macaque_CB/run_slice_registration_optimized_newReg_sdf_v2_hpc.py   # 3-min environment test
 nohup uv run --project <repo> python <repo>/macaque_CB/run_slice_registration_optimized_newReg_sdf_v2_hpc.py > run.log 2>&1 &
 ```
-- The script stops at the start if an input image is missing. If the csv lists another mount, set
-  `SLICEREG_PATH_FROM=/data/data_drive/ SLICEREG_PATH_TO=<hpc prefix>/`.
-- Other inputs: `SLICEREG_LOOKUP_CSV`, `SLICEREG_OUTPUT_ROOT` (default `/tmp/`), `SLICEREG_MAX_WORKERS` (96).
+- The image paths in the csv are used as they are (as in the original script). The script stops at the start
+  if an input image is missing, and warns if the D99 files are missing.
+- Other inputs: `SLICEREG_LOOKUP_CSV`, `SLICEREG_OUTPUT_ROOT` (default `/tmp/`), `SLICEREG_D99_DIR`,
+  `SLICEREG_MAX_WORKERS` (96).
 - Disk: P20 (rescale 20) is 6.1 GB in about 88,000 files. Rescale 5 has 16 times the in-plane voxels: expect
-  about 100 GB. Check `df -h /tmp` before you start. If `/tmp` is tmpfs (in RAM), the output uses memory that the
-  workers need: set `SLICEREG_OUTPUT_ROOT` to scratch storage.
+  about 100 GB in `/tmp`.
 - `/tmp` may be cleared: copy the output folder off when the run ends.
 - Rescale 5 with this version has not been run yet. Expected: the pose graph takes about 15 min per pass (2
   passes), and the QC takes 10-20 min. The original script used 50 workers at rescale 5 on this HPC.

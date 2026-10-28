@@ -51,9 +51,10 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_STAGE1_REG` | Medium | STAGE1 SyN regularization preset |
 | `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5; `stack` placement only since 2026-10-28) |
 | `SLICEREG_QC` | 1 | write the QC report `<output_dir>/QC/index.html` at the end of the run (§7) |
-| `SLICEREG_MRI_REGISTER` | 1 (since 2026-10-28) | run `mri_register.py` (reference affine + SyN + D99 labels) on the final level at the end of the run; skipped with a message if the D99 files are not in `local_extras/cerebellum_target/` |
+| `SLICEREG_MRI_REGISTER` | 1 (since 2026-10-28) | run `mri_register.py` (reference affine + SyN + D99 labels) on the final level at the end of the run; skipped with a message if the D99 files are not found |
+| `SLICEREG_D99_DIR` | `local_extras/cerebellum_target/` (HPC script: `/data/neuralabc/johmat/phase_ml/D99/D99_v2.0_dist/cerebellum_target`) | folder of the D99 target files, for all scripts |
 | `SLICEREG_TCK_VIEW` | `~/Documents/code/tck_view` | tck_view checkout for the OME-Zarr export; no checkout = export skipped with a message |
-| `SLICEREG_LOOKUP_CSV`, `SLICEREG_OUTPUT_ROOT`, `SLICEREG_PATH_FROM` / `_TO` | HPC script only | input lookup csv, output root (`/tmp/`), image path prefix rewrite (see `SCRIPTS_local.md`) |
+| `SLICEREG_LOOKUP_CSV`, `SLICEREG_OUTPUT_ROOT` | HPC script only | input lookup csv (its image paths are used as they are), output root (`/tmp/`) (see `SCRIPTS_local.md`) |
 
 Each run also writes `run_settings.json` (all `SLICEREG_*` variables, git commit, main parameters) in its output
 folder; the QC report shows it.

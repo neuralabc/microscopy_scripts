@@ -10,8 +10,8 @@ Run from a scratch working directory (ANTs can leave files in the cwd), e.g.:
     mkdir -p /tmp/zefir_work && cd /tmp/zefir_work && uv run --project <repo> \
         python <repo>/macaque_CB/run_slice_registration_optimized_newReg_sdf_v2_hpc.py
 HPC settings (environment variables): SLICEREG_LOOKUP_CSV (input lookup csv), SLICEREG_OUTPUT_ROOT (default /tmp/),
-SLICEREG_PATH_FROM / SLICEREG_PATH_TO (rewrite a prefix of the image paths in the csv, off by default),
-SLICEREG_MAX_WORKERS (default 96). See SCRIPTS_local.md and REGISTRATION_NOTES_local.md for all SLICEREG_* options.
+SLICEREG_D99_DIR (D99 target files, default /data/neuralabc/johmat/phase_ml/D99/D99_v2.0_dist/cerebellum_target),
+SLICEREG_MAX_WORKERS (default 96). The image paths in the csv are used as they are (as in the original script). See SCRIPTS_local.md and REGISTRATION_NOTES_local.md for all SLICEREG_* options.
 Set SLICEREG_SMOKE=1 for a quick test of the environment (first 7 slices, slice 3 treated as missing, rescale 40).
 """
 import env_compat  # must come before slice_registration_functions (threads, OOM priority, ANTsPy/nighres shims)
@@ -128,7 +128,10 @@ mri_refit = os.environ.get('SLICEREG_MRI_REFIT', '0') == '1' #1: refit the MRI a
 # refitting let the reference follow the stack (run C, 2026-10-27: Dice 0.86 -> 0.76, section scale 1.01 -> 1.20 over the levels)
 mri_fixed_level = 'cascade_0'
 mri_direction = int(os.environ.get('SLICEREG_MRI_DIRECTION', 1)) #+1/-1: hemisphere of the MRI that the stack is fitted to (the MRI is near symmetric; fixed so that runs are comparable)
-mri_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_extras', 'cerebellum_target')
+# D99 target files on the HPC; put in the environment so that mri_register.py and atlas_labels.py (run as
+# subprocesses at the end) use the same folder
+os.environ.setdefault('SLICEREG_D99_DIR', '/data/neuralabc/johmat/phase_ml/D99/D99_v2.0_dist/cerebellum_target')
+mri_dir = os.environ['SLICEREG_D99_DIR']
 mri_template_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')
 mri_mask_fname = os.path.join(mri_dir, 'D99_cerebellum_brainstem_mask_crop.nii.gz')
 if not use_mri_anchor:
@@ -189,13 +192,12 @@ else:
 lookup_csv = os.environ.get('SLICEREG_LOOKUP_CSV', '/data/neuralabc/neuralabc_volunteers/macaque/all_TP_image_idxs_file_lookup.csv')
 output_root = os.environ.get('SLICEREG_OUTPUT_ROOT', '/tmp/').rstrip('/') + '/'
 output_dir = f'{output_root}{subject}_sliceReg_optimized_v2_rescale_{rescale}{sdf_tag}_hpc{variant_tag}{"_smoke" if smoke_test else ""}/'
-_df = pd.read_csv(lookup_csv)
-if os.environ.get('SLICEREG_PATH_FROM'):
-    _df['file_name'] = _df['file_name'].str.replace(os.environ['SLICEREG_PATH_FROM'], os.environ.get('SLICEREG_PATH_TO', ''), regex=False)
+_df = pd.read_csv(lookup_csv)   # the image paths in the csv are used as they are, as in the original script
 _absent = [f for f in _df['file_name'] if not os.path.isfile(f)]
 if _absent:
-    raise FileNotFoundError(f'{len(_absent)} of {len(_df)} input images not found (first: {_absent[0]}); '
-                            f'check SLICEREG_LOOKUP_CSV or set SLICEREG_PATH_FROM / SLICEREG_PATH_TO')
+    raise FileNotFoundError(f'{len(_absent)} of {len(_df)} input images not found (first: {_absent[0]}); check {lookup_csv}')
+if not os.path.isfile(os.path.join(mri_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')):
+    print(f'WARNING: D99 target files not found in {mri_dir}: the MRI registration and the D99 labels will be skipped')
 
 missing_idxs_to_fill = [32,59,120,160,189,228] #these are the slice indices with missing or terrible data, fill with coreg of neighbours
 # output_dir = '/data/data_drive/Macaque_CB/processing/results_from_cell_counts/slice_reg_perSliceTemplate_image_weights_all_tmp/'
@@ -1085,10 +1087,10 @@ if export_zarr:
 
 # ==================================================================================
 # STEP: MRI registration of the final level (mri_register.py: stored reference affine + SyN to D99, then the D99
-# labels in the stack grid, atlas_labels.py). Needs the D99 target files in local_extras/cerebellum_target/
-# (not in git); skipped with a message if they are missing. Exit 2 = stability check failed (nothing written).
+# labels in the stack grid, atlas_labels.py). Needs the D99 target files in mri_dir (SLICEREG_D99_DIR; not in
+# git); skipped with a message if they are missing. Exit 2 = stability check failed (nothing written).
 # ==================================================================================
-d99_dir = os.path.join(script_dir, 'local_extras', 'cerebellum_target')
+d99_dir = mri_dir
 if os.environ.get('SLICEREG_MRI_REGISTER', '1') == '1' and not smoke_test:
     if not os.path.isfile(os.path.join(d99_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')):
         logging.warning(f'MRI registration skipped: D99 target files not found in {d99_dir}')

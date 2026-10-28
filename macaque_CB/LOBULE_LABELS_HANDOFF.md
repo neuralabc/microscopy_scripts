@@ -3,6 +3,11 @@
 Written 2026-10-28, branch `enh-local_uv_mri_anchor`. Read `SCRIPTS_local.md` (tools) and
 `REGISTRATION_NOTES_local.md` §3 (output contract), §7.2 (MRI registration), §7.3 (current labels) first.
 
+**Decision (user, 2026-10-28): follow option C (hybrid), for Mat to follow up.** D99 gives the lobule names and
+the initial labels; zefir's own anatomy (fissures, white-matter branches) sets the boundaries. Options A and B
+(§4) stay as background and fallbacks. The open questions in §4 (vermis definition, lateral coverage, Purkinje
+maps, hand-labelled sections) still need answers from the user before or during the work.
+
 ## 1. Goal
 
 Each tissue voxel of the registered stack gets a cerebellar lobule label (I-X and the hemispheric lobules) and a
@@ -39,13 +44,13 @@ grid of a chosen registration level, so that Mat's data (pushed into the same sp
 4. **Unlabelled tissue.** D99 leaves white matter (code 252) and much of the brainstem (253) without a label. The
    D99 crop cuts the brainstem (255).
 
-## 4. Decision needed first (discuss with the user before you build)
+## 4. Options considered (C chosen; see the decision at the top)
 
 | Option | Idea | For | Against |
 |---|---|---|---|
 | A. Better propagation | Keep D99. Improve the fit: section-axis scale, a less smooth SyN inside the cerebellum, a 2D refinement per section on the folial pattern | Little new code; full label set | Still another animal's boundaries; validation is hard |
 | B. Direct anatomy | Labels only from zefir: find the fissures in the cell density, split the white-matter tree into branches, give each branch and its cortex a lobule | True boundaries of this brain; no atlas bias | More work; needs a seed per lobule (by hand or from D99); the vermis edge in I-V is subtle |
-| C. Hybrid (recommended to discuss first) | D99 gives the initial label and the names. The boundaries then move to the nearest fissure in zefir's own data (e.g. watershed or graph cut on the cortex, with D99 labels as seeds and fissures as edges) | Names from the atlas, boundaries from the data | Needs a good fissure map; seeds can be wrong where D99 is off by a folium |
+| **C. Hybrid (chosen)** | D99 gives the initial label and the names. The boundaries then move to the nearest fissure in zefir's own data (e.g. watershed or graph cut on the cortex, with D99 labels as seeds and fissures as edges) | Names from the atlas, boundaries from the data | Needs a good fissure map; seeds can be wrong where D99 is off by a folium |
 
 Other decisions: the vermis definition (paravermal sulcus where visible, a fixed width in zefir mm, or the
 deep nuclei as a guide); the nomenclature (Larsell I-X + HVI, HVIIA, ... or the D99 names); which registration
@@ -64,7 +69,7 @@ the white matter too.
   exist and where.
 - The midline: about section 75 (D99 x = 0 in J20/P20). Sections 0-75 are about 3.75 mm of the other side.
 
-## 6. Proposed work plan (after the decision)
+## 6. Work plan for option C
 
 1. **Ground truth first.** Ask the user (or Mat) to mark the lobules on about 4 sections by hand: one at the
    midline, one in the paravermis, two in the hemisphere. Also mark the vermis edge on a few sections. Without
@@ -73,7 +78,9 @@ the white matter too.
    (`mri_register.py --no-reference ... --save-reference`, check by eye) and run the labels again.
 3. **Fissure map.** From the stack density at rescale 20: cortex mask, molecular-layer / fissure map, and a 3D
    skeleton of the white matter. Check it on the midline section, where all ten vermal lobules are visible.
-4. **Build the chosen option** as a new script beside `atlas_labels.py`, with the same output contract (uint8 on
+4. **Build option C** as a new script beside `atlas_labels.py`: D99 labels (from `atlas_labels.py`) as seeds,
+   eroded away from their boundaries so that only confident cores remain; the fissure map as the edge cost; a
+   watershed or graph cut on the cortex mask grows the seeds to the fissures. Write it with the same output contract (uint8 on
    the stack grid, a names table, a QC section). Do not change the meaning of the existing files; add new ones.
 5. **Validate** against the hand labels: Dice per lobule, boundary distance (mm), and continuity of each label
    across sections. Compare with the current D99 propagation as the baseline.
@@ -85,5 +92,6 @@ the white matter too.
   files and document every change in `REGISTRATION_NOTES_local.md`.
 - Use uv (`uv run python ...`). On the workstation, other jobs have priority: nice 19, few workers, our processes
   are killed first under memory pressure (`env_compat.py`).
-- The D99 files are not in git (`local_extras/`). Copy them to any new machine.
+- The D99 files are not in git: `local_extras/cerebellum_target/` on the workstation,
+  `/data/neuralabc/johmat/phase_ml/D99/D99_v2.0_dist/cerebellum_target` on the HPC (`SLICEREG_D99_DIR`).
 - Commit on the branch with clear messages. Write user-facing text in ASD-STE100 Simplified Technical English.

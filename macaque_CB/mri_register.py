@@ -126,17 +126,18 @@ def overlay_figure(T, W, thr, centre, title, out_png, extra=None):
 
 
 def jacobian_figure(J, region, centre, out_png):
-    fig, ax = plt.subplots(1, 4, figsize=(15, 3.6), gridspec_kw=dict(width_ratios=[1, 1, 1, 1.1]))
+    fig, ax = plt.subplots(1, 5, figsize=(16, 3.6), gridspec_kw=dict(width_ratios=[1, 1, 1, 0.06, 1.1]))
     Jm = np.where(region, J, np.nan)
     for k, (name, p) in enumerate(planes(Jm, centre)):
         im = ax[k].imshow(p, cmap='RdBu_r', origin='lower', vmin=0.5, vmax=1.5)
         ax[k].set_title(f'Jacobian determinant, {name}', loc='left', fontsize=9)
-        ax[k].set_xticks([]); ax[k].set_yticks([])
-    fig.colorbar(im, ax=ax[2], fraction=0.05, pad=0.02)
+        ax[k].set_xticks([]); ax[k].set_yticks([]); ax[k].grid(False)
+    fig.colorbar(im, cax=ax[3])
     v = J[region]
-    ax[3].hist(np.clip(v, 0, 3), bins=60, color=C1)
-    ax[3].set_title('Jacobian in the registration region', loc='left', fontsize=9)
-    ax[3].set_xlabel('det J (1 = no volume change)')
+    ax[4].hist(np.clip(v, 0, 3), bins=60, color=C1)
+    ax[4].set_title('Jacobian in the registration region', loc='left', fontsize=9)
+    ax[4].set_xlabel('det J (1 = no volume change)')
+    fig.tight_layout(w_pad=2.5)
     fig.savefig(out_png, dpi=70, facecolor='white', bbox_inches='tight')
     plt.close(fig)
 

@@ -9,7 +9,7 @@ See REGISTRATION_NOTES_local.md for the SLICEREG_* options. Set SLICEREG_SMOKE=1
 import env_compat  # must come before slice_registration_functions (threads, OOM priority, ANTsPy/nighres shims)
 from slice_registration_functions import *
 from slice_structure_identification_functions import compute_signed_distance_weight_filled
-from slice_registration_extensions import run_parallel_coregistrations_v3
+from slice_registration_extensions import run_parallel_coregistrations_v3, groupwise_stack_optimization_embedded_antspy_v2
 
 # file parameters
 subject = 'zefir'
@@ -753,7 +753,7 @@ logging.warning(expected_stack_fname)
 if os.path.isfile(os.path.join(output_dir,expected_stack_fname)):
     logging.warning('Groupwise optimization stacks exist, skipping the groupwise optimization step')
 else:
-    groupwise_stack_optimization_embedded_antspy(output_dir,subject, all_image_fnames, 
+    groupwise_stack_optimization_embedded_antspy_v2(output_dir,subject, all_image_fnames, 
                                     reg_level_tag=f'{input_source_file_tag}',
                                     iterations=groupwise_iterations,
                                     zfill_num=4,

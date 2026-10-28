@@ -86,7 +86,7 @@ jitter_sigma = float(os.environ.get('SLICEREG_JITTER_SIGMA', 15)) #slices; the s
 # method: 'jitter' (nearest neighbours, slice_jitter.py) or 'posegraph' (pairs at distances 1-16 slices, one robust
 # least-squares solve, slice_posegraph.py: also corrects blocks of sections mounted at a common angle, which the
 # nearest-neighbour fit cannot; REGISTRATION_NOTES_local.md 4.8). Same output files and pose format.
-pose_method = os.environ.get('SLICEREG_JITTER_METHOD', 'jitter')
+pose_method = os.environ.get('SLICEREG_JITTER_METHOD', 'posegraph') #default since 2026-10-28 (run P20, notes 4.8)
 if pose_method not in ('jitter', 'posegraph'):
     raise ValueError(f'Unknown SLICEREG_JITTER_METHOD: {pose_method}')
 jitter_iterations = int(os.environ.get('SLICEREG_JITTER_ITERS', 6 if pose_method == 'jitter' else 2))
@@ -1047,6 +1047,10 @@ try:
 except Exception as e:
     logging.warning(f'Tissue mask failed: {e}')
 export_zarr = os.environ.get('SLICEREG_EXPORT_ZARR', '1') == '1' and not smoke_test
+tck_view_dir = os.environ.get('SLICEREG_TCK_VIEW', os.path.expanduser('~/Documents/code/tck_view'))
+if export_zarr and not os.path.isdir(tck_view_dir):
+    logging.warning(f'OME-Zarr export skipped: no tck_view at {tck_view_dir} (set SLICEREG_TCK_VIEW)')
+    export_zarr = False
 if export_zarr:
     for placement in ['stack']:
         zarr_out = f'{output_dir}{subject}_{final_level}_density_{placement}.ome.zarr'
@@ -1056,13 +1060,29 @@ if export_zarr:
         cmd = [sys.executable, os.path.join(script_dir, 'export_ome_zarr.py'), '--run-dir', output_dir,
                '--rescale', str(rescale), '--level', final_level, '--placement', placement, '--out', zarr_out,
                '--direction', str(int(os.environ.get('SLICEREG_MRI_DIRECTION', 1))),
-               '--missing', ','.join(map(str, missing_idxs_to_fill or []))]
+               '--missing', ','.join(map(str, missing_idxs_to_fill or [])), '--tck-view', tck_view_dir]
         try:
             subprocess.run(cmd, check=True)
             logging.warning(f'OME-Zarr written: {zarr_out}')
         except Exception as e:
             logging.warning(f'OME-Zarr export failed for {placement}: {e}')
 
+
+# ==================================================================================
+# STEP: MRI registration of the final level (mri_register.py: stored reference affine + SyN to D99, then the D99
+# labels in the stack grid, atlas_labels.py). Needs the D99 target files in local_extras/cerebellum_target/
+# (not in git); skipped with a message if they are missing. Exit 2 = stability check failed (nothing written).
+# ==================================================================================
+d99_dir = os.path.join(script_dir, 'local_extras', 'cerebellum_target')
+if os.environ.get('SLICEREG_MRI_REGISTER', '1') == '1' and not smoke_test:
+    if not os.path.isfile(os.path.join(d99_dir, 'D99_cerebellum_brainstem_template_crop.nii.gz')):
+        logging.warning(f'MRI registration skipped: D99 target files not found in {d99_dir}')
+    else:
+        _r = subprocess.run([sys.executable, os.path.join(script_dir, 'mri_register.py'), '--run-dir', output_dir,
+                             '--rescale', str(rescale), '--level', final_level, '--subject', subject,
+                             '--missing', ','.join(map(str, missing_idxs_to_fill or [])), '--no-qc-report']
+                            + ([] if export_zarr else ['--no-zarr']), check=False)
+        logging.warning(f'MRI registration finished (exit {_r.returncode}): {output_dir}mri_registration/{final_level}/')
 
 # ==================================================================================
 # STEP: QC report (qc_report.py): <output_dir>/QC/index.html; mri_register.py adds its results to it

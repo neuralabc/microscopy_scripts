@@ -1,5 +1,8 @@
 """Pull the D99 atlas labels (lobules, deep nuclei, brainstem) into the stack grid of one registered level.
 
+WORK IN PROGRESS (2026-10-28): a first atlas-propagation version. The lobule boundaries, the vermis rule and the
+lateral coverage are not validated; see LOBULE_LABELS_HANDOFF.md before using the labels for analysis.
+
 Run mri_register.py on the level first (it runs this script itself at its end); for another level or settings:
   uv run python macaque_CB/atlas_labels.py --run-dir <output_dir> --rescale 5 --level <level>
 
@@ -329,7 +332,8 @@ def main():
     label_figure(counts, lab, reg, res_mm, slices, names, os.path.join(qc_dir, 'atlas_labels_sections.png'))
     across_sections_figure(counts, reg, res_mm, os.path.join(qc_dir, 'atlas_labels_across.png'))
     qc = dict(command=cmd, time=time.strftime('%Y-%m-%d %H:%M'),
-              notes=[f'D99 labels in the stack grid: {os.path.basename(pre)}_labels.nii.gz, _regions.nii.gz, _x_mm.nii.gz, '
+              notes=['WORK IN PROGRESS: lobule labels not validated (LOBULE_LABELS_HANDOFF.md).',
+                     f'D99 labels in the stack grid: {os.path.basename(pre)}_labels.nii.gz, _regions.nii.gz, _x_mm.nii.gz, '
                      f'_labels.tsv (see atlas_labels.py). D99 is a different animal; lobule boundaries can be off by '
                      f'about one folium. Lobules I-V are split into vermis / hemisphere at |D99 x| = '
                      f'{a.anterior_vermis_halfwidth_mm} mm (D99 has no vermis label there).'],

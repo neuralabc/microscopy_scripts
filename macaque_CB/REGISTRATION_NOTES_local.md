@@ -4,6 +4,9 @@ Branch `enh-local_uv_mri_anchor`. Started 2026-10-27. The original script
 `run_slice_registration_optimized_newReg_sdf_v2.py` and the function library are **unchanged**;
 all changes are in new files.
 
+Short guide to all scripts: `SCRIPTS_local.md`. HPC (full resolution): `run_slice_registration_optimized_newReg_sdf_v2_hpc.py`.
+Lobule labels (work in progress): `LOBULE_LABELS_HANDOFF.md`.
+
 ## 1. Environment (uv)
 
 ```bash
@@ -40,14 +43,17 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_MRI_WEIGHT` | 1.0 | weight factor of the MRI target |
 | `SLICEREG_MRI_REFIT` | 0 | 1 = refit the MRI affine at every STAGE1 level (drifts, see 4.2); 0 = one fit on `cascade_0` |
 | `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
-| `SLICEREG_JITTER` | 1 (since 2026-10-28; was 0) | 1 = rigid jitter correction folded into coreg0nl (4.7), output suffix `_jit`; 0 = the original pipeline (no suffix); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (6) |
-| `SLICEREG_JITTER_METHOD` | jitter | `jitter` (nearest neighbours) or `posegraph` (§4.8; suffix `_pg`, 2 passes by default) |
+| `SLICEREG_JITTER` | 1 (since 2026-10-28; was 0) | 1 = rigid per-slice pose correction folded into coreg0nl (4.7, 4.8); 0 = the original pipeline (no suffix); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (2 for posegraph, 6 for jitter) |
+| `SLICEREG_JITTER_METHOD` | posegraph (since 2026-10-28; was jitter) | `posegraph` (§4.8, suffix `_pg`) or `jitter` (nearest neighbours, §4.7, suffix `_jit`) |
 | `SLICEREG_GROUPWISE_ITERS` | 10 | number of groupwise iterations; the final level becomes `..._groupwise_iter{N-1}` (suffix `_gw{N}`; jitter iterations other than 6 add the number to `_jit`) |
 | `SLICEREG_STAGE1_SYN` | 1 | 0 = STAGE1 rigid only |
 | `SLICEREG_STAGE1_SYN_LAST` | 1 | 0 = SyN only in the template-building STAGE1 levels, the last level rigid |
 | `SLICEREG_STAGE1_REG` | Medium | STAGE1 SyN regularization preset |
 | `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5; `stack` placement only since 2026-10-28) |
 | `SLICEREG_QC` | 1 | write the QC report `<output_dir>/QC/index.html` at the end of the run (§7) |
+| `SLICEREG_MRI_REGISTER` | 1 (since 2026-10-28) | run `mri_register.py` (reference affine + SyN + D99 labels) on the final level at the end of the run; skipped with a message if the D99 files are not in `local_extras/cerebellum_target/` |
+| `SLICEREG_TCK_VIEW` | `~/Documents/code/tck_view` | tck_view checkout for the OME-Zarr export; no checkout = export skipped with a message |
+| `SLICEREG_LOOKUP_CSV`, `SLICEREG_OUTPUT_ROOT`, `SLICEREG_PATH_FROM` / `_TO` | HPC script only | input lookup csv, output root (`/tmp/`), image path prefix rewrite (see `SCRIPTS_local.md`) |
 
 Each run also writes `run_settings.json` (all `SLICEREG_*` variables, git commit, main parameters) in its output
 folder; the QC report shows it.
@@ -61,8 +67,10 @@ Data: the lookup csv lists `/data/data_drive/...`; on this workstation that is `
 
 File names, formats and the chain below have not changed. Any future change must be listed here.
 
-Changes in content (2026-10-28), with the jitter correction now on by default (`SLICEREG_JITTER=1`):
-- The output folder has the suffix `_jit` (e.g. `..._rescale_5_local_jit/`).
+Changes in content (2026-10-28), with the per-slice pose correction now on by default (`SLICEREG_JITTER=1`,
+method `posegraph` since the evening of 2026-10-28; first `jitter`):
+- The output folder has the suffix `_pg` (e.g. `..._rescale_5_local_pg/`, `..._rescale_5_hpc_pg/`); `_jit` for the
+  jitter method. Both methods write the same files in the same format.
 - The `coreg0nl` maps, inverse maps and deformed slices include a rigid per-slice correction (rotation about the
   tissue centroid + shift). The chain still starts at `coreg0nl`, so pushing data through the chain needs no change.
   A tool that builds its own `coreg0nl` step (image-centre placement) instead of reading the `coreg0nl` maps must
@@ -538,7 +546,10 @@ Results (affine from the reference, then SyN; Dice in the SyN region, which diff
 QC report at rescale 5 (test with the rescale-5 stack, 2026-10-28): about 5 s per level and 2.1 GB peak memory
 for the stack measures; the map warps (about 400 maps per level) add an estimated 10-20 minutes.
 
-### 7.3 D99 labels in the stack (`atlas_labels.py`, 2026-10-28)
+### 7.3 D99 labels in the stack (`atlas_labels.py`, 2026-10-28) - WORK IN PROGRESS
+
+Status: first version by atlas propagation, not validated. Do not use the lobule or vermis labels for analysis
+yet. Open decisions and the plan for the next step: `LOBULE_LABELS_HANDOFF.md`.
 
 `mri_register.py` runs it at its end (`--no-labels` turns it off); for another level or other settings:
 ```bash

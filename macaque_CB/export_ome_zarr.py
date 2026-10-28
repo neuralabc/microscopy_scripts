@@ -41,7 +41,7 @@ SUBJECT = 'zefir'
 DEFAULT_LEVEL = 'coreg12nl_win12_rigsyn_4_groupwise_iter9'
 DEFAULT_MISSING = [32, 59, 120, 160, 189, 228]
 SLICE_MM = 0.05
-TCK_VIEW = os.path.expanduser('~/Documents/code/tck_view')
+TCK_VIEW = os.environ.get('SLICEREG_TCK_VIEW', os.path.expanduser('~/Documents/code/tck_view'))
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

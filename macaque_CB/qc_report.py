@@ -382,6 +382,22 @@ def mri_sections(qc_dir):
             if os.path.isfile(p):
                 with open(p, 'rb') as fh:
                     parts.append(figure(base64.b64encode(fh.read()).decode('ascii'), im.get('caption', im['file'])))
+        lf = os.path.join(d, 'atlas_labels.json')   # written by atlas_labels.py
+        if os.path.isfile(lf):
+            with open(lf) as fh:
+                lq = json.load(fh)
+            parts.append(f'<h4>D99 labels in the stack</h4><p>Written {html.escape(lq.get("time", ""))} by '
+                         f'<code>{html.escape(lq.get("command", "atlas_labels.py"))}</code></p>')
+            if lq.get('notes'):
+                parts.append('<ul>' + ''.join(f'<li>{html.escape(n)}</li>' for n in lq['notes']) + '</ul>')
+            for title, tab in lq.get('tables', {}).items():
+                parts.append(f'<p><b>{html.escape(title)}</b></p>' + table([[html.escape(k), fmt(v)] for k, v in tab.items()],
+                                                                          ['measure', 'value']))
+            for im in lq.get('images', []):
+                p = os.path.join(d, im['file'])
+                if os.path.isfile(p):
+                    with open(p, 'rb') as fh:
+                        parts.append(figure(base64.b64encode(fh.read()).decode('ascii'), im.get('caption', im['file'])))
         out.append('\n'.join(parts))
     return out
 

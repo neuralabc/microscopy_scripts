@@ -13,6 +13,10 @@ Placement:
 Label maps under the image's labels/ group (uint8, same grid):
   synthetic_slices  1 = interpolated slice (missing_idxs_to_fill): its densities are not measured
   tissue            1 = tissue (tissue_mask.py: counts > 2 per 50 um voxel, holes filled per slice)
+  d99_labels        D99 v2.0 label values in tissue, 254 no D99 label, 255 outside the D99 mask (atlas_labels.py)
+  d99_regions       1 vermis, 2 hemisphere cortex, 3 deep nuclei, 4 other D99 label, 254 / 255 as above
+                    (both only if <subject>_<level>_D99_labels.nii.gz / _D99_regions.nii.gz exist, i.e. after
+                    mri_register.py / atlas_labels.py; the label names are in the attributes)
 
 The OME-Zarr itself is written by neuralarc.core.ome_zarr.write_ome_zarr (default chunks and pyramid: levels
 halve the finest axes first, then all, until the largest side is at most 256), run in tck_view's own uv
@@ -106,6 +110,11 @@ def main():
         if s < counts.shape[2]:
             synthetic[..., s] = 1
     tissue = tissue_mask(counts, res_mm)
+    atlas = {}   # optional label maps from atlas_labels.py
+    for name, suffix in (('d99_labels', 'D99_labels'), ('d99_regions', 'D99_regions')):
+        f = f'{run_dir}{a.subject}_{a.level}_{suffix}.nii.gz'
+        if os.path.isfile(f):
+            atlas[name] = np.asarray(nibabel.load(f).dataobj, dtype=np.uint8)
 
     out = os.path.abspath(a.out)
     attrs = {'microscopy_scripts': {
@@ -117,6 +126,15 @@ def main():
         'placement': a.placement, 'synthetic_slices': missing,
         'labels': {'synthetic_slices': '1 = interpolated slice', 'tissue': '1 = tissue: counts > 2 per 50 um voxel '
                    '(about 16000 cells/mm^3), holes filled per slice (tissue_mask.py)'}}}
+    if atlas:
+        from atlas_labels import load_names, REGION_NAMES, NO_LABEL, OUTSIDE_ATLAS
+        attrs['microscopy_scripts']['labels'].update(
+            d99_labels='D99 v2.0 label value in tissue; 254 = no D99 label (mostly white matter), 255 = outside the '
+                       'D99 mask (atlas_labels.py)',
+            d99_regions='; '.join(f'{k} = {v}' for k, v in REGION_NAMES.items()))
+        names = {str(v): f"{n['abbreviation']}: {n['name']}" for v, n in load_names().items()}
+        names.update({str(NO_LABEL): 'no D99 label', str(OUTSIDE_ATLAS): 'outside the D99 mask'})
+        attrs['microscopy_scripts']['d99_label_names'] = names
     if a.placement == 'mri':
         affine, qc = mri_world_affine(counts, res_mm, SLICE_MM, out + '.mri_fit', direction=a.direction,
                                      affine_file=a.mri_affine)
@@ -129,6 +147,7 @@ def main():
         density = nibabel.orientations.apply_orientation(density, ornt)
         synthetic = nibabel.orientations.apply_orientation(synthetic, ornt)
         tissue = nibabel.orientations.apply_orientation(tissue, ornt)
+        atlas = {k: nibabel.orientations.apply_orientation(v, ornt) for k, v in atlas.items()}
         affine = affine @ reorient
         if np.linalg.det(affine[:3, :3]) <= 0 or not np.all(np.argmax(np.abs(affine[:3, :3]), axis=0) == [0, 1, 2]):
             raise ValueError(f'reorientation to RAS+ failed:\n{affine}')
@@ -148,6 +167,9 @@ def main():
         np.save(os.path.join(tmp, 'tissue.npy'), np.ascontiguousarray(tissue))
         labels = [dict(name='synthetic_slices', path=os.path.join(tmp, 'synthetic.npy')),
                   dict(name='tissue', path=os.path.join(tmp, 'tissue.npy'))]
+        for k, v in atlas.items():
+            np.save(os.path.join(tmp, k + '.npy'), np.ascontiguousarray(v))
+            labels.append(dict(name=k, path=os.path.join(tmp, k + '.npy')))
         spec = dict(out=out, density=os.path.join(tmp, 'density.npy'), labels=labels,
                     affine=affine.tolist(), anatomical=anatomical, name=f'{a.subject}_cell_density',
                     source=stack_f, attrs=attrs, overwrite=a.overwrite)

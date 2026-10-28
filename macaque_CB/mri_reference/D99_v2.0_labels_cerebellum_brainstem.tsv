@@ -1,0 +1,83 @@
+# D99 v2.0 (Saleem et al. 2021) label names, from D99_v2.0_labels_semicolon.txt in
+# https://afni.nimh.nih.gov/pub/dist/atlases/macaque/D99_Saleem/D99_v2.0_dist.tgz (downloaded 2026-10-28);
+# only the values present in local_extras/cerebellum_target/D99_cerebellum_brainstem_labels_crop.nii.gz
+value	abbreviation	name	group	subgroup
+42	3rd	third cranial (oculomotor) nuclei	Brainstem	Midbrain
+43	4th	fourth cranial (trochlear) nuclei	Brainstem	Midbrain
+44	SC	superior colliculus	Brainstem	Midbrain
+45	IC	inferior colliculus	Brainstem	Midbrain
+46	5th	fifth cranial (trigeminal) nuclei	Brainstem	Pons
+47	6th	sixth cranial (abducent) nuclei	Brainstem	Pons
+48	7th	seventh cranial (facial) nuclei	Brainstem	Pons
+49	vn	vestibular nuclei	Brainstem	Pons
+50	stn	spinal trigeminal nucleus	Brainstem	pons and medulla
+51	ion	inferior olivary nucleus	Brainstem	Medulla
+52	soc	superior olivary complex	Brainstem	Pons
+53	chn	cochlear nucleus	Brainstem	Medulla
+54	12th	twelfth cranial (hypoglossal) nuclei	Brainstem	Medulla
+55	denv_10	dorsal motor nucleus of vagus (tenth cranial nuclei)	Brainstem	Medulla
+56	sn	solitary nucleus	Brainstem	Medulla
+57	np	nucleus prepositus	Brainstem	Medulla
+58	gn	gracile nucleus	Brainstem	Medulla
+59	cn	cuneate nucleus	Brainstem	Medulla
+60	lcn	lateral cuneate nucleus	Brainstem	Medulla
+61	DN	dentate nucleus	Cerebellum	Deep cerebellar nuclei
+62	AIN	anterior interposed nucleus	Cerebellum	Deep cerebellar nuclei
+63	PIN	posterior interposed nucleus	Cerebellum	Deep cerebellar nuclei
+64	FN	fastigial nucleus	Cerebellum	Deep cerebellar nuclei
+108	I	cerebellar lobule I	Cerebellum	
+109	II	cerebellar lobule II	Cerebellum	
+110	III	cerebellar lobule III	Cerebellum	
+111	IV	cerebellar lobule IV	Cerebellum	
+112	V	cerebellar lobule V	Cerebellum	
+113	VI	cerebellar lobule VI	Cerebellum	
+114	VII	cerebellar lobule VII	Cerebellum	
+115	VIII	cerebellar lobule VIII	Cerebellum	
+116	IX	cerebellar lobule IX	Cerebellum	
+117	X	cerebellar lobule X	Cerebellum	
+118	Par_p	paramedian lobule posterior part	Cerebellum	
+119	Par_a	paramedian lobule anterior part	Cerebellum	
+120	Cr_II	crus II of the ansiform lobule	Cerebellum	
+121	Cr_I	crus I of the ansiform lobule	Cerebellum	
+122	RNmc	red nucleus, magnocellular division	Brainstem	Midbrain
+123	lPFl	lateral paraflocculus	Cerebellum	
+125	Fl	flocculus	Cerebellum	
+133	PAG	periaqueductal gray	Brainstem	Midbrain
+140	IPN	interpeduncular nucleus	Brainstem	Midbrain
+144	mlf	medial longitudinal fasciculus	Fiber bundle	
+145	SCPX	superior cerebellar peduncle decussation	Fiber bundle	
+147	gf	gracile fasciculus	Fiber bundle	
+148	ml	medial lemniscus	Fiber bundle	
+149	tb	trapezoid body	Fiber bundle	
+151	pcf_sd	pontocerebellar fibers, superficial and deeper parts	Fiber bundle	
+152	cf	cuneate fasciculus	Fiber bundle	
+153	SCP	superior cerebellar peduncle	Fiber bundle	
+157	ic_CP_CST_CBT	internal capsule, cerebral peduncle, corticospinal, or corticobulbar tract	Fiber bundle	
+159	PN	pontine nuclei	Brainstem	Midbrain
+176	cir	central lineal nucleus of the raphe	Brainstem	Midbrain
+177	MR	median raphe	Brainstem	Midbrain
+178	NRTP	nucleus reticularis tegmenti pontis	Brainstem	Midbrain
+179	RMTg	rostromedial tegmental nucleus	Brainstem	Midbrain
+180	vnll	ventral nucleus of lateral lemniscus	Brainstem	Midbrain
+181	dnll	dorsal nucleus of lateral lemniscus	Brainstem	Midbrain
+182	bic	brachium of inferior colliculus	Fiber bundle	
+183	nbic	nucleus of brachium of inferior colliculus	Brainstem	Midbrain
+184	pbgn	parabigeminal nucleus	Brainstem	Midbrain
+185	ll	lateral lemniscus	Fiber bundle	
+188	S4	supra trochlear nucleus	Brainstem	Midbrain
+189	ldtn	lateral dorsal tegmental nucleus	Brainstem	Midbrain
+216	ICP	inferior cerebellar peduncle	Fiber bundle	
+217	MCP	middle cerebellar peduncle	Fiber bundle	
+218	lc	locus coeruleus	Brainstem	Pons
+219	MC5_t	mesencephalic trigeminal tract	Fiber bundle	
+220	MC5_nu	mesencephalic trigeminal nucleus	Brainstem	Pons
+221	PBN	parabrachial nucleus	Brainstem	Pons
+222	Sim_a	anterior part of the simple lobule	Cerebellum	
+223	Sim_p	posterior part of the simple lobule	Cerebellum	
+224	dPFl	dorsal paraflocculus	Cerebellum	
+225	vPFl	ventral paraflocculus	Cerebellum	
+226	DR	dorsal raphe	Brainstem	Midbrain
+227	DTg	dorsal tegmentum	Brainstem	Midbrain
+230	AN	ambiguus nucleus	Brainstem	Medulla
+231	stt	spinal trigeminal tract_5th	Brainstem	pons and medulla
+232	lrn	lateral reticular nucleus	Brainstem	Medulla

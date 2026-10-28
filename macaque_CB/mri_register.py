@@ -25,6 +25,8 @@ Outputs in <run_dir>/mri_registration/<level>/ (see README.md written there):
   stack_to_D99_affine.mat, stack_to_D99_warp.nii.gz, stack_to_D99_inverse_warp.nii.gz (ANTs)
   density_D99grid_affine.nii.gz, density_D99grid_nonlinear.nii.gz (cells/mm^3 on the D99 crop grid, D99 world affine)
   <subject>_<level>_density_mri.ome.zarr (tck_view; the stack voxels with the affine to D99 world, no resampling)
+Then (unless --no-labels) atlas_labels.py pulls the D99 labels (lobules, vermis, deep nuclei) into the stack grid:
+  <run_dir>/<subject>_<level>_D99_{labels,regions,x_mm}.nii.gz and _D99_labels.tsv (see atlas_labels.py)
 QC: <run_dir>/QC/mri/<level>/ (qc.json + images); the QC report (qc_report.py) is rebuilt to include them.
 """
 import argparse
@@ -163,6 +165,7 @@ def main():
     p.add_argument('--grad-step', type=float, default=0.1)
     p.add_argument('--region-dilation-mm', type=float, default=1.5)
     p.add_argument('--no-zarr', action='store_true')
+    p.add_argument('--no-labels', action='store_true', help='do not run atlas_labels.py (D99 labels in the stack grid)')
     p.add_argument('--missing', default=','.join(map(str, DEFAULT_MISSING)))
     p.add_argument('--save-reference', action='store_true',
                    help=f'store the affine used here as the reference ({DEFAULT_REFERENCE})')
@@ -389,12 +392,22 @@ Points, stack frame mm -> D99 frame mm (point transforms go the opposite way fro
     ants.apply_transforms_to_points(3, points_df, ['stack_to_D99_affine.mat', 'stack_to_D99_inverse_warp.nii.gz'],
                                     whichtoinvert=[True, False])
 
+D99 labels in the stack grid (atlas_labels.py, run by this script): `../../{a.subject}_{level}_D99_labels.nii.gz`,
+`_D99_regions.nii.gz`, `_D99_x_mm.nii.gz`, `_D99_labels.tsv` (beside the stack).
+
 Densities on the D99 grid (cells/mm^3, the D99 world affine): `density_D99grid_affine.nii.gz`,
 `density_D99grid_nonlinear.nii.gz`. The stack is smoothed to {mri_sp} mm before resampling.
 QC: `{os.path.relpath(qc_dir, run_dir)}` and `QC/index.html`.
 """
     with open(os.path.join(out, 'README.md'), 'w') as fh:
         fh.write(readme)
+
+    if not a.no_labels:   # before the OME-Zarr export, which adds the label maps if they exist
+        r = subprocess.run([sys.executable, os.path.join(HERE, 'atlas_labels.py'), '--run-dir', run_dir,
+                            '--rescale', str(a.rescale), '--level', level, '--subject', a.subject,
+                            '--missing', a.missing, '--no-qc-report'], check=False)
+        qc['notes'].append('D99 labels in the stack grid: see the D99 labels part below' if r.returncode == 0
+                           else f'atlas_labels.py failed (exit {r.returncode})')
 
     if not a.no_zarr:
         zarr_out = os.path.join(run_dir, f'{a.subject}_{level}_density_mri.ome.zarr')

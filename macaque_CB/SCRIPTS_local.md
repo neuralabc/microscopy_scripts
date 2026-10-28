@@ -90,3 +90,55 @@ strong). Reference data in `mri_reference/`: the stack-to-D99 reference affine a
   on the histology images; they make the count maps that the pipeline reads.
 - `notebooks/*Apply_Mappings*`: push other data through the transform chain into the registered space (§3).
 - `legacy/`: older versions of the registration scripts.
+
+## 7. Push data into the final space, and clean up a run
+
+### 7.1 Files needed to push data (e.g. Mat's Purkinje-cell masks) into the final space
+
+The push applies, per section, a chain of forward maps (`_ants-map.nii.gz`, pull-style coordinate maps) to an
+image on the native section grid. The chain to the final level `groupwise_iterN` (from
+`slice_registration_functions.get_transform_chain_for_level`, which reads `<subject>_forward_maps.csv`):
+
+| Step | File per section (`<base>` = `zefir_NNNN_<image>_downsample_10p002um_pix`) |
+|---|---|
+| source grid | `<base>.nii.gz` (native section; a mask is first downsampled to this grid) |
+| 1. coreg0nl | `init_translation_slice_NNNN/<base>_coreg0nl_ants-map.nii.gz` |
+| 2. STAGE1 | `<base>_coreg12nl_win12_rigsyn_4_ants-map.nii.gz` |
+| 3.-9. groupwise | `<base>_coreg12nl_win12_rigsyn_4_groupwise_iter{3..N}_ants-map.nii.gz` |
+| check | `<base>_coreg12nl_win12_rigsyn_4_groupwise_iterN_ants-def0.nii.gz` (the counts pushed the same way) |
+
+Apply the maps in this order, each with `apply_coordinate_mapping_2d` (as in
+`notebooks/2026_04_Apply_Mappings_python_CLEAN.ipynb`). The inverse maps (`_ants-invmap`) of the same levels
+bring final-space data (e.g. the D99 labels) back to the sections, in the reverse order. Interpolated sections
+(32, 59, 120, 160, 189, 228) have maps, but their final `def0` is interpolated from the neighbours: leave them out
+or treat them in the same way. Everything else in a run folder is not needed for a push.
+
+### 7.2 Cleanup (`cleanup_run.py`)
+
+```bash
+uv run python macaque_CB/cleanup_run.py --run-dir <run> --verify 5             # 1. report + check (removes nothing)
+uv run python macaque_CB/cleanup_run.py --run-dir <run> --verify 5 --execute   # 2. remove
+```
+1. Read the report: GB and files per category, "keep" and "remove". "keep: unknown per-section file" must be 0 or
+   understood (unknown files are never removed).
+2. `--verify 5` must say `verify: OK` (NCC >= 0.95; it is 1.000 on P20). It pushes 5 sections through the kept
+   maps only and compares them with the final `def0`.
+3. Then run with `--execute`. The script refuses if a native section or a chain map is missing. It writes every
+   removed path to `<run>/cleanup_manifest.txt`.
+
+| Kept | Removed |
+|---|---|
+| native sections; chain forward maps; chain inverse maps (`--drop-inverse` removes them); final `def0`; stacks, templates, csv / json / log files, tissue mask, D99 labels; `QC/`, `mri_registration/`, `missing_slices/`, `*.ome.zarr` | maps of levels not in the chain (cascade_0, STAGE1 levels 0-3, win1 / win2 / plain coreg12nl, coreg1nl / coreg2nl, groupwise_iter0-2); deformed sections of non-final levels (`def0`-`def10`); per-section templates; ANTs intermediate files |
+
+Sizes: P20 (rescale 20) 6.3 GB -> 2.3 GB (76,000 files removed). Rescale 5 (estimate, x16): about 100 GB ->
+about 36 GB, or about 25 GB with `--drop-inverse`.
+
+After a cleanup:
+- Only the final level and the chain remain. To use an earlier groupwise iteration as the final level, decide
+  before the cleanup and pass `--final-level groupwise_iterK`: the chain then ends at K, and the maps of later
+  iterations are removed.
+- The maps csv files are not changed; their columns for removed levels point to absent files.
+- The QC report keeps its cached measures but cannot measure removed levels again; `mri_register.py`,
+  `atlas_labels.py` and `export_ome_zarr.py` still work on the final level (they use its stack).
+- The removal cannot be undone. Copy a run first if its intermediate levels may be needed (e.g. to compare
+  registration variants).

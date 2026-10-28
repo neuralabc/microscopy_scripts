@@ -91,6 +91,7 @@ New files (2026-10-28), nothing existing changes:
   templates and ANTs intermediate files, and lists them in `cleanup_manifest.txt`. The maps csv files are not
   changed, so their columns for removed levels point to absent files. Tested 2026-10-28: P20 4.0 of 6.3 GB
   removable; after a cleanup (smoke run) the kept chain reproduces the final `def0` sections exactly (NCC 1.000).
+  Procedure, the files of a push, and what a cleanup changes: `SCRIPTS_local.md` §7.
 - From `mri_register.py` (via `atlas_labels.py`, §7.3), beside the stack of the registered level:
   `{subject}_{level}_D99_labels.nii.gz` (uint8: D99 v2.0 label value in tissue, 0 outside tissue, 252 / 253 =
   D99 cerebellum / brainstem without a label, 254 = in the D99 mask but in neither region, 255 = tissue outside

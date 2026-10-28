@@ -401,7 +401,32 @@ stack (`posegraph_test.py`, both corrections applied the same way):
 The block-step measure uses the same kind of rigid fit that the pose graph optimises (partly circular); the
 through-plane views (folia continuous through the whole stack with rigid poses only) and the mask Dice are
 independent and agree. Cost: about 3,000 rigid fits per pass (about 12 min per pass at rescale 20, 6 workers).
-Full rescale-20 run P20 (`..._rescale_20_local_pg`): running.
+Full rescale-20 run P20 (`/mnt/ssd/Macaque_CB/processing/results_from_cell_counts/zefir_sliceReg_optimized_v2_rescale_20_local_pg/`,
+`SLICEREG_JITTER_METHOD=posegraph`, finished 2026-10-28, no errors), against A20 (no correction) and J20 (jitter):
+
+| Measure (final `groupwise_iter9` unless stated) | A20 | J20 | P20 |
+|---|---|---|---|
+| block step RMS median / 95th pct (mm) | 0.147 / 0.467 | 0.143 / 0.485 | **0.128 / 0.290** |
+| boundaries with a block step > 0.5 mm | 16 | 19 | **6** (all at 385-390, the small lateral end) |
+| boundaries with a block rotation > 3 deg | 27 | 23 | **0** |
+| blocks 276-283 / 234-235 / 322-326 (deg) | -4,+5 / +2 / -4 | -7,+10 / 0 / -5 | **-0.3,+0.7 / -1.3 / -0.7** |
+| blur-equalized NCC median / 5th pct | 0.932 / 0.702 | 0.959 / 0.776 | **0.968 / 0.837** |
+| mask Dice median / 5th pct | 0.974 / 0.925 | 0.979 / 0.934 | 0.980 / 0.933 |
+| STAGE1 blur-eq NCC median / 5th pct | 0.856 / 0.511 | 0.926 / 0.622 | **0.950 / 0.783** |
+| STAGE1 warp, total / non-affine RMS median (mm) | 0.58 / 0.25 | 0.29 / 0.21 | **0.24 / 0.18** |
+| slow path vs A20: centroid max (mm) / angle max (deg) | - | 0.20 / 5.3 | 0.26 / 2.9 |
+| count ratio registered / native, \|dev\| median / 95th pct | 0.026 / 0.066 | 0.020 / 0.074 | 0.019 / 0.073 |
+
+- The blocks are gone at every level (coreg0nl, STAGE1, groupwise: no boundary above 3 deg). All other blocks
+  keep a small common rotation of about -1 deg; this is the same at all of them and is the anatomy (the block fit
+  of 4 + 4 slices sees the curve of the folia).
+- Through-plane views (in-plane rows j = 87 and 108, sections 9-20 mm): A20 and J20 show a sharp break of the
+  folia at about 14 mm; P20 shows them continuous.
+- MRI registration of P20 (`mri_register.py`, from the reference): rotation vs reference 0 deg, SyN Dice
+  0.853 -> 0.864, displacement median 0.83 mm, no folding. D99 labels: vermis cortex 25.5%, hemisphere cortex
+  40.4% of the cells (J20: 25.1 / 40.4%).
+- Cost: the pose-graph step took 21 minutes at rescale 20 (2 passes of about 10.5 minutes, 8 workers); the whole
+  run took about 3 h 20 min (10:37-13:55). The later stages were not slower than in J20.
 
 ## 5. OME-Zarr export of the final densities
 

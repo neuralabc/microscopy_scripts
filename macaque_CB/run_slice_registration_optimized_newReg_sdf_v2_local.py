@@ -76,7 +76,9 @@ variant_tag = '' if stage1_neighbour_targets == 'coreg0nl' else '_nbrprev'
 # neighbours, only the fast part of the poses is kept (the slow path stays as it was), iterated with half steps.
 # The coreg0nl maps, inverse maps and deformed slices are rewritten in place (same names and formats), so the
 # transform chain is unchanged; the poses are in {subject}_coreg0nl_jitter_poses.csv
-use_jitter_correction = os.environ.get('SLICEREG_JITTER', '0') == '1'
+# default on since 2026-10-28 (better than without at rescale 40 and 20, REGISTRATION_NOTES_local.md 4.7); the output
+# folder keeps the '_jit' suffix, so it never mixes with the older folders made without the correction
+use_jitter_correction = os.environ.get('SLICEREG_JITTER', '1') == '1'
 jitter_sigma = float(os.environ.get('SLICEREG_JITTER_SIGMA', 15)) #slices; the slow part removed from the poses
 jitter_iterations = int(os.environ.get('SLICEREG_JITTER_ITERS', 6))
 if use_jitter_correction:

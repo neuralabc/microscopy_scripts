@@ -40,7 +40,7 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_MRI_WEIGHT` | 1.0 | weight factor of the MRI target |
 | `SLICEREG_MRI_REFIT` | 0 | 1 = refit the MRI affine at every STAGE1 level (drifts, see 4.2); 0 = one fit on `cascade_0` |
 | `SLICEREG_MRI_DIRECTION` | 1 | D99 hemisphere the stack is fitted to (+1 right, -1 left); fixed so outputs are comparable |
-| `SLICEREG_JITTER` | 0 | 1 = rigid jitter correction folded into coreg0nl (4.7); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (6) |
+| `SLICEREG_JITTER` | 1 (since 2026-10-28; was 0) | 1 = rigid jitter correction folded into coreg0nl (4.7), output suffix `_jit`; 0 = the original pipeline (no suffix); `SLICEREG_JITTER_SIGMA` (15), `SLICEREG_JITTER_ITERS` (6) |
 | `SLICEREG_GROUPWISE_ITERS` | 10 | number of groupwise iterations; the final level becomes `..._groupwise_iter{N-1}` (suffix `_gw{N}`; jitter iterations other than 6 add the number to `_jit`) |
 | `SLICEREG_STAGE1_SYN` | 1 | 0 = STAGE1 rigid only |
 | `SLICEREG_STAGE1_SYN_LAST` | 1 | 0 = SyN only in the template-building STAGE1 levels, the last level rigid |
@@ -54,7 +54,15 @@ Data: the lookup csv lists `/data/data_drive/...`; on this workstation that is `
 
 ## 3. Output contract (used to push other cell data into the final space)
 
-Nothing in this section has changed. Any future change must be listed here.
+File names, formats and the chain below have not changed. Any future change must be listed here.
+
+Changes in content (2026-10-28), with the jitter correction now on by default (`SLICEREG_JITTER=1`):
+- The output folder has the suffix `_jit` (e.g. `..._rescale_5_local_jit/`).
+- The `coreg0nl` maps, inverse maps and deformed slices include a rigid per-slice correction (rotation about the
+  tissue centroid + shift). The chain still starts at `coreg0nl`, so pushing data through the chain needs no change.
+  A tool that builds its own `coreg0nl` step (image-centre placement) instead of reading the `coreg0nl` maps must
+  apply the poses in `{subject}_coreg0nl_jitter_poses.csv` (theta_deg, tx_mm, ty_mm, centroid_i_vox,
+  centroid_j_vox per slice; `slice_jitter.pose_to_voxel` gives the voxel form).
 
 - Native slices: `{subject}_{idx:04d}_{img}.nii.gz`, made with `downsample_image(img, rescale, prop_pad=0.2)`
   and `create_affine(shape, voxel_res=[10*rescale, 10*rescale, 50])` (µm, centred).
@@ -315,7 +323,7 @@ Rescale 20 (0.2 mm, 2026-10-28; A20 vs J20, 10 groupwise iterations):
 - The gain is larger than at rescale 40: final blur-equalized residual (1 - NCC) -40% at the median, -25% at the
   5th pct (rescale 40: -28% / -22%). J wins every measure except the 95th pct of the count deviation (7.4% vs 6.6%).
 - Through-plane views: folia clearly more continuous in J, also in the lateral part (slices 250-399).
-- Decision candidate stands: J (`SLICEREG_JITTER=1`).
+- Decision (2026-10-28): J is the default (`SLICEREG_JITTER=1`; set 0 for the original pipeline).
 
 
 Note on what STAGE1 warps do: every STAGE1 level registers from coreg0nl again, so the warps of levels 0-3 (and of

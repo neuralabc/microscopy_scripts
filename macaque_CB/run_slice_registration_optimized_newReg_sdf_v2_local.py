@@ -83,9 +83,17 @@ variant_tag = '' if stage1_neighbour_targets == 'coreg0nl' else '_nbrprev'
 # folder keeps the '_jit' suffix, so it never mixes with the older folders made without the correction
 use_jitter_correction = os.environ.get('SLICEREG_JITTER', '1') == '1'
 jitter_sigma = float(os.environ.get('SLICEREG_JITTER_SIGMA', 15)) #slices; the slow part removed from the poses
-jitter_iterations = int(os.environ.get('SLICEREG_JITTER_ITERS', 6))
-if use_jitter_correction:
+# method: 'jitter' (nearest neighbours, slice_jitter.py) or 'posegraph' (pairs at distances 1-16 slices, one robust
+# least-squares solve, slice_posegraph.py: also corrects blocks of sections mounted at a common angle, which the
+# nearest-neighbour fit cannot; REGISTRATION_NOTES_local.md 4.8). Same output files and pose format.
+pose_method = os.environ.get('SLICEREG_JITTER_METHOD', 'jitter')
+if pose_method not in ('jitter', 'posegraph'):
+    raise ValueError(f'Unknown SLICEREG_JITTER_METHOD: {pose_method}')
+jitter_iterations = int(os.environ.get('SLICEREG_JITTER_ITERS', 6 if pose_method == 'jitter' else 2))
+if use_jitter_correction and pose_method == 'jitter':
     variant_tag += '_jit' + ('' if jitter_iterations == 6 else str(jitter_iterations))
+elif use_jitter_correction:
+    variant_tag += '_pg' + ('' if jitter_iterations == 2 else str(jitter_iterations))
 # number of groupwise iterations; the final level (and the end of the transform chain) is groupwise_iter{N-1}
 groupwise_iterations = int(os.environ.get('SLICEREG_GROUPWISE_ITERS', 10))
 if groupwise_iterations != 10:
@@ -226,7 +234,7 @@ with open(os.path.join(output_dir, 'run_settings.json'), 'w') as _fh:
     json.dump(dict(script=os.path.abspath(__file__), git_commit=_git_commit(), started=time.strftime('%Y-%m-%d %H:%M'),
                    subject=subject, rescale=rescale, in_plane_res_um=[rescaled_in_plane_res_x, rescaled_in_plane_res_y],
                    max_workers=max_workers, missing_idxs_to_fill=missing_idxs_to_fill, variant_tag=variant_tag,
-                   jitter_correction=use_jitter_correction, jitter_sigma=jitter_sigma, jitter_iterations=jitter_iterations,
+                   jitter_correction=use_jitter_correction, jitter_method=pose_method, jitter_sigma=jitter_sigma, jitter_iterations=jitter_iterations,
                    groupwise_iterations=groupwise_iterations,
                    env={k: v for k, v in sorted(os.environ.items()) if k.startswith('SLICEREG_')}), _fh, indent=1)
 
@@ -402,10 +410,12 @@ if use_jitter_correction:
     if os.path.isfile(jitter_poses_fname): #written last, so its presence means the correction is complete
         logging.warning('Jitter correction of coreg0nl already done, skipping')
     else:
-        logger.warning('2b. Rigid jitter correction of coreg0nl (slow path kept)')
+        logger.warning(f'2b. Rigid {pose_method} correction of coreg0nl (slow path kept)')
         import slice_jitter
+        import slice_posegraph
         import mri_anchor
         slice_jitter.correct_level_in_place(output_dir, subject, all_image_fnames, 'coreg0nl',
+                                            poses_fn=slice_posegraph.posegraph_poses if pose_method == 'posegraph' else None,
                                             res_mm=rescaled_in_plane_res_x / 1000.0, voxel_res=voxel_res,
                                             thr=mri_anchor.tissue_threshold_for(rescaled_in_plane_res_x / 1000.0),
                                             sigma=jitter_sigma, iters=jitter_iterations, step=0.5,

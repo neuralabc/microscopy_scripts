@@ -134,18 +134,19 @@ def _rigid_or_none(job):
 
 
 def correct_level_in_place(output_dir, subject, all_image_fnames, level, res_mm, voxel_res, thr, sigma=15.0,
-                           iters=6, step=0.5, exclude=(), max_workers=1, zfill_num=4):
+                           iters=6, step=0.5, exclude=(), max_workers=1, zfill_num=4, poses_fn=None):
     """Fold the jitter correction into `level`: rewrite each slice's forward map, inverse map and deformed slice
     (root copy and the copy beside the maps), same names and formats. Writes `{subject}_{level}_jitter_poses.csv`.
-    Returns the poses."""
+    poses_fn: the function that computes the poses (default jitter_poses; e.g. slice_posegraph.posegraph_poses),
+    same signature and pose convention. Returns the poses."""
     import pandas as pd
     from slice_registration_functions import create_affine
     names = [os.path.basename(f).split('.')[0] for f in all_image_fnames]
     pre = [f'{subject}_{str(i).zfill(zfill_num)}_{nm}' for i, nm in enumerate(names)]
     def0 = [os.path.join(output_dir, f'{p}_{level}_ants-def0.nii.gz') for p in pre]
     stack = np.stack([nibabel.load(f).get_fdata().astype(np.float32) for f in def0], axis=2)
-    poses, centroids = jitter_poses(stack, res_mm, thr, sigma=sigma, iters=iters, step=step,
-                                    exclude=exclude, max_workers=max_workers)
+    poses, centroids = (poses_fn or jitter_poses)(stack, res_mm, thr, sigma=sigma, iters=iters, step=step,
+                                                  exclude=exclude, max_workers=max_workers)
     for s, p in enumerate(pre):
         if np.allclose(poses[s], 0):
             continue

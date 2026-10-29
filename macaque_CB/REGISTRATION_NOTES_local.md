@@ -624,9 +624,26 @@ goes through the same steps and gives the native area per final pixel.
 
 Outputs beside the stack (new files; the pipeline stacks and csv files are not changed):
 `<subject>_<level>_counts_stack.nii.gz` (cells per final pixel), `_native_area_stack.nii.gz` (native pixels per
-final pixel), `_counts_per_section.tsv`, `_counts_stack.json`. Density of a region R in cells/mm^3 =
-sum_R(counts) / (sum_R(native area) x native pixel area x 0.05 mm). The interpolated sections are 0 in both stacks
-and left out of all totals.
+final pixel), `_counts_per_section.tsv`, `_counts_stack.json`, `_counts_stack_README.md`. Density of a region R in
+cells/mm^3 = sum_R(counts) / (sum_R(native area) x native pixel area x 0.05 mm). The interpolated sections are 0 in
+both stacks and left out of all totals.
+
+How to use the stacks (added 2026-10-29 after a question from the user; `usage_notes()` in
+`count_preserving_stack.py` writes these rules with the run's numbers into the json key `usage` and into
+`_counts_stack_README.md`; the QC page "Counts" and `QC/METHODS.md` §9 show them):
+
+| Need | Use | Factor (cells/mm^3) |
+|---|---|---|
+| cells in a region | sum of the counts stack over the region | - |
+| density of a region | factor x sum(counts) / sum(native area) | 1 / (native pixel area mm^2 x 0.05 mm): 8000 at rescale 5 (50 um), 500 at rescale 20 (200 um) |
+| density image (per voxel) | factor x pipeline stack (`<subject>_<level>_stack.nii.gz`) | same |
+
+Divide the counts by the area; do not multiply them. Do not divide the two count-preserving stacks voxel by voxel:
+the native area is near 0 at the tissue and canvas edges, so that ratio is noisy there. Inside the tissue it equals
+the pipeline stack (P20, voxels with native area > 0.5 and stack > 2: median ratio 1.0001, 5th-95th percentile
+0.969-1.025; over all of them, sum(counts)/sum(area) 193.8 against the area-weighted stack mean 193.7).
+`count_preserving_stack.py --run-dir <run> --notes-only` adds the rules and the README to an existing count stack
+(no recomputation); done for P20 and the HPC rescale-5 run on 2026-10-29.
 
 P20 results: count-preserving total / native total per section, |deviation| median 0.05%, 95th percentile 0.13%,
 max 0.25% (pipeline stack: median 1.9%, max 21%); no counts on pixels with det J < 0; counts / native area

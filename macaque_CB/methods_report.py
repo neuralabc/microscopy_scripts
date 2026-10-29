@@ -774,6 +774,21 @@ def build(run_dir, subject=SUBJECT, missing=None):
             f'of spatially normalised tissue maps by the Jacobian determinants {d.cite("ashburner2000")}. An image of '
             'ones passed through the same steps gives the native area per final pixel, so that the density of a '
             'region is the ratio of its summed counts to its summed native area times the section thickness.')
+        u = c.get('units', {})
+        if u.get('native_pixel_area_mm2') and u.get('section_thickness_mm'):
+            vox = u['native_pixel_area_mm2'] * u['section_thickness_mm']
+            px, th = 1000 * u['native_pixel_area_mm2'] ** 0.5, 1000 * u['section_thickness_mm']
+            d.p()
+            d.p(f'Use of the outputs. The number of cells in a region R is the sum of `{subject}_{final}_counts_stack'
+                f'.nii.gz` over R. The density of R is sum_R(counts) / (sum_R(native area) x {vox:g} mm^3) = '
+                f'{1 / vox:g} x sum_R(counts) / sum_R(native area), where the native area is read from '
+                f'`{subject}_{final}_native_area_stack.nii.gz` (native pixels per final voxel) and {vox:g} mm^3 is the '
+                f'volume of one native pixel ({px:g} x {px:g} um) over the section thickness ({th:g} um). A voxel-wise '
+                f'density image in cells/mm^3 is obtained by multiplying the final stack `{subject}_{final}_stack.nii.gz` '
+                f'(cells per native pixel at each position) by {1 / vox:g}; the voxel-wise ratio of the two '
+                'count-preserving stacks is not used for this purpose, because the native area approaches zero at the '
+                'tissue and canvas boundaries and the ratio is unstable there. Sums of the final stack are not cell '
+                f'totals. These rules are also written beside the stacks in `{subject}_{final}_counts_stack_README.md`.')
         if k:
             d.p()
             d.p(f'Check: per measured section, the ratio of the modulated total to the native total deviated from 1 '

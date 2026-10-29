@@ -14,12 +14,16 @@ Outputs (new files; the existing stacks and csv files are not changed):
   <subject>_<level>_counts_stack.nii.gz       cell counts per final pixel (sum over a region = cells in the region)
   <subject>_<level>_native_area_stack.nii.gz  native pixels per final pixel (a native image of ones, same chain)
   <subject>_<level>_counts_per_section.tsv    per section: native / modulated / unmodulated totals and ratios
-  <subject>_<level>_counts_stack.json         summary, units, the chain, the interpolated sections
+  <subject>_<level>_counts_stack.json         summary, units, the chain, the interpolated sections, 'usage' rules
+  <subject>_<level>_counts_stack_README.md    how to use the stacks (the 'usage' rules with this run's numbers)
 Density of a region R (cells per mm^3) = sum_R(counts) / (sum_R(native_area) * native pixel area mm^2 * thickness mm).
+Density image: the pipeline stack / (native pixel area mm^2 * thickness mm); not counts / native_area per voxel
+(native_area is near 0 at the edges). usage_notes() holds these rules; qc_report.py and methods_report.py show them.
 The interpolated sections (--missing) are 0 in both stacks and are left out of all totals: they are not real counts.
 
 usage: uv run python macaque_CB/count_preserving_stack.py --run-dir <run> [--final-level groupwise_iter9]
            [--workers 8] [--thickness-um 50]
+       --notes-only: (re)write the 'usage' rules and the README of an existing count stack (no recomputation)
 """
 import argparse
 import json
@@ -41,6 +45,54 @@ def rel_key(path):
     """Path relative to its run folder (same rule as cleanup_run.py)."""
     parent = os.path.basename(os.path.dirname(path))
     return os.path.join(parent, os.path.basename(path)) if parent.startswith('init_translation_slice_') else os.path.basename(path)
+
+
+def usage_notes(subject, level, px_um, thickness_um, missing=()):
+    """How to use the count-preserving stack, the native area stack and the pipeline stack, with the numbers of the
+    run (json 'usage', the README beside the stacks, the QC page). Returns (factor cells/mm^3 per native-pixel
+    count, list of rules)."""
+    voxel_mm3 = (px_um / 1000) ** 2 * (thickness_um / 1000)
+    f = 1.0 / voxel_mm3
+    stem = f'{subject}_{level}'
+    rules = [
+        f'Cells in a region R: the sum over R of {stem}_counts_stack.nii.gz (cells per final voxel).',
+        f'Density of a region R (cells/mm^3) = sum_R(counts) / (sum_R(native_area) * {voxel_mm3:g} mm^3) = '
+        f'{f:g} * sum_R(counts) / sum_R(native_area). native_area is {stem}_native_area_stack.nii.gz (native '
+        f'pixels per final voxel); {voxel_mm3:g} mm^3 is one native pixel ({px_um:g} x {px_um:g} um) times the '
+        f'section thickness ({thickness_um:g} um). Divide, do not multiply: the counts are not multiplied by the area.',
+        f'Density image (cells/mm^3 per voxel): {f:g} * {stem}_stack.nii.gz. The pipeline stack already holds the '
+        f'cells per native pixel at each point. Do not divide the counts stack by the native area voxel by voxel: '
+        f'the native area is near 0 at the tissue and canvas edges, so that ratio is noisy there.',
+        f'Use the counts stack for totals and region densities. Use the pipeline stack for images, masks and '
+        f'boundaries. Sums of the pipeline stack are not cell totals, because the warps change the area '
+        f'(see the unmodulated ratios in {stem}_counts_per_section.tsv).',
+    ]
+    if missing:
+        rules.append(f'The interpolated sections {", ".join(map(str, sorted(missing)))} are 0 in both count-preserving '
+                     f'stacks and are left out of all totals (they are not real counts).')
+    return f, rules
+
+
+def write_notes(stem, summary):
+    """Add the usage rules to the summary (json) and write <stem>_counts_stack_README.md beside the stacks."""
+    u = summary['units']
+    px_um = 1000 * u['native_pixel_area_mm2'] ** 0.5
+    th_um = 1000 * u['section_thickness_mm']
+    subject_level = os.path.basename(stem)
+    level = summary['level']
+    subject = subject_level[:-len(level) - 1] if subject_level.endswith('_' + level) else subject_level
+    f, rules = usage_notes(subject, level, px_um, th_um, summary.get('interpolated_sections_left_out', ()))
+    u['density_factor_cells_per_mm3'] = f
+    summary['usage'] = rules
+    with open(stem + '_counts_stack.json', 'w') as fh:
+        json.dump(summary, fh, indent=1)
+    with open(stem + '_counts_stack_README.md', 'w') as fh:
+        fh.write(f'# Count-preserving stack of {subject_level}\n\n'
+                 f'Written by `count_preserving_stack.py` ({summary.get("time", "")}). Run folder: '
+                 f'`{summary.get("run_dir", "")}`.\n\n'
+                 + ''.join(f'- {r}\n' for r in rules)
+                 + f'\nChain of maps: {" -> ".join(summary.get("chain", []))}. Checks: see '
+                   f'`{subject_level}_counts_stack.json` and the QC page (Counts).\n')
 
 
 def pull_modulated(src, coords):
@@ -83,6 +135,7 @@ def main():
     p.add_argument('--thickness-um', type=float, default=50.0, help='section thickness (for the density note)')
     p.add_argument('--workers', type=int, default=int(os.environ.get('SLICEREG_COUNTS_WORKERS', 8)))
     p.add_argument('--overwrite', action='store_true')
+    p.add_argument('--notes-only', action='store_true', help='only (re)write the usage rules and the README')
     a = p.parse_args()
     run_dir = os.path.abspath(a.run_dir)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -97,6 +150,12 @@ def main():
     level = re.search(r'_pix_(.+)_ants-map\.nii\.gz$', os.path.basename(fwd[col].iloc[0])).group(1)
     stem = os.path.join(run_dir, f'{a.subject}_{level}')
     out_counts, out_area = stem + '_counts_stack.nii.gz', stem + '_native_area_stack.nii.gz'
+    if a.notes_only:
+        with open(stem + '_counts_stack.json') as fh:
+            summary = json.load(fh)
+        write_notes(stem, summary)
+        print(f'written: {stem}_counts_stack_README.md (and the usage rules in {stem}_counts_stack.json)')
+        return
     if os.path.isfile(out_counts) and not a.overwrite:
         sys.exit(f'{out_counts} exists (use --overwrite)')
     ref = nibabel.load(stem + '_stack.nii.gz')   # grid, affine and section order of the pipeline stack
@@ -157,8 +216,7 @@ def main():
         'command': 'count_preserving_stack.py ' + ' '.join(sys.argv[1:]),
         'time': time.strftime('%Y-%m-%d %H:%M'),
     }
-    with open(stem + '_counts_stack.json', 'w') as fh:
-        json.dump(summary, fh, indent=1)
+    write_notes(stem, summary)   # writes the json (with the usage rules) and the README
     c = summary['check']
     print(f'modulated / native:   |dev| median {c["modulated_ratio_abs_dev_median"]:.4f}, '
           f'95th {c["modulated_ratio_abs_dev_p95"]:.4f}, max {c["modulated_ratio_abs_dev_max"]:.4f}')

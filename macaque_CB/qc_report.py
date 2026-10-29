@@ -249,7 +249,22 @@ def count_preserving(run_dir, subject, final, missing):
         for g in groups.values():
             g[[m for m in missing if m < g.size]] = np.nan
         del reg, cnt
-    return tab, groups
+    return tab, groups, count_usage(pre + 'counts_stack.json', subject, final, missing)
+
+
+def count_usage(json_file, subject, final, missing):
+    """Usage rules of the count stacks (count_preserving_stack.usage_notes) with the numbers of the run: from the json
+    when it has them, else from its units (runs before the rules were added). [] if there is no json."""
+    if not os.path.isfile(json_file):
+        return []
+    with open(json_file) as fh:
+        c = json.load(fh)
+    if c.get('usage'):
+        return c['usage']
+    from count_preserving_stack import usage_notes
+    u = c['units']
+    return usage_notes(subject, final, 1000 * u['native_pixel_area_mm2'] ** 0.5, 1000 * u['section_thickness_mm'],
+                       c.get('interpolated_sections_left_out', missing))[1]
 
 
 def fig_totals(tab, groups, missing):
@@ -571,7 +586,11 @@ def main():
                      + ('<p>The count-preserving stack (<code>count_preserving_stack.py</code>) multiplies each pull '
                         'step by |det J| of its map, so that its section totals keep the native totals. Use it for '
                         'cell totals per region; use the pipeline stack (counts per native pixel area) for images and '
-                        'masks.</p>' + figure(fig_totals(cp[0], cp[1], missing), 'cells per section')
+                        'masks.</p>'
+                        + ('<p><b>How to use the stacks</b> (also in <code>' + html.escape(f'{a.subject}_{final}')
+                           + '_counts_stack_README.md</code> beside the stacks):</p><ul>'
+                           + ''.join(f'<li>{html.escape(r)}</li>' for r in cp[2]) + '</ul>' if cp[2] else '')
+                        + figure(fig_totals(cp[0], cp[1], missing), 'cells per section')
                         if cp is not None else
                         '<p>No count-preserving stack for the final level (run <code>count_preserving_stack.py</code>).'
                         '</p>')))

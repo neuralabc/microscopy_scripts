@@ -16,6 +16,7 @@ Content (all from the run's own files; nothing in the run directory is changed o
   - slow path (low-pass tissue centroid and principal-axis angle), jitter poses (if the jitter correction ran)
   - through-plane views and a slice montage
   - MRI registration results (QC/mri/<level>/qc.json, written by mri_register.py), if any
+  - the methods of the run (methods_report.py): QC/METHODS.md, written from the run's records, and shown here
 
 Stacks finer than 0.2 mm are block-summed in-plane to about 0.2 mm for the measures and images (stated in the page),
 so the report stays fast and the numbers are comparable between rescales 5, 10 and 20. Per-level measures are cached
@@ -591,6 +592,13 @@ def main():
                      f'{html.escape(run_dir)} --rescale {a.rescale} --level &lt;level&gt;</code>; it adds its results '
                      'here.</p>'))
     del centre_stack
+    try:   # methods text of this run (methods_report.py): QC/METHODS.md, also shown here
+        import methods_report
+        mpath, md, _checks = methods_report.write(run_dir, a.subject, missing)
+        sections.append(('methods', 'Methods', '<p>Generated from the records of this run; the same text is in '
+                         '<a href="METHODS.md"><code>QC/METHODS.md</code></a>.</p>' + methods_report.md_to_html(md)))
+    except Exception as e:
+        sections.append(('methods', 'Methods', f'<p>The methods text could not be written: {html.escape(str(e))}</p>'))
 
     nav = ''.join(f'<a href="#{k}">{html.escape(t)}</a>' for k, t, _ in sections)
     body = ''.join(f'<h2 id="{k}">{html.escape(t)}</h2>{c}' for k, t, c in sections)

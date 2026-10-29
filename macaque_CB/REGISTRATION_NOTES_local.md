@@ -611,8 +611,10 @@ of the stack, sections 380-397).
 
 Checks of the input, 2026-10-29: the first step sums the counts in blocks (`downsample_image`: `block_reduce` with
 `numpy.sum`). The input TIFFs hold whole cell counts per 10 µm pixel (values 0-5). The native section has the same
-total as its TIFF (section 100: 2,040,290 at rescale 20 and at rescale 5, HPC), and no negative values (the pad
-value of `downsample_image` does not reach the native files).
+total as its TIFF (section 100: 2,040,290 at rescale 20 and at rescale 5, HPC), and no negative values. The pad
+value of `downsample_image` is `-sdf_clip_val`, and `sdf_clip_val` is 0 because the scripts set
+`use_signed_distance_weighting_for_registration = False` (so the cost function is MutualInformation and the
+missing-slice method is `intermediate_nonlin_mean`); the -10/-50/-100 values apply only to the SDF mode.
 
 Method: each native section goes through the same chain of pull maps as the pipeline (coreg0nl -> rigsyn_iter4_win12
 -> groupwise_iter3..N; sequential, because the composition helpers are marked broken). Each step multiplies the
@@ -637,4 +639,51 @@ Users: `atlas_labels.py` adds the columns `cells_cp`, `native_volume_mm3` and `d
 the D99 regions. In P20, most of the decrease of the native totals after section 120 is in the brainstem part.
 `find_levels` (QC, MRI, labels) now matches the groupwise levels exactly, so the new `_counts_stack` and
 `_native_area_stack` files are not taken as levels. `cleanup_run.py` keeps them (run-level files).
+
+### 7.5 Methods text of a run (`methods_report.py`, 2026-10-29)
+
+`qc_report.py` writes `QC/METHODS.md` (scientific English) and shows it as the last section of the QC page; a
+failure is caught and reported in the page. By hand: `methods_report.py --run-dir <run> [--check]`.
+
+Sources, in this order of trust (each parameter in Appendix A names its source):
+- run: `run_settings.json`. Since 2026-10-29 the run scripts add keys during the run (`_update_run_settings`;
+  existing keys are kept): `git_dirty`, `packages` (ants, numpy, scipy, nibabel, skimage, sklearn, pandas),
+  `n_sections`, `input_files`, `pipeline` (SDF mode, cost function, missing-section method, template type,
+  `use_resolution_in_registration`, neighbour targets, MRI anchor), `scaling_factor` and `canvas_shape` (after they
+  are computed), `sharpening` (the dataset multipliers), `cascade`, `stage1`, `groupwise`.
+- log: every `antsRegistration` argument list in the run log, grouped by level (transform, metric, bins, sampling,
+  iterations, shrink factors, sigmas, number of metric terms and their weights); pose-graph lines; scaling factor;
+  skip, fallback and exit messages. The summary is cached in `QC/cache/methods_log.json` (P20 log 245 MB: 5 s).
+- script: the copy of the main script in the run folder, parsed with `ast` (offsets, Gaussian sigmas, groupwise
+  keywords, which stacking calls get the sharpening multipliers).
+- code: 31 statements about function internals, each a regular expression against the file at the run's git
+  commit (`git show`), else the working tree (named in Appendix B). A failed check marks the statement
+  UNVERIFIED in the text; `--check` exits 1.
+- files: QC/metrics.json, QC/mri/*/qc.json, atlas_labels.json, `_counts_stack.json`, the jitter poses csv, and
+  (when it exists) `_granular_mask.json`.
+
+References: checked on 2026-10-29 against the publisher, PubMed Central or Project Euclid records (authors, title,
+journal, volume, pages, DOI): Avants 2008 (SyN), Avants 2011 (ANTs metrics), Tustison 2021 (ANTsX/ANTsPy),
+Huntenburg 2018 (nighres: the registration wrapper is a modified copy of its `embedded_antspy_2d_multi`), Maes 1997 (MI), Mattes 2003 (Mattes MI), Huber 1964,
+Ashburner & Friston 2000 (Jacobian modulation: p. 815 "multiplies the partitioned images by the relative voxel
+volumes ... the Jacobian determinants of the deformation field"), Reveley 2017 (D99), Saleem 2021 (D99 v2.0).
+
+Facts found while writing it (all checked in the code or the log):
+- `coreg0nl` has no optimisation: `do_reg(run_rigid=False, run_syn=False)` calls antsRegistration with
+  `Rigid[0.1]` and `--convergence [0,1.0,2]`, after `ignore_orient=True` has replaced the headers by centred grids.
+  So coreg0nl is a centre alignment on the canvas of the largest section; the rigid alignment comes from the pose
+  graph and from STAGE1.
+- The smoothing sigmas of STAGE1 and groupwise (`16x8x4x2x1`, no suffix) are voxels: ANTs reads a sigma without a
+  `mm`/`vox` suffix as voxels (`antsRegistrationTemplateHeader.h`). (A first reading in this session assumed
+  physical units, i.e. micrometres; that was wrong.)
+- STAGE1 metric weights: Gaussian of the offset, the stack template gets the weight of offset 0, and
+  `embedded_antspy_2d_multi` divides all weights by their sum (logged interior weights: 0.116, 0.116, 0.038 ...).
+- The sharpening multipliers are passed only to the `coreg0nl` stacking; the later levels interpolate the
+  excluded sections without the unsharp mask.
+- With a stored reference, `mri_register.py` always uses "refined from reference"; it does not choose between the
+  candidates (the HPC run: refined Dice 0.786 vs reference 0.805, rotation 4.6 deg from the reference).
+- P20 ran with `slice_posegraph.py` before it was committed (commit feda426 does not contain it); its checks use
+  the working tree, and Appendix B says so.
+- The SDF mode is off in both scripts, so `sdf_clip_val` = 0, the pad value of the downsampling is 0, the cost
+  function is MutualInformation and the missing-section method is `intermediate_nonlin_mean`.
 

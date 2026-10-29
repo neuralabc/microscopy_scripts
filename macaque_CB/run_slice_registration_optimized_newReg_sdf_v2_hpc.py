@@ -255,6 +255,44 @@ with open(os.path.join(output_dir, 'run_settings.json'), 'w') as _fh:
                    groupwise_iterations=groupwise_iterations,
                    env={k: v for k, v in sorted(os.environ.items()) if k.startswith('SLICEREG_')}), _fh, indent=1)
 
+def _update_run_settings(**kw):
+    """Add keys to run_settings.json (existing keys are kept unless named here); methods_report.py reads them."""
+    _f = os.path.join(output_dir, 'run_settings.json')
+    try:
+        with open(_f) as _fh:
+            _d = json.load(_fh)
+    except Exception:
+        _d = {}
+    _d.update(kw)
+    with open(_f, 'w') as _fh:
+        json.dump(_d, _fh, indent=1, default=str)
+
+def _package_versions():
+    import importlib
+    out = {}
+    for _m in ('ants', 'numpy', 'scipy', 'nibabel', 'skimage', 'sklearn', 'pandas'):
+        try:
+            out[_m] = getattr(importlib.import_module(_m), '__version__', '?')
+        except Exception:
+            out[_m] = 'not installed'
+    return out
+
+def _git_dirty():
+    try:
+        return bool(subprocess.run(['git', '-C', os.path.dirname(os.path.abspath(__file__)), 'status', '--porcelain', '--', '.'],
+                                   capture_output=True, text=True, check=True).stdout.strip())
+    except Exception:
+        return None
+
+_update_run_settings(git_dirty=_git_dirty(), packages=_package_versions(), n_sections=len(all_image_fnames),
+                     input_files=[str(f) for f in all_image_fnames],
+                     pipeline=dict(in_plane_res_um_input=[in_plane_res_x, in_plane_res_y], section_thickness_um=in_plane_res_z,
+                                   signed_distance_mode=use_signed_distance_weighting_for_registration,
+                                   cost_function=cost_function, missing_slice_interp_method=missing_slice_interp_method,
+                                   per_slice_template=per_slice_template, slice_template_type=slice_template_type,
+                                   use_resolution_in_registration=use_resolution_in_registration,
+                                   stage1_neighbour_targets=stage1_neighbour_targets, mri_anchor=use_mri_anchor))
+
 
 
 print(f"Output directory: {output_dir}")
@@ -379,6 +417,7 @@ scaling_factor = int((2**num_valid_steps)/2)
 # scaling_factor = num_valid_steps #scaling factor was doubling?
 
 logger.warning(f'\tScaling factor set to: {scaling_factor}')
+_update_run_settings(scaling_factor=scaling_factor, canvas_section=int(largest), canvas_shape=[int(v) for v in shape[:2]])
 
 
 print('2. Bring all image slices into same place as our 2d template with an initial translation registration')
@@ -415,6 +454,7 @@ for idx,img_name in enumerate(all_image_fnames):
     
 #compute the scaling factors for sharpening from the entire dataset
 sigma_multiplier, strength_multiplier, stats = compute_scaling_multipliers_from_dataset(image_list)
+_update_run_settings(sharpening={k: float(v) for k, v in stats.items() if numpy.isscalar(v)})
 
 # deformation files are expected to be in the root output dir directly, so lets copy them here (skip if already exists)
 for _file in image_list:
@@ -459,6 +499,7 @@ else:
 template_not_generated = True #keeps track of if we generated a template or not at this stage so that we can generate one if we stopped the registration at some point
 iter_tag = ""
 num_cascade_iterations = 1
+_update_run_settings(cascade=dict(iterations=num_cascade_iterations, run_syn=True))
 anchor_slice_idxs = numpy.linspace(0,len(all_image_fnames)-1,num_cascade_iterations+2).astype(int)
 anchor_slice_idxs = anchor_slice_idxs[1:-1] #remove the first and last, as they will denote 1st and last indices of the stack
 for iter in range(num_cascade_iterations):
@@ -536,6 +577,8 @@ run_rigid = True
 run_syn = os.environ.get('SLICEREG_STAGE1_SYN', '1') == '1' #0: STAGE1 rigid only, all warping left to the groupwise step
 stage1_syn_last = os.environ.get('SLICEREG_STAGE1_SYN_LAST', '1') == '1' #0: SyN only in the template-building STAGE1 levels, the last level (in the chain) rigid only
 regularization = os.environ.get('SLICEREG_STAGE1_REG', 'Medium') #SyN preset in embedded_antspy_smthMod: Low, Medium, High, VeryHigh
+_update_run_settings(stage1=dict(iterations=num_reg_iterations, run_rigid=run_rigid, run_syn=run_syn,
+                                 syn_last_level=stage1_syn_last, regularization=regularization))
 MI_df_struct = {} #output for MI values, will be saved in a csv file
 # TODO: 2. Add masks to the registration process to improve speed (hopefully) and precision
 # did this below in the groupwise reg, which decreased high frequency drift at the expense of low
@@ -812,6 +855,8 @@ else:
                                     use_local_template_after_iteration=3,
                                     local_template_window=5,
                                     cost_function=cost_function)
+_update_run_settings(groupwise=dict(iterations=groupwise_iterations, use_deformed_source_after_iteration=4,
+                                   use_local_template_after_iteration=3, local_template_window=5))
 
 
 #we generate all the stacks at the end, since we will need to identify which is potentially the best 

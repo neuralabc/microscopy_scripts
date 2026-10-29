@@ -1063,6 +1063,14 @@ try:
     logging.warning(f'Tissue mask written: {write_tissue_mask(output_dir, subject, final_level, rescale)}')
 except Exception as e:
     logging.warning(f'Tissue mask failed: {e}')
+# count-preserving stack of the final level (count_preserving_stack.py: each pull step times |det J|, so that section
+# totals keep the native cell counts; new files beside the stack). Before the MRI step: atlas_labels.py uses it.
+if os.environ.get('SLICEREG_COUNTS_STACK', '1') == '1' and not smoke_test:
+    _r = subprocess.run([sys.executable, os.path.join(script_dir, 'count_preserving_stack.py'), '--run-dir', output_dir,
+                         '--subject', subject, '--missing', ','.join(map(str, missing_idxs_to_fill or [])),
+                         '--workers', str(max_workers), '--overwrite'], check=False)
+    logging.warning(f'Count-preserving stack finished (exit {_r.returncode}): '
+                    f'{output_dir}{subject}_{final_level}_counts_stack.nii.gz')
 export_zarr = os.environ.get('SLICEREG_EXPORT_ZARR', '1') == '1' and not smoke_test
 tck_view_dir = os.environ.get('SLICEREG_TCK_VIEW', os.path.expanduser('~/Documents/code/tck_view'))
 if export_zarr and not os.path.isdir(tck_view_dir):

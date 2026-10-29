@@ -37,6 +37,11 @@ Outputs beside the stack (same grid, affine and header as <subject>_<level>_stac
   <subject>_<level>_D99_x_mm.nii.gz     float32, D99 world x (mm; 0 = D99 midline, + = right), NaN outside the D99 grid
   <subject>_<level>_D99_labels.tsv      per label: voxels, volume, cells and density (measured sections only; the
                                         interpolated sections are left out), cells in the vermis, cells left/right
+                                        if count_preserving_stack.py has run for the level: also cells_cp (sum of the
+                                        count-preserving stack, i.e. cells without the warp's area change),
+                                        native_volume_mm3 (native tissue volume) and density_cp_cells_per_mm3 = their
+                                        ratio; the first columns are unchanged (sum of the pipeline stack, final-frame
+                                        volume)
 QC: <run_dir>/QC/mri/<level>/atlas_labels.json + images (the QC report shows them with the MRI registration).
 
 Accuracy: D99 is a different animal at 0.25 mm, and the SyN is smooth (flow sigma 3, median displacement ~0.7 mm
@@ -280,6 +285,9 @@ def main():
     filled = exact_outside & (lab != OUTSIDE_ATLAS)
     reg = regions_of(lab, np.nan_to_num(x_mm, nan=1e3), a.anterior_vermis_halfwidth_mm)
 
+    cp_f = os.path.join(run_dir, f'{a.subject}_{a.level}_counts_stack.nii.gz')   # count_preserving_stack.py
+    area_f = os.path.join(run_dir, f'{a.subject}_{a.level}_native_area_stack.nii.gz')
+    has_cp = os.path.isfile(cp_f) and os.path.isfile(area_f)
     pre = os.path.join(run_dir, f'{a.subject}_{a.level}_D99')
     d = f'D99 v2.0; 252 cb/253 bs no label, 255 outside D99; fill {a.fill_mm} mm'
     save_like(lab, stack_img, np.uint8, d, pre + '_labels.nii.gz')
@@ -292,6 +300,9 @@ def main():
     meas[[s for s in missing if s < shape[2]]] = False
     lm, cm, rm, xm = lab[..., meas], counts[..., meas], reg[..., meas], x_mm[..., meas]
     cells_tissue = float(cm[lm > 0].sum())
+    if has_cp:
+        cpm = np.asarray(nibabel.load(cp_f).dataobj, dtype=np.float32)[..., meas]
+        arm = np.asarray(nibabel.load(area_f).dataobj, dtype=np.float32)[..., meas]
     rows = []
     for v in np.unique(lm[lm > 0]):
         sel = lm == v
@@ -307,10 +318,15 @@ def main():
                          cells_in_vermis=float(c[rm[sel] == 1].sum()),
                          cells_D99_left=float(c[xs < 0].sum()), cells_D99_right=float(c[xs >= 0].sum()),
                          cells_filled_rim=float(c[filled[..., meas][sel]].sum())))
+        if has_cp:
+            cc, nv = float(cpm[sel].sum()), float(arm[sel].sum() * voxel_mm3)
+            rows[-1].update(cells_cp=cc, native_volume_mm3=nv, density_cp_cells_per_mm3=cc / nv if nv > 0 else float('nan'))
     cols = list(rows[0])
     with open(pre + '_labels.tsv', 'w') as fh:
         fh.write(f'# {cmd}  ({time.strftime("%Y-%m-%d %H:%M")}); transforms: {used}; measured sections only '
-                 f'(interpolated sections {missing} left out); cells = sum of stack counts\n')
+                 f'(interpolated sections {missing} left out); cells = sum of stack counts'
+                 + ('; cells_cp, native_volume_mm3, density_cp: count-preserving stack (count_preserving_stack.py)'
+                    if has_cp else '; no count-preserving stack (run count_preserving_stack.py for cells_cp)') + '\n')
         fh.write('\t'.join(cols) + '\n')
         for r in rows:
             fh.write('\t'.join(f'{r[k]:.6g}' if isinstance(r[k], float) else str(r[k]) for k in cols) + '\n')
@@ -321,6 +337,11 @@ def main():
     for k, nm in REGION_NAMES.items():
         summ[f'cells: {nm} (fraction of tissue cells)'] = float(cm[rm == k].sum() / cells_tissue)
     summ['cells: filled rim (fraction of tissue cells, included above)'] = float(cm[filled[..., meas]].sum() / cells_tissue)
+    summ['count-preserving columns (cells_cp, native_volume_mm3, density_cp)'] = 'yes' if has_cp else 'no (stack not found)'
+    if has_cp:
+        cp_tissue = float(cpm[lm > 0].sum())
+        for k, nm in REGION_NAMES.items():
+            summ[f'cells, count-preserving: {nm} (fraction of tissue cells)'] = float(cpm[rm == k].sum() / cp_tissue)
     per = {}
     for r in rows:
         if r['value'] in ANTERIOR_LOBE + VERMIS_POSTERIOR + HEMISPHERE + NUCLEI:

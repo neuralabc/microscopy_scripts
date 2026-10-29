@@ -11,6 +11,8 @@ Content (all from the run's own files; nothing in the run directory is changed o
   - warp: STAGE1 final maps (coreg0nl -> rigsyn_4) per slice; groupwise maps per iteration
   - per-slice total counts / native counts: an independent check (the registration does not optimise it); a change
     means that the warp stretched or compressed the slice
+  - if count_preserving_stack.py has run for the final level: its count ratio (should be 1), and the cell total of
+    each section, split by the D99 regions (atlas_labels.py) when they exist
   - slow path (low-pass tissue centroid and principal-axis angle), jitter poses (if the jitter correction ran)
   - through-plane views and a slice montage
   - MRI registration results (QC/mri/<level>/qc.json, written by mri_register.py), if any
@@ -66,7 +68,8 @@ def find_levels(run_dir, subject):
     s1 = sorted((lv for lv in have if re.fullmatch(r'coreg12nl_win12_rigsyn_\d+', lv)), key=lambda v: int(v.split('_')[-1]))
     out += s1
     if s1:
-        gw = [lv for lv in have if lv.startswith(s1[-1] + '_groupwise_iter')]
+        # fullmatch: count_preserving_stack.py writes <level>_counts_stack / _native_area_stack, which are not levels
+        gw = [lv for lv in have if re.fullmatch(re.escape(s1[-1]) + r'_groupwise_iter\d+', lv)]
         out += sorted(gw, key=lambda v: int(v.split('iter')[-1]))
     return out
 
@@ -212,13 +215,51 @@ def fig_warp(stage1, gw_levels, M, missing):
 
 def fig_counts(levels_show, ratios, missing):
     fig, ax = plt.subplots(1, 1, figsize=(13, 3.2))
-    for lv, col in zip(levels_show, (C1, C2, C3)):
+    for lv, col in zip(levels_show, (C1, C2, C3, C4)):
         r = ratios[lv]
         ax.plot(np.arange(len(r)), r, color=col, lw=1, label=lv)
     ax.axhspan(0.95, 1.05, color='#e4e3df', alpha=0.6, zorder=0, lw=0)
     mark_missing(ax, missing)
     ax.set_title('per-slice total counts / native counts (band: +/- 5%; 1 = no area change)', loc='left')
     ax.set_xlabel('slice'); ax.set_ylabel('ratio'); ax.legend(loc='lower right')
+    return fig_png(fig)
+
+
+def count_preserving(run_dir, subject, final, missing):
+    """Per-section totals of the count-preserving stack (count_preserving_stack.py) of the final level, split by the
+    D99 regions of atlas_labels.py when present. Returns None if the tool has not run."""
+    import pandas as pd
+    pre = os.path.join(run_dir, f'{subject}_{final}_')
+    tf = pre + 'counts_per_section.tsv'
+    if not os.path.isfile(tf):
+        return None
+    tab = pd.read_csv(tf, sep='\t')
+    groups = None
+    rf, cf = pre + 'D99_regions.nii.gz', pre + 'counts_stack.nii.gz'
+    if os.path.isfile(rf) and os.path.isfile(cf):
+        reg = np.asarray(nibabel.load(rf).dataobj)
+        cnt = np.asarray(nibabel.load(cf).dataobj, np.float64)
+        # atlas_labels.py codes: 1 vermis, 2 hemisphere, 3 nuclei, 4 other D99 label, 252 cerebellum no label,
+        # 253 brainstem no label, 254 neither, 255 tissue outside D99, 0 outside the tissue mask
+        defs = [('cerebellum (D99 1-3, 252)', (1, 2, 3, 252)), ('brainstem / other D99 (4, 253)', (4, 253)),
+                ('tissue outside D99 (254, 255)', (254, 255)), ('outside the tissue mask', (0,))]
+        groups = {nm: np.array([cnt[..., k][np.isin(reg[..., k], v)].sum() for k in range(cnt.shape[2])])
+                  for nm, v in defs}
+        for g in groups.values():
+            g[[m for m in missing if m < g.size]] = np.nan
+        del reg, cnt
+    return tab, groups
+
+
+def fig_totals(tab, groups, missing):
+    fig, ax = plt.subplots(1, 1, figsize=(13, 3.4))
+    ax.plot(tab.section, tab.native_total / 1e3, color=GREY, lw=1.2, label='native section (all)')
+    if groups:
+        for (nm, g), col in zip(groups.items(), (C1, C2, C3, C4)):
+            ax.plot(np.arange(g.size), g / 1e3, color=col, lw=1, label=nm)
+    mark_missing(ax, missing)
+    ax.set_title('cells per section (thousands); count-preserving stack split by D99 region (WIP labels)', loc='left')
+    ax.set_xlabel('slice'); ax.set_ylabel('cells (thousands)'); ax.legend(loc='upper left', fontsize=8)
     return fig_png(fig)
 
 
@@ -476,6 +517,16 @@ def main():
         count_rows.append([html.escape(lv), fmt(np.median(r)), fmt(100 * np.median(dev), 1) + ' %',
                            fmt(100 * np.percentile(dev, 95), 1) + ' %', fmt(100 * dev.max(), 1) + ' %',
                            str(int(np.argmax(np.nan_to_num(np.abs(ratios[lv] - 1)))))])
+    cp = count_preserving(run_dir, a.subject, final, missing)
+    if cp is not None:   # same measure for the count-preserving stack of the final level
+        rcp = np.full(n, np.nan)
+        rcp[cp[0].section.values.astype(int)] = cp[0].modulated_ratio.values
+        rcp[~keep] = np.nan
+        ratios[final + ' (count-preserving)'] = rcp
+        dev = np.abs(rcp[np.isfinite(rcp)] - 1)
+        count_rows.append([html.escape(final + ' (count-preserving)'), fmt(np.nanmedian(rcp)),
+                           fmt(100 * np.median(dev), 2) + ' %', fmt(100 * np.percentile(dev, 95), 2) + ' %',
+                           fmt(100 * dev.max(), 2) + ' %', str(int(np.nanargmax(np.abs(rcp - 1))))])
     count_table = table(count_rows, ['level', 'ratio median', '|dev| median', '|dev| 95th', '|dev| max', 'slice of max'])
 
     # settings
@@ -515,7 +566,14 @@ def main():
                      '<p>Total cell counts of each registered slice divided by those of its native slice. The '
                      'registration does not optimise this. A ratio below 1 means that the warp compressed the slice '
                      '(or moved tissue out of the canvas); above 1, stretched. Interpolated slices are left out.</p>'
-                     + figure(fig_counts(show, ratios, missing), 'count ratio per slice') + count_table))
+                     + figure(fig_counts(list(ratios), ratios, missing), 'count ratio per slice') + count_table
+                     + ('<p>The count-preserving stack (<code>count_preserving_stack.py</code>) multiplies each pull '
+                        'step by |det J| of its map, so that its section totals keep the native totals. Use it for '
+                        'cell totals per region; use the pipeline stack (counts per native pixel area) for images and '
+                        'masks.</p>' + figure(fig_totals(cp[0], cp[1], missing), 'cells per section')
+                        if cp is not None else
+                        '<p>No count-preserving stack for the final level (run <code>count_preserving_stack.py</code>).'
+                        '</p>')))
     sections.append(('views', 'Through-plane views',
                      figure(fig_through_plane(run_dir, a.subject, show, f, res_qc, (ci, cj), box),
                             'through-plane cuts at the tissue centre (physical aspect) and the middle slice')

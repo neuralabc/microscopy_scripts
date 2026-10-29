@@ -25,7 +25,7 @@ cd <repo> && uv sync            # Python 3.12, antspyx 0.6.3 (pyproject.toml, uv
 
 The `_local` and `_hpc` scripts are the same pipeline. Only the configuration lines differ (`diff` the two files).
 Steps: downsampling, coreg0nl + pose-graph correction, STAGE1 (rigid + SyN), groupwise (10 iterations), tissue
-mask, OME-Zarr (`stack` placement), MRI registration + D99 labels, QC report.
+mask, count-preserving stack, OME-Zarr (`stack` placement), MRI registration + D99 labels, QC report.
 
 HPC, full resolution (rescale 5 = 50 µm in-plane, the default):
 ```bash
@@ -44,7 +44,8 @@ nohup uv run --project <repo> python <repo>/macaque_CB/run_slice_registration_op
   passes), and the QC takes 10-20 min. The original script used 50 workers at rescale 5 on this HPC.
 
 All options are `SLICEREG_*` environment variables (§2): e.g. `SLICEREG_RESCALE`, `SLICEREG_JITTER_METHOD`
-(posegraph | jitter), `SLICEREG_GROUPWISE_ITERS`, `SLICEREG_QC`, `SLICEREG_MRI_REGISTER`, `SLICEREG_EXPORT_ZARR`.
+(posegraph | jitter), `SLICEREG_GROUPWISE_ITERS`, `SLICEREG_QC`, `SLICEREG_MRI_REGISTER`, `SLICEREG_EXPORT_ZARR`,
+`SLICEREG_COUNTS_STACK`.
 Each run writes `run_settings.json`. Output files and the transform chain: §3 (Mat's processing depends on them).
 
 ## 3. Tools for a finished run (point them at a run folder and a level)
@@ -54,6 +55,7 @@ Each run writes `run_settings.json`. Output files and the transform chain: §3 (
 | `qc_report.py` | QC page `<run>/QC/index.html`: continuity, warps, counts, images per level; MRI and label parts if present | `qc_report.py --run-dir <run> --rescale <r>` |
 | `mri_register.py` | Stack to D99: stored reference affine (+ stability check, exit 2 on failure), SyN, densities on the D99 grid, `mri` OME-Zarr; then runs `atlas_labels.py` | `mri_register.py --run-dir <run> --rescale <r> [--level <level>]` |
 | `atlas_labels.py` | D99 labels in the stack grid: `_D99_labels`, `_D99_regions` (vermis / hemisphere / nuclei), `_D99_x_mm`, cell table. **Work in progress** (`LOBULE_LABELS_HANDOFF.md`) | `atlas_labels.py --run-dir <run> --rescale <r> [--level <level>]` |
+| `count_preserving_stack.py` | Count-preserving stack of a level: the native counts through the same chain of maps, each step times \|det J\|, so that section totals keep the native totals (P20: deviation median 0.05%, max 0.25%; pipeline stack up to 21%). Also writes the native area per final pixel, a per-section table and a json summary. Use it for cell totals and densities; use the pipeline stack for images and masks | `count_preserving_stack.py --run-dir <run> [--final-level groupwise_iter9] [--workers 8]` |
 | `tissue_mask.py` | Tissue mask of a level (counts > 2 per 50 µm voxel, holes filled) | `tissue_mask.py --run-dir <run> --rescale <r> --level <level>` |
 | `cleanup_run.py` | Removes intermediate files; keeps the native sections and the transform chain that pushes data (e.g. Purkinje-cell maps) into the final space. Dry run by default; `--verify N` proves that the kept chain reproduces the final sections; `--execute` removes (P20: 4.0 of 6.3 GB, 76,000 files) | `cleanup_run.py --run-dir <run> --verify 5 [--execute] [--drop-inverse]` |
 | `export_ome_zarr.py` | OME-Zarr (NGFF 0.6) of a level in cells/mm³, `stack` or `mri` placement, with label maps | `export_ome_zarr.py --run-dir <run> --rescale <r> --level <level> --placement stack --out <file>.ome.zarr` |

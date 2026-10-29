@@ -52,6 +52,7 @@ SLICEREG_RESCALE=40 SLICEREG_NEIGHBOUR_TARGETS=coreg0nl SLICEREG_MAX_WORKERS=6 n
 | `SLICEREG_EXPORT_ZARR` | 1 | export the final densities as OME-Zarr at the end of the run (§5; `stack` placement only since 2026-10-28) |
 | `SLICEREG_QC` | 1 | write the QC report `<output_dir>/QC/index.html` at the end of the run (§7) |
 | `SLICEREG_MRI_REGISTER` | 1 (since 2026-10-28) | run `mri_register.py` (reference affine + SyN + D99 labels) on the final level at the end of the run; skipped with a message if the D99 files are not found |
+| `SLICEREG_COUNTS_STACK` | 1 (since 2026-10-29) | write the count-preserving stack of the final level (`count_preserving_stack.py`, §7.4) before the MRI step; `SLICEREG_COUNTS_WORKERS` sets its workers when it is run by hand (default 8; the run scripts pass `SLICEREG_MAX_WORKERS`) |
 | `SLICEREG_D99_DIR` | `local_extras/cerebellum_target/` (HPC script: `/data/neuralabc/johmat/phase_ml/D99/D99_v2.0_dist/cerebellum_target`) | folder of the D99 target files, for all scripts |
 | `SLICEREG_TCK_VIEW` | `~/Documents/code/tck_view` | tck_view checkout for the OME-Zarr export; no checkout = export skipped with a message |
 | `SLICEREG_LOOKUP_CSV`, `SLICEREG_OUTPUT_ROOT` | HPC script only | input lookup csv (its image paths are used as they are), output root (`/tmp/`) (see `SCRIPTS_local.md`) |
@@ -600,4 +601,40 @@ sections narrower on the covered side).
 Accuracy: D99 is another animal at 0.25 mm and the SyN is smooth, so lobule boundaries can be off by about one
 folium (most likely at the primary fissure and in lobules I-V). Check the QC images (sagittal sections with label
 edges and names; views across the sections that show the vermis band).
+
+### 7.4 Count-preserving stack (`count_preserving_stack.py`, 2026-10-29)
+
+Why: the pipeline stacks pull the native counts through the warps without a Jacobian. Each final pixel holds the
+native count per native pixel at that point (a density), which is correct for images and masks. But the total of a
+section changes with the area change of the warp: QC "Counts", P20 `groupwise_iter9`, median 1.9%, up to 21% (end
+of the stack, sections 380-397).
+
+Checks of the input, 2026-10-29: the first step sums the counts in blocks (`downsample_image`: `block_reduce` with
+`numpy.sum`). The input TIFFs hold whole cell counts per 10 µm pixel (values 0-5). The native section has the same
+total as its TIFF (section 100: 2,040,290 at rescale 20 and at rescale 5, HPC), and no negative values (the pad
+value of `downsample_image` does not reach the native files).
+
+Method: each native section goes through the same chain of pull maps as the pipeline (coreg0nl -> rigsyn_iter4_win12
+-> groupwise_iter3..N; sequential, because the composition helpers are marked broken). Each step multiplies the
+pulled values by |det J| of its map (J = derivative of the source voxel coordinates with respect to the output pixel
+index, central differences; 0 where the map samples outside the source canvas). An image of ones on the native grid
+goes through the same steps and gives the native area per final pixel.
+
+Outputs beside the stack (new files; the pipeline stacks and csv files are not changed):
+`<subject>_<level>_counts_stack.nii.gz` (cells per final pixel), `_native_area_stack.nii.gz` (native pixels per
+final pixel), `_counts_per_section.tsv`, `_counts_stack.json`. Density of a region R in cells/mm^3 =
+sum_R(counts) / (sum_R(native area) x native pixel area x 0.05 mm). The interpolated sections are 0 in both stacks
+and left out of all totals.
+
+P20 results: count-preserving total / native total per section, |deviation| median 0.05%, 95th percentile 0.13%,
+max 0.25% (pipeline stack: median 1.9%, max 21%); no counts on pixels with det J < 0; counts / native area
+reproduces the pipeline stack (NCC 0.9999, total ratio 1.0008); native area per final tissue pixel 0.74-1.26
+(5th-95th percentile). 5 s with 6 workers at rescale 20.
+
+Users: `atlas_labels.py` adds the columns `cells_cp`, `native_volume_mm3` and `density_cp_cells_per_mm3` to
+`_D99_labels.tsv` when the stack exists (the first columns are unchanged). P20: per label, `cells_cp` differs from
+`cells` by 1-3%. The QC report adds the count-preserving ratio to "Counts" and plots the cells per section split by
+the D99 regions. In P20, most of the decrease of the native totals after section 120 is in the brainstem part.
+`find_levels` (QC, MRI, labels) now matches the groupwise levels exactly, so the new `_counts_stack` and
+`_native_area_stack` files are not taken as levels. `cleanup_run.py` keeps them (run-level files).
 
